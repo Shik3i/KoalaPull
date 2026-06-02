@@ -340,7 +340,9 @@ func (a *App) CheckDependencies() DependencyStatus {
 }
 
 func (a *App) GetYtdlpVersion() string {
-	out, err := exec.Command(a.ytdlpPath(), "--version").Output()
+	ctx, cancel := context.WithTimeout(a.ctx, 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, a.ytdlpPath(), "--version").Output()
 	if err != nil {
 		return ""
 	}
@@ -348,7 +350,9 @@ func (a *App) GetYtdlpVersion() string {
 }
 
 func (a *App) GetFfmpegVersion() string {
-	out, err := exec.Command(a.ffmpegPath(), "-version").Output()
+	ctx, cancel := context.WithTimeout(a.ctx, 5*time.Second)
+	defer cancel()
+	out, err := exec.CommandContext(ctx, a.ffmpegPath(), "-version").Output()
 	if err != nil {
 		return ""
 	}
@@ -785,6 +789,12 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 const maxErrLines = 20
 
 func (a *App) StartDownload(url, formatID, outputDir, container, subtitle, title string) (string, error) {
+	if url == "" || formatID == "" {
+		return "", fmt.Errorf("url and formatID are required")
+	}
+	if len(url) > 2048 || len(outputDir) > 4096 {
+		return "", fmt.Errorf("input too long")
+	}
 	if outputDir == "" {
 		settings := a.GetSettings()
 		outputDir = settings.DefaultOutputDir
@@ -836,6 +846,9 @@ func (a *App) CancelDownload(downloadID string) {
 
 func (a *App) runDownload(ctx context.Context, downloadID string, args []string, title, url, formatID string) {
 	defer func() {
+		if r := recover(); r != nil {
+			println("runDownload panic:", fmt.Sprint(r))
+		}
 		a.adMu.Lock()
 		delete(a.activeDownloads, downloadID)
 		a.adMu.Unlock()
