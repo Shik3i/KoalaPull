@@ -42,8 +42,6 @@ interface VersionInfo { ytdlp: string; ffmpeg: string; app: string }
 interface SupportedSite {
   name: string
   blurb: string
-  badge: string
-  color: string
   href: string
 }
 
@@ -52,25 +50,67 @@ type Tab = 'downloads' | 'history' | 'settings' | 'help'
 let historyRequestId = 0
 
 const supportedSites: SupportedSite[] = [
-  { name: 'YouTube', blurb: 'Video, Shorts, playlists, live', badge: 'YT', color: '#ff0033', href: 'https://www.youtube.com' },
-  { name: 'Twitch', blurb: 'Streams, VODs, clips', badge: 'TW', color: '#9146ff', href: 'https://www.twitch.tv' },
-  { name: 'Vimeo', blurb: 'Clean video hosting', badge: 'VM', color: '#1ab7ea', href: 'https://vimeo.com' },
-  { name: 'SoundCloud', blurb: 'Music and audio', badge: 'SC', color: '#ff5500', href: 'https://soundcloud.com' },
-  { name: 'TikTok', blurb: 'Short video downloads', badge: 'TT', color: '#00f2ea', href: 'https://www.tiktok.com' },
-  { name: 'Instagram', blurb: 'Reels, posts, stories', badge: 'IG', color: '#e1306c', href: 'https://www.instagram.com' },
-  { name: 'Facebook', blurb: 'Videos and live clips', badge: 'FB', color: '#1877f2', href: 'https://www.facebook.com' },
-  { name: 'Reddit', blurb: 'Host videos and clips', badge: 'RD', color: '#ff4500', href: 'https://www.reddit.com' },
+  { name: 'YouTube', blurb: 'Videos, Shorts, playlists', href: 'https://www.youtube.com' },
+  { name: 'Vimeo', blurb: 'Videos, showcases, livestreams', href: 'https://vimeo.com' },
+  { name: 'Dailymotion', blurb: 'Videos, channels, playlists', href: 'https://www.dailymotion.com' },
+  { name: 'Twitch', blurb: 'Streams, VODs, clips', href: 'https://www.twitch.tv' },
+  { name: 'TikTok', blurb: 'Videos, profiles, slideshows', href: 'https://www.tiktok.com' },
+  { name: 'Twitter (X)', blurb: 'Posts with video, clips', href: 'https://x.com' },
+  { name: 'Instagram', blurb: 'Reels, posts, stories', href: 'https://www.instagram.com' },
+  { name: 'Facebook', blurb: 'Videos, reels, live clips', href: 'https://www.facebook.com' },
+  { name: 'Reddit', blurb: 'Post videos, clips, embeds', href: 'https://www.reddit.com' },
+  { name: 'ARD', blurb: 'Shows, documentaries, news', href: 'https://www.ardmediathek.de' },
+  { name: 'ZDF', blurb: 'Shows, documentaries, live streams', href: 'https://www.zdf.de' },
+  { name: 'Arte', blurb: 'Documentaries, concerts, films', href: 'https://www.arte.tv' },
+  { name: '3sat', blurb: 'Culture shows, docs, concerts', href: 'https://www.3sat.de' },
+  { name: 'NDR', blurb: 'Shows, reports, regional clips', href: 'https://www.ndr.de' },
+  { name: 'BBC', blurb: 'Programmes, news clips, episodes', href: 'https://www.bbc.com' },
+  { name: 'TED', blurb: 'Talks, playlists, event videos', href: 'https://www.ted.com' },
+  { name: 'CNN', blurb: 'News videos, interviews, clips', href: 'https://www.cnn.com' },
+  { name: 'Discovery', blurb: 'Episodes, clips, trailers', href: 'https://www.discovery.com' },
+  { name: 'Bilibili', blurb: 'Videos, series, livestreams', href: 'https://www.bilibili.com' },
+  { name: 'Niconico', blurb: 'Videos, livestreams, channels', href: 'https://www.nicovideo.jp' },
+  { name: 'Rumble', blurb: 'Videos, channels, livestreams', href: 'https://rumble.com' },
+  { name: 'Odysee', blurb: 'Videos, channels, creators', href: 'https://odysee.com' },
+  { name: 'SoundCloud', blurb: 'Tracks, sets, podcasts', href: 'https://soundcloud.com' },
+  { name: 'Bandcamp', blurb: 'Tracks, albums, releases', href: 'https://bandcamp.com' },
 ]
+
+function formatAppVersionLabel(version: string): string {
+  if (!version) return '...'
+  if (version === 'dev' || version.startsWith('v')) return version
+  return `v${version}`
+}
+
+function siteLogoUrl(site: SupportedSite): string {
+  if (site.name === 'Niconico') return 'https://www.nicovideo.jp/favicon.ico'
+  const hostname = new URL(site.href).hostname
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`
+}
+
+function SiteMark({ site }: { site: SupportedSite }) {
+  return (
+    <div
+      className="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center overflow-hidden"
+      style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}
+    >
+      <img src={siteLogoUrl(site)} alt="" className="w-7 h-7 object-contain" loading="lazy" />
+    </div>
+  )
+}
 
 function SiteBadge({ site }: { site: SupportedSite }) {
   return (
-    <div className="flex items-start gap-3 rounded-xl p-3 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
-      <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 font-semibold text-xs tracking-wider" style={{ background: site.color, color: '#fff' }}>
-        {site.badge}
-      </div>
-      <div className="min-w-0">
-        <p className="text-sm font-medium leading-5">{site.name}</p>
-        <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{site.blurb}</p>
+    <div
+      className="group h-full rounded-2xl p-3.5 border transition-colors"
+      style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}
+    >
+      <div className="flex items-start gap-3">
+        <SiteMark site={site} />
+        <div className="min-w-0">
+          <p className="text-sm font-semibold leading-5">{site.name}</p>
+          <p className="text-xs mt-1 leading-5" style={{ color: 'var(--text-muted)' }}>{site.blurb}</p>
+        </div>
       </div>
     </div>
   )
@@ -571,7 +611,7 @@ function fmtTime(t: string): string {
             <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.38.6.11.79-.26.79-.58v-2.23c-3.34.73-4.03-1.41-4.03-1.41-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49 1 .11-.78.42-1.31.76-1.61-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.53-1.53.12-3.18 0 0 1-.32 3.3 1.23.96-.27 1.98-.4 3-.4s2.05.13 3.01.4c2.29-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.48 5.92.43.37.82 1.1.82 2.22v3.29c0 .32.19.69.8.57C20.56 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z" />
             </svg>
-            <span className="font-mono text-xs">{appVersion ? `v${appVersion}` : '...'}</span>
+            <span className="font-mono text-xs">{formatAppVersionLabel(appVersion)}</span>
           </button>
         </div>
       </aside>
@@ -909,7 +949,7 @@ function fmtTime(t: string): string {
                   >
                     <span
                       className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform"
-                      style={{ transform: autoPasteEnabled ? 'translateX(20px)' : 'translateX(2px)' }}
+                      style={{ left: '2px', transform: autoPasteEnabled ? 'translateX(20px)' : 'translateX(0)' }}
                     />
                   </button>
                 </div>
@@ -929,7 +969,7 @@ function fmtTime(t: string): string {
                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
                         <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.38.6.11.79-.26.79-.58v-2.23c-3.34.73-4.03-1.41-4.03-1.41-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49 1 .11-.78.42-1.31.76-1.61-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.53-1.53.12-3.18 0 0 1-.32 3.3 1.23.96-.27 1.98-.4 3-.4s2.05.13 3.01.4c2.29-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.48 5.92.43.37.82 1.1.82 2.22v3.29c0 .32.19.69.8.57C20.56 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z"/>
                       </svg>
-                      {appVersion || '-'}
+                      {appVersion ? formatAppVersionLabel(appVersion) : '-'}
                     </button>
                   </div>
                   <div className="flex items-center gap-2">
@@ -941,7 +981,7 @@ function fmtTime(t: string): string {
                       className="font-mono hover:underline inline-flex items-center gap-1"
                       style={{ color: 'var(--color-accent)' }}
                     >
-                      {toolVersions?.ytdlp || '-'}
+                      {toolVersionsLoading ? 'Loading...' : (toolVersions?.ytdlp || 'Unavailable')}
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ opacity: 0.6 }}>
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
@@ -976,14 +1016,14 @@ function fmtTime(t: string): string {
                         {updateInfo.koalaPullUpdateAvailable ? (
                           <div>
                             <span style={{ color: '#fbbf24' }}>KoalaPull {updateInfo.latestKoalaPullVersion} available</span>
-                            <span className="ml-2" style={{ color: 'var(--text-muted)' }}>(current: {appVersion || '?'})</span>
+                            <span className="ml-2" style={{ color: 'var(--text-muted)' }}>(current: {appVersion ? formatAppVersionLabel(appVersion) : '?'})</span>
                             <button
                               onClick={() => OpenExternalLink('https://github.com/Shik3i/KoalaPull/releases/latest').catch(() => {})}
                               className="btn-primary text-xs px-3 py-1 ml-3"
                             >View Release</button>
                           </div>
                         ) : (
-                          <p>KoalaPull is up to date ({appVersion || '?'})</p>
+                          <p>KoalaPull is up to date ({appVersion ? formatAppVersionLabel(appVersion) : '?'})</p>
                         )}
                       </div>
 
@@ -992,10 +1032,10 @@ function fmtTime(t: string): string {
                       {updateInfo.ytdlpUpdateAvailable ? (
                           <div>
                             <span style={{ color: '#fbbf24' }}>yt-dlp {updateInfo.latestYtdlpVersion} available</span>
-                            <span className="ml-2" style={{ color: 'var(--text-muted)' }}>(current: v{toolVersions?.ytdlp || '?'})</span>
+                            <span className="ml-2" style={{ color: 'var(--text-muted)' }}>(current: {toolVersions?.ytdlp || '?'})</span>
                           </div>
                         ) : (
-                          <p>yt-dlp is up to date (v{toolVersions?.ytdlp || '?'})</p>
+                          <p>yt-dlp is up to date ({toolVersions?.ytdlp || '?'})</p>
                         )}
                         <button
                           onClick={async () => {
@@ -1037,52 +1077,101 @@ function fmtTime(t: string): string {
             <div className="px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--color-surface-border)' }}>
               <h2 className="text-base font-semibold">Help</h2>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 max-w-4xl">
-              <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
-                <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>What KoalaPull does</h3>
-                <p className="text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
-                  Paste a link, fetch metadata, pick a format, then queue downloads. KoalaPull wraps yt-dlp so the common flows stay simple in a native desktop UI.
-                </p>
-                <ul className="mt-3 space-y-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
-                  <li>• Video, audio, playlists, subtitles, and metadata.</li>
-                  <li>• Queue with parallel downloads and live progress.</li>
-                  <li>• History, themes, and local yt-dlp / ffmpeg setup.</li>
-                </ul>
-              </section>
-
-              <section>
-                <div className="flex items-end justify-between gap-4 mb-3">
-                  <div>
-                    <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Common sites</h3>
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>A small grab bag of the big names yt-dlp usually handles well.</p>
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <div className="space-y-6 max-w-4xl">
+                <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+                  <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>How to download a video</h3>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    {[
+                      {
+                        step: '1',
+                        title: 'Find your video',
+                        text: 'Copy the link of the video or playlist you want to download from your browser.',
+                      },
+                      {
+                        step: '2',
+                        title: 'Fetch the data',
+                        text: 'Paste the link into the KoalaPull search bar and click "Fetch".',
+                      },
+                      {
+                        step: '3',
+                        title: 'Choose your format',
+                        text: 'Pick the video quality you want, or choose audio only if you just want MP3.',
+                      },
+                      {
+                        step: '4',
+                        title: 'Download',
+                        text: 'Add it to the queue. KoalaPull handles the rest for you.',
+                      },
+                    ].map((item) => (
+                      <div
+                        key={item.step}
+                        className="rounded-xl border p-3"
+                        style={{ background: 'var(--color-surface)', borderColor: 'var(--color-surface-border)' }}
+                      >
+                        <div className="flex items-start gap-3">
+                          <div
+                            className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-semibold shrink-0"
+                            style={{ background: 'color-mix(in srgb, var(--color-accent) 18%, transparent)', color: 'var(--color-accent)' }}
+                          >
+                            {item.step}
+                          </div>
+                          <div>
+                            <p className="text-sm font-semibold">{item.title}</p>
+                            <p className="text-xs mt-1 leading-5" style={{ color: 'var(--text-muted)' }}>{item.text}</p>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
                   </div>
-                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>More below</span>
-                </div>
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                  {supportedSites.map((site) => (
-                    <a key={site.name} href={site.href} target="_blank" rel="noopener noreferrer" className="block">
-                      <SiteBadge site={site} />
-                    </a>
-                  ))}
-                </div>
-              </section>
+                </section>
 
-              <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
-                <div className="flex flex-wrap items-center justify-between gap-3">
-                  <div>
-                    <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>And many more</h3>
-                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
-                      Full yt-dlp list lives in the upstream repo.
+                <section className="space-y-4">
+                  <div className="flex items-end justify-between gap-4">
+                    <div>
+                      <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Popular supported sites</h3>
+                      <p className="text-xs mt-1 max-w-2xl" style={{ color: 'var(--text-muted)' }}>
+                        A curated snapshot of what yt-dlp can handle across video, social, broadcasters, and audio.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => OpenExternalLink('https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md').catch((err) => { console.warn('OpenExternalLink failed:', err) })}
+                      className="text-xs hover:underline shrink-0"
+                      style={{ color: 'var(--color-accent)' }}
+                    >
+                      View all 1000+ supported sites
+                    </button>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                    {supportedSites.map((site) => (
+                      <button
+                        key={site.name}
+                        onClick={() => OpenExternalLink(site.href).catch((err) => { console.warn('OpenExternalLink failed:', err) })}
+                        className="block text-left"
+                        title={`Open ${site.name}`}
+                      >
+                        <SiteBadge site={site} />
+                      </button>
+                    ))}
+                  </div>
+                </section>
+
+                <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+                  <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>Under the Hood</h3>
+                  <div className="space-y-3 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+                    <p>
+                      KoalaPull is a graphical user interface, or GUI. It gives you buttons, menus, and progress bars so you do not need to type terminal commands.
+                    </p>
+                    <p>
+                      In the background, KoalaPull uses two open-source tools: <span className="font-mono">yt-dlp</span> for downloading media, and <span className="font-mono">FFmpeg</span> for processing, converting, and merging video and audio formats.
+                    </p>
+                    <p>
+                      KoalaPull manages these tools for you automatically, so you get their power without needing to learn or use the command line.
                     </p>
                   </div>
-                  <button
-                    onClick={() => OpenExternalLink('https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md').catch((err) => { console.warn('OpenExternalLink failed:', err) })}
-                    className="btn-primary text-xs px-3 py-1.5"
-                  >
-                    supportedsites.md
-                  </button>
-                </div>
-              </section>
+                </section>
+              </div>
             </div>
           </div>
         )}
