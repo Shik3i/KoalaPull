@@ -43,6 +43,8 @@ type Tab = 'downloads' | 'history' | 'settings'
 
 const parseBytesRe = /^([\d.]+)\s*([KMG]i?B?b?)?/
 
+let historyRequestId = 0
+
 function buildFormatOptions(formats: FormatInfo[]): FormatOption[] {
   const options: FormatOption[] = [
     { label: 'Best Video + Audio', formatId: 'bestvideo+bestaudio/best' },
@@ -344,14 +346,14 @@ function App() {
   }
 
   const loadHistory = async () => {
+    const id = ++historyRequestId
     setHistoryLoading(true)
-    let cancelled = false
     try {
       const h = await GetHistory()
-      if (cancelled) return
+      if (id !== historyRequestId) return
       setHistory(h)
     } catch (err) { console.warn('loadHistory failed:', err) }
-    if (!cancelled) setHistoryLoading(false)
+    if (id === historyRequestId) setHistoryLoading(false)
   }
 
   const handleClearHistory = async () => {
@@ -845,6 +847,7 @@ function formatTotalEta(seconds: number): string {
                     style={{
                       background: autoPasteEnabled ? 'var(--color-accent)' : 'var(--color-surface-border)',
                     }}
+                    aria-label={autoPasteEnabled ? 'Disable auto-paste' : 'Enable auto-paste'}
                   >
                     <span
                       className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform"

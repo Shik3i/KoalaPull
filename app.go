@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -34,6 +35,7 @@ type App struct {
 	lastFileSize      map[string]string
 	lastSpeed         map[string]string
 	downloadSemaphore chan struct{}
+	semMu             sync.Mutex
 	historyMu         sync.Mutex
 }
 
@@ -234,7 +236,9 @@ func (a *App) GetSettings() Settings {
 
 func (a *App) writeSettings(s Settings) {
 	if data, err := json.MarshalIndent(s, "", "  "); err == nil {
-		os.WriteFile(a.settingsPath(), data, 0644)
+		if err := os.WriteFile(a.settingsPath(), data, 0644); err != nil {
+			println("writeSettings error:", err.Error())
+		}
 	}
 }
 
@@ -242,7 +246,9 @@ func (a *App) UpdateSettings(s Settings) {
 	old := a.GetSettings()
 	a.writeSettings(s)
 	if s.MaxConcurrency != old.MaxConcurrency && s.MaxConcurrency > 0 {
+		a.semMu.Lock()
 		a.downloadSemaphore = make(chan struct{}, s.MaxConcurrency)
+		a.semMu.Unlock()
 	}
 }
 
@@ -375,7 +381,11 @@ func (a *App) OpenOutputDir() error {
 	default:
 		cmd = exec.Command("xdg-open", dir)
 	}
-	return cmd.Start()
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go cmd.Wait()
+	return nil
 }
 
 func (a *App) GetVersionInfo() VersionInfo {
@@ -477,6 +487,7 @@ func (a *App) downloadYtdlp(force bool) error {
 		return err
 	}
 	if err := os.Rename(tmpPath, destPath); err != nil {
+		os.Remove(tmpPath)
 		return fmt.Errorf("rename failed: %w", err)
 	}
 	if runtime.GOOS != "windows" {
@@ -608,7 +619,7 @@ func extractFFmpegFromZip(archivePath, destDir string) error {
 		_, err = io.Copy(dst, rc)
 		if cerr := dst.Close(); cerr != nil {
 			rc.Close()
-			return cerr
+			return errors.Join(err, cerr)
 		}
 		rc.Close()
 		if err != nil {
@@ -637,12 +648,22 @@ func extractFFmpegFromTarXz(archivePath, destDir string) error {
 			return err
 		}
 		if !info.IsDir() && info.Mode().IsRegular() && filepath.Base(path) == "ffmpeg" {
-			data, readErr := os.ReadFile(path)
-			if readErr != nil {
-				return readErr
+			src, openErr := os.Open(path)
+			if openErr != nil {
+				return openErr
 			}
-			if writeErr := os.WriteFile(filepath.Join(destDir, "ffmpeg"), data, 0755); writeErr != nil {
-				return writeErr
+			dst, createErr := os.Create(filepath.Join(destDir, "ffmpeg"))
+			if createErr != nil {
+				src.Close()
+				return createErr
+			}
+			_, copyErr := io.Copy(dst, src)
+			src.Close()
+			if cerr := dst.Close(); cerr != nil && copyErr == nil {
+				return cerr
+			}
+			if copyErr != nil {
+				return copyErr
 			}
 			found = true
 		}
@@ -820,7 +841,9 @@ func (a *App) runDownload(ctx context.Context, downloadID string, args []string,
 		a.adMu.Unlock()
 	}()
 
+	a.semMu.Lock()
 	sem := a.downloadSemaphore
+	a.semMu.Unlock()
 	select {
 	case sem <- struct{}{}:
 	case <-ctx.Done():
@@ -861,7 +884,7 @@ func (a *App) runDownload(ctx context.Context, downloadID string, args []string,
 
 	done := make(chan struct{})
 	go func() {
-		defer close(done)
+		defer func() { recover(); close(done) }()
 		currentPS := ""
 		lastPct := 0.0
 		lastSpeed := ""
@@ -894,7 +917,7 @@ func (a *App) runDownload(ctx context.Context, downloadID string, args []string,
 	errLines := make([]string, 0, maxErrLines)
 	errCh := make(chan struct{})
 	go func() {
-		defer close(errCh)
+		defer func() { recover(); close(errCh) }()
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
 			line := scanner.Text()
