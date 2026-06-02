@@ -1,56 +1,61 @@
-# Frontend — React + TypeScript + Vite + Tailwind CSS
+# Frontend
 
-This directory contains the KoalaPull user interface.
+This folder holds the KoalaPull UI.
 
-## Architecture
+## Shape
 
-The UI is a single-page React application bootstrapped by Vite. It communicates with the Go backend through two Wails mechanisms:
+The frontend is a single-page React app built with Vite.
+It talks to the Go backend through Wails bindings and Wails events.
 
-1. **Wails Bindings** (sync) — Direct async function calls to Go methods, e.g.:
-   - `FetchMetadata(url)` → returns `VideoMetadata`
-   - `StartDownload(url, format, dir, container, subtitle)` → returns `downloadId`
-   - `GetSettings()` / `UpdateSettings()` → read/write settings
+### Wails bindings
 
-2. **Wails Events** (async) — Real-time streaming from Go to React:
-   - `download-progress` — percent, speed, ETA, playlist status
-   - `dependency-progress` — yt-dlp/ffmpeg download progress
+Generated files live in `wailsjs/go/main/`.
+They expose the Go app methods used by the UI for metadata, downloads, settings, and version data.
 
-Auto-generated binding stubs live in `wailsjs/go/main/App.js` and `App.d.ts`. They are maintained manually when the Wails `generate module` command is unavailable.
+### Wails events
 
-## Tailwind Configuration
+Live backend updates stream into React through named events such as:
 
-The theme is defined in `tailwind.config.js`:
+- `download-progress`
+- `dependency-progress`
 
-- **Surface colors**: `#111111` (base), `#1a1a1a` (light), `#252525` (lighter), `#2a2a2a` (border)
-- **Accent**: `#00d4aa` (cyan/turquoise)
-- **Fonts**: Inter (UI), JetBrains Mono (code)
+## Theme
 
-Custom component classes (`btn-primary`, `select-dark`, `input-dark`) are composed with `@apply` in `style.css`.
+Theme tokens live in `src/style.css` and `tailwind.config.js`.
+
+- Surfaces and text colors use CSS variables.
+- Accent color is teal, not purple.
+- Fonts are bundled locally: Inter and JetBrains Mono.
+
+Shared classes such as `btn-primary`, `select-dark`, and `input-dark` are built with `@apply`.
 
 ## Key Files
 
 | File | Purpose |
 |------|---------|
-| `src/App.tsx` | Main application component (state, effects, layout) |
-| `src/style.css` | Tailwind directives + reusable component classes |
-| `tailwind.config.js` | Dark theme colors, fonts, content paths |
-| `vite.config.ts` | Vite configuration (React plugin, dev server) |
-| `index.html` | Vite entry point (mounts `<div id="app">`) |
+| `src/App.tsx` | Main app UI, state, and view logic |
+| `src/style.css` | Global styles, theme vars, shared classes |
+| `src/main.tsx` | React mount point |
+| `tailwind.config.js` | Tailwind theme config |
+| `vite.config.ts` | Vite config |
+| `index.html` | App shell and CSP |
 
-## Development
+## Dev
 
 ```bash
 cd frontend
 npm install
-npm run dev       # Standalone Vite dev server (browser only, no Go backend)
+npm run dev
 ```
 
-For full app with Go backend, run `wails dev` from the project root.
+That starts Vite only.
+For the full app, run `wails dev` from repo root.
 
-## Build
+## Test and Build
 
 ```bash
-npm run build     # tsc + vite build
+npm run test
+npm run build
 ```
 
-The output goes to `frontend/dist/` and is embedded by Wails during `wails build`.
+`npm run build` emits `frontend/dist/`, which Wails embeds in the desktop build.

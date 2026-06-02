@@ -1,27 +1,25 @@
 # Build Directory
 
-This directory holds platform-specific assets used by `wails build` to produce native packages.
+This folder holds the native build assets used by `wails build`.
 
 ## Layout
 
-```
+```text
 build/
-├── appicon.png            # Source icon (256×256 PNG, converted to platform formats)
+├── appicon.png            # Source icon, converted by Wails
 ├── darwin/
-│   ├── Info.plist         # macOS app bundle metadata (CFBundleName, etc.)
-│   └── Info.dev.plist     # Same as above, used during `wails dev`
+│   ├── Info.plist         # macOS app bundle metadata
+│   └── Info.dev.plist     # Dev-time macOS bundle metadata
 ├── windows/
 │   ├── icon.ico           # Windows application icon
-│   ├── info.json          # Windows file version metadata (right-click → Properties)
-│   ├── installer/         # Windows installer assets (NSIS/inno)
-│   └── wails.exe.manifest # Windows application manifest (DPIAware, etc.)
-└── bin/                   # Build output (gitignored)
-    ├── koalapull          # macOS / Linux binary
-    └── koalapull.exe      # Windows binary
+│   ├── info.json          # Windows version metadata
+│   └── wails.exe.manifest # Windows app manifest
+└── bin/                   # Build output, gitignored
 ```
 
-## Customisation
+## Notes
 
-- Replace `appicon.png` with your own 256×256 PNG. Wails will convert it to the platform formats on next build.
-- Edit `darwin/Info.plist` to change the macOS bundle identifier, version, or category.
-- Edit `windows/info.json` to change the Windows file version, copyright, or description.
+- Replace `appicon.png` to change the app icon.
+- Edit `darwin/Info.plist` to change the macOS bundle metadata.
+- Edit `windows/info.json` to change Windows version details.
+- `build/bin/` is where release binaries land after a build.
