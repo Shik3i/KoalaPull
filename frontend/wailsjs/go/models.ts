@@ -95,6 +95,7 @@ export namespace main {
 	    theme: string;
 	    maxConcurrency: number;
 	    autoPasteURL: boolean;
+	    language: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -106,6 +107,7 @@ export namespace main {
 	        this.theme = source["theme"];
 	        this.maxConcurrency = source["maxConcurrency"];
 	        this.autoPasteURL = source["autoPasteURL"];
+	        this.language = source["language"];
 	    }
 	}
 	export class UpdateInfo {
@@ -188,4 +190,3 @@ export namespace main {
 	}
 
 }
-

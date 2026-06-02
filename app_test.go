@@ -166,20 +166,33 @@ func TestFetchMetadataRejectsInvalidURLsBeforeExec(t *testing.T) {
 }
 
 func TestValidateSettingsClampsUnsafeValues(t *testing.T) {
-	settings := validateSettings(Settings{Theme: "neon", MaxConcurrency: 1 << 30})
+	settings := validateSettings(Settings{Theme: "neon", MaxConcurrency: 1 << 30, Language: "pirate"})
 	if settings.Theme != "dark" {
 		t.Fatalf("Theme = %q, want dark", settings.Theme)
 	}
 	if settings.MaxConcurrency != 10 {
 		t.Fatalf("MaxConcurrency = %d, want 10", settings.MaxConcurrency)
 	}
+	if settings.Language != "en" {
+		t.Fatalf("Language = %q, want en", settings.Language)
+	}
 }
 
 func TestValidateSettingsPreservesUTF8PathBoundaries(t *testing.T) {
 	raw := strings.Repeat("你", maxPathLength/3+10)
-	settings := validateSettings(Settings{DefaultOutputDir: raw, Theme: "dark", MaxConcurrency: 3})
+	settings := validateSettings(Settings{DefaultOutputDir: raw, Theme: "dark", MaxConcurrency: 3, Language: "de"})
 	if !utf8.ValidString(settings.DefaultOutputDir) {
 		t.Fatal("DefaultOutputDir is not valid UTF-8 after validation")
+	}
+	if settings.Language != "de" {
+		t.Fatalf("Language = %q, want de", settings.Language)
+	}
+}
+
+func TestValidateSettingsDefaultsLanguageToEnglish(t *testing.T) {
+	settings := validateSettings(Settings{})
+	if settings.Language != "en" {
+		t.Fatalf("Language = %q, want en", settings.Language)
 	}
 }
 

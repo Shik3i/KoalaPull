@@ -101,6 +101,7 @@ type Settings struct {
 	Theme            string `json:"theme"`
 	MaxConcurrency   int    `json:"maxConcurrency"`
 	AutoPasteURL     bool   `json:"autoPasteURL"`
+	Language         string `json:"language"`
 }
 
 type HistoryEntry struct {
@@ -290,7 +291,7 @@ func (a *App) getSettingsLocked() Settings {
 			return validateSettings(s)
 		}
 	}
-	s := validateSettings(Settings{DefaultOutputDir: defaultOutputDir(), Theme: "dark", MaxConcurrency: defaultMaxConcurrency, AutoPasteURL: false})
+	s := validateSettings(Settings{DefaultOutputDir: defaultOutputDir(), Theme: "dark", MaxConcurrency: defaultMaxConcurrency, AutoPasteURL: false, Language: "en"})
 	if err := a.writeSettingsLocked(s); err != nil {
 		println("writeSettings error:", err.Error())
 	}
@@ -353,6 +354,9 @@ func validateSettings(s Settings) Settings {
 	if s.MaxConcurrency > maxMaxConcurrency {
 		s.MaxConcurrency = maxMaxConcurrency
 	}
+	if s.Language != "en" && s.Language != "de" && s.Language != "fr" {
+		s.Language = "en"
+	}
 	return s
 }
 
@@ -371,8 +375,15 @@ func truncateToValidUTF8Prefix(s string, maxBytes int) string {
 }
 
 func (a *App) SelectDirectory() (string, error) {
+	title := "Choose Download Directory"
+	switch a.GetSettings().Language {
+	case "de":
+		title = "Download-Ordner auswählen"
+	case "fr":
+		title = "Choisir le dossier de téléchargement"
+	}
 	dir, err := wailsRuntime.OpenDirectoryDialog(a.ctx, wailsRuntime.OpenDialogOptions{
-		Title: "Choose Download Directory",
+		Title: title,
 	})
 	if err != nil {
 		return "", err
