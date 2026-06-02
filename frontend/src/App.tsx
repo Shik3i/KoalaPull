@@ -5,7 +5,7 @@ import {
   GetSettings, UpdateSettings, SelectDirectory,
   GetYtdlpVersion, GetVersionInfo, GetHistory,
   ClearHistory, DeleteHistoryEntry,
-  UpdateDependencies, OpenOutputDir, CheckForUpdates,
+  UpdateDependencies, OpenOutputDir, CheckForUpdates, OpenExternalLink,
 } from "../wailsjs/go/main/App"
 import { EventsOn, EventsOff, ClipboardGetText } from "../wailsjs/runtime/runtime"
 import type { main } from "../wailsjs/go/models"
@@ -138,6 +138,7 @@ export class ErrorBoundary extends Component<{ children: React.ReactNode }, { ha
 
 function App() {
   const urlInputRef = useRef<HTMLInputElement>(null)
+  const fetchRequestIdRef = useRef(0)
   const [activeTab, setActiveTab] = useState<Tab>('downloads')
   const [url, setUrl] = useState('')
   const [fetched, setFetched] = useState(false)
@@ -244,7 +245,7 @@ function App() {
 
   useEffect(() => {
     if (!depsReady) return
-    GetYtdlpVersion().then((v: string) => { if (v) setYtdlpVersion(v) }).catch(() => {})
+    GetYtdlpVersion().then((v: string) => { if (v) setYtdlpVersion(v) }).catch((err: any) => { console.warn('GetYtdlpVersion:', err?.message || err) })
   }, [depsReady])
 
   useEffect(() => {
@@ -276,23 +277,31 @@ function App() {
 
   useEffect(() => {
     const handleDlProgress = (data: DownloadProgress) => {
-      setQueue((prev) =>
-        prev.map((item) => {
-          if (item.id !== data.downloadId) return item
-          if (data.status === 'completed') return { ...item, status: 'completed', progress: 100, playlistStatus: '' }
-          if (data.status === 'error') {
-            const msg = data.error || 'Download failed'
-            return { ...item, status: 'error', progress: 0, speed: '', eta: '', fileSize: '', errorMsg: msg, playlistStatus: '' }
-          }
-          if (data.status === 'cancelled') return { ...item, status: 'cancelled', progress: 0, speed: '', eta: '', fileSize: '', playlistStatus: '' }
-          if (data.status === 'starting') return { ...item, status: 'starting', progress: 0, playlistStatus: data.playlistStatus || '' }
-          return {
+      setQueue((prev) => {
+        const idx = prev.findIndex((item) => item.id === data.downloadId)
+        if (idx === -1) return prev
+        const item = prev[idx]
+        let nextItem: QueueItem
+        if (data.status === 'completed') {
+          nextItem = { ...item, status: 'completed', progress: 100, playlistStatus: '' }
+        } else if (data.status === 'error') {
+          const msg = data.error || 'Download failed'
+          nextItem = { ...item, status: 'error', progress: 0, speed: '', eta: '', fileSize: '', errorMsg: msg, playlistStatus: '' }
+        } else if (data.status === 'cancelled') {
+          nextItem = { ...item, status: 'cancelled', progress: 0, speed: '', eta: '', fileSize: '', playlistStatus: '' }
+        } else if (data.status === 'starting') {
+          nextItem = { ...item, status: 'starting', progress: 0, playlistStatus: data.playlistStatus || '' }
+        } else {
+          nextItem = {
             ...item, status: data.status,
             progress: Math.round(data.percent), speed: data.speed, eta: data.eta, fileSize: data.fileSize || item.fileSize,
             playlistStatus: data.playlistStatus || '',
           }
-        }),
-      )
+        }
+        const next = [...prev]
+        next[idx] = nextItem
+        return next
+      })
     }
     EventsOn('download-progress', handleDlProgress)
     return () => { EventsOff('download-progress') }
@@ -300,6 +309,7 @@ function App() {
 
   const handleFetch = async () => {
     if (!url.trim()) return
+    const requestId = ++fetchRequestIdRef.current
     setFetching(true)
     setFetchError('')
     setFetched(false)
@@ -307,13 +317,15 @@ function App() {
     setSelectedFormat('bestvideo+bestaudio/best')
     try {
       const meta = await FetchMetadata(url)
+      if (requestId !== fetchRequestIdRef.current) return
       setMetadata(meta)
-      setFormatOptions(buildFormatOptions(meta.formats))
+      setFormatOptions(buildFormatOptions(meta.formats || []))
       setFetched(true)
     } catch (err: any) {
+      if (requestId !== fetchRequestIdRef.current) return
       setFetchError(err?.message || 'Failed to fetch metadata')
     } finally {
-      setFetching(false)
+      if (requestId === fetchRequestIdRef.current) setFetching(false)
     }
   }
 
@@ -501,9 +513,9 @@ function formatTotalEta(seconds: number): string {
                   {activeCount}
                 </span>
               )}
-              {t.id === 'settings' && updateInfo?.ytdlpUpdateAvailable && (
+              {t.id === 'settings' && (updateInfo?.ytdlpUpdateAvailable || updateInfo?.koalaPullUpdateAvailable) && (
                 <span className="text-xs font-medium px-1.5 py-0.5 rounded-full" style={{ background: '#fbbf24', color: '#000' }}>
-                  1
+                  {(updateInfo?.ytdlpUpdateAvailable ? 1 : 0) + (updateInfo?.koalaPullUpdateAvailable ? 1 : 0)}
                 </span>
               )}
             </div>
@@ -912,39 +924,58 @@ function formatTotalEta(seconds: number): string {
               {/* Updates */}
               <section>
                 <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>Updates</h3>
-                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                <div className="text-xs space-y-3" style={{ color: 'var(--text-muted)' }}>
                   {updateInfo ? (
-                    <div className="space-y-2">
-                      {updateInfo.ytdlpUpdateAvailable ? (
-                        <div className="flex items-center gap-2" style={{ color: '#fbbf24' }}>
-                          <span>yt-dlp {updateInfo.latestYtdlpVersion} available</span>
-                          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>(current: v{versionInfo?.ytdlp || '?'})</span>
-                        </div>
-                      ) : (
-                        <p>yt-dlp is up to date (v{versionInfo?.ytdlp || '?'})</p>
-                      )}
-                      <button
-                        onClick={async () => {
-                          setUpdatingDeps(true)
-                          setUpdatesError('')
-                          try {
-                            await UpdateDependencies()
-                            const v = await GetVersionInfo()
-                            setVersionInfo(v)
-                            if (v.ytdlp) setYtdlpVersion(v.ytdlp)
-                            const u = await CheckForUpdates()
-                            setUpdateInfo(u)
-                          } catch (err: any) {
-                            setUpdatesError(err?.message || 'Update failed')
-                          }
-                          setUpdatingDeps(false)
-                        }}
-                        disabled={updatingDeps}
-                        className="btn-primary text-xs px-4 py-1.5 mt-2"
-                      >
-                        {updatingDeps ? 'Updating...' : updateInfo.ytdlpUpdateAvailable ? 'Download Update' : 'Re-download'}
-                      </button>
-                    </div>
+                    <>
+                      {/* KoalaPull */}
+                      <div>
+                        {updateInfo.koalaPullUpdateAvailable ? (
+                          <div>
+                            <span style={{ color: '#fbbf24' }}>KoalaPull {updateInfo.latestKoalaPullVersion} available</span>
+                            <span className="ml-2" style={{ color: 'var(--text-muted)' }}>(current: {versionInfo?.app || '?'})</span>
+                            <button
+                              onClick={() => OpenExternalLink('https://github.com/Shik3i/KoalaPull/releases/latest').catch(() => {})}
+                              className="btn-primary text-xs px-3 py-1 ml-3"
+                            >View Release</button>
+                          </div>
+                        ) : (
+                          <p>KoalaPull is up to date ({versionInfo?.app || '?'})</p>
+                        )}
+                      </div>
+
+                      {/* yt-dlp */}
+                      <div>
+                        {updateInfo.ytdlpUpdateAvailable ? (
+                          <div>
+                            <span style={{ color: '#fbbf24' }}>yt-dlp {updateInfo.latestYtdlpVersion} available</span>
+                            <span className="ml-2" style={{ color: 'var(--text-muted)' }}>(current: v{versionInfo?.ytdlp || '?'})</span>
+                          </div>
+                        ) : (
+                          <p>yt-dlp is up to date (v{versionInfo?.ytdlp || '?'})</p>
+                        )}
+                        <button
+                          onClick={async () => {
+                            setUpdatingDeps(true)
+                            setUpdatesError('')
+                            try {
+                              await UpdateDependencies()
+                              const v = await GetVersionInfo()
+                              setVersionInfo(v)
+                              if (v.ytdlp) setYtdlpVersion(v.ytdlp)
+                              const u = await CheckForUpdates()
+                              setUpdateInfo(u)
+                            } catch (err: any) {
+                              setUpdatesError(err?.message || 'Update failed')
+                            }
+                            setUpdatingDeps(false)
+                          }}
+                          disabled={updatingDeps}
+                          className="btn-primary text-xs px-4 py-1.5 mt-2"
+                        >
+                          {updatingDeps ? 'Updating...' : updateInfo.ytdlpUpdateAvailable ? 'Download Update' : 'Re-download'}
+                        </button>
+                      </div>
+                    </>
                   ) : (
                     <p>Loading...</p>
                   )}

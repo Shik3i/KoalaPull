@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -17,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
@@ -25,18 +27,22 @@ import (
 var AppVersion = "dev"
 
 type App struct {
-	ctx               context.Context
-	configDir         string
-	binDir            string
-	dlMu              sync.Mutex
-	dlCounter         int
-	activeDownloads   map[string]context.CancelFunc
-	adMu              sync.Mutex
-	lastFileSize      map[string]string
-	lastSpeed         map[string]string
-	downloadSemaphore chan struct{}
-	semMu             sync.Mutex
-	historyMu         sync.Mutex
+	ctx             context.Context
+	configDir       string
+	binDir          string
+	startupErr      error
+	settingsMu      sync.Mutex
+	dependencyMu    sync.Mutex
+	dlMu            sync.Mutex
+	dlCounter       int
+	activeDownloads map[string]context.CancelFunc
+	adMu            sync.Mutex
+	lastFileSize    map[string]string
+	lastSpeed       map[string]string
+	semCount        atomic.Int32
+	semLimit        atomic.Int32
+	semWake         chan struct{}
+	historyMu       sync.Mutex
 }
 
 type DependencyStatus struct {
@@ -111,8 +117,10 @@ type VersionInfo struct {
 }
 
 type UpdateInfo struct {
-	YtdlpUpdateAvailable  bool   `json:"ytdlpUpdateAvailable"`
-	LatestYtdlpVersion    string `json:"latestYtdlpVersion"`
+	YtdlpUpdateAvailable     bool   `json:"ytdlpUpdateAvailable"`
+	LatestYtdlpVersion       string `json:"latestYtdlpVersion"`
+	KoalaPullUpdateAvailable bool   `json:"koalaPullUpdateAvailable"`
+	LatestKoalaPullVersion   string `json:"latestKoalaPullVersion"`
 }
 
 var progressRegex = regexp.MustCompile(`\[download\]\s+([\d.]+)%\s+of\s+~?([\d.]+\S+)\s+at\s+([\d.]+\S+)\s+ETA\s+(\S+)`)
@@ -123,14 +131,53 @@ var playlistItemRegex = regexp.MustCompile(`\[download\]\s+Downloading\s+(video|
 
 func NewApp() *App {
 	a := &App{
-		lastFileSize: make(map[string]string),
-		lastSpeed:    make(map[string]string),
+		activeDownloads: make(map[string]context.CancelFunc),
+		lastFileSize:    make(map[string]string),
+		lastSpeed:       make(map[string]string),
+		semWake:         make(chan struct{}, 1),
 	}
+	a.semLimit.Store(3)
 	return a
 }
 
+func (a *App) appContext() context.Context {
+	if a.ctx != nil {
+		return a.ctx
+	}
+	return context.Background()
+}
+
 func (a *App) initSemaphore() {
-	a.downloadSemaphore = make(chan struct{}, a.GetSettings().MaxConcurrency)
+	s := a.GetSettings()
+	a.semLimit.Store(int32(s.MaxConcurrency))
+	if a.semWake == nil {
+		a.semWake = make(chan struct{}, 1)
+	}
+}
+
+func (a *App) semAcquire(ctx context.Context) bool {
+	for {
+		cur := a.semCount.Load()
+		if cur >= a.semLimit.Load() {
+			select {
+			case <-a.semWake:
+				continue
+			case <-ctx.Done():
+				return false
+			}
+		}
+		if a.semCount.CompareAndSwap(cur, cur+1) {
+			return true
+		}
+	}
+}
+
+func (a *App) semRelease() {
+	a.semCount.Add(-1)
+	select {
+	case a.semWake <- struct{}{}:
+	default:
+	}
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -147,6 +194,7 @@ func (a *App) startup(ctx context.Context) {
 	a.configDir = filepath.Join(configDir, "KoalaPull")
 	a.binDir = filepath.Join(a.configDir, "bin")
 	if err := os.MkdirAll(a.binDir, 0755); err != nil {
+		a.startupErr = fmt.Errorf("create bin directory: %w", err)
 		println("Failed to create bin directory:", err.Error())
 	}
 	a.activeDownloads = make(map[string]context.CancelFunc)
@@ -215,6 +263,12 @@ func defaultOutputDir() string {
 }
 
 func (a *App) GetSettings() Settings {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+	return a.getSettingsLocked()
+}
+
+func (a *App) getSettingsLocked() Settings {
 	path := a.settingsPath()
 	data, err := os.ReadFile(path)
 	if err == nil {
@@ -230,26 +284,48 @@ func (a *App) GetSettings() Settings {
 		}
 	}
 	s := Settings{DefaultOutputDir: defaultOutputDir(), Theme: "dark", MaxConcurrency: 3, AutoPasteURL: false}
-	a.writeSettings(s)
+	if err := a.writeSettingsLocked(s); err != nil {
+		println("writeSettings error:", err.Error())
+	}
 	return s
 }
 
-func (a *App) writeSettings(s Settings) {
-	if data, err := json.MarshalIndent(s, "", "  "); err == nil {
-		if err := os.WriteFile(a.settingsPath(), data, 0644); err != nil {
-			println("writeSettings error:", err.Error())
-		}
-	}
+func (a *App) writeSettings(s Settings) error {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+	return a.writeSettingsLocked(s)
 }
 
-func (a *App) UpdateSettings(s Settings) {
-	old := a.GetSettings()
-	a.writeSettings(s)
-	if s.MaxConcurrency != old.MaxConcurrency && s.MaxConcurrency > 0 {
-		a.semMu.Lock()
-		a.downloadSemaphore = make(chan struct{}, s.MaxConcurrency)
-		a.semMu.Unlock()
+func (a *App) writeSettingsLocked(s Settings) error {
+	data, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal settings: %w", err)
 	}
+	if err := os.WriteFile(a.settingsPath(), data, 0644); err != nil {
+		return fmt.Errorf("write settings file: %w", err)
+	}
+	return nil
+}
+
+func (a *App) UpdateSettings(s Settings) error {
+	a.settingsMu.Lock()
+	old := a.getSettingsLocked()
+	if err := a.writeSettingsLocked(s); err != nil {
+		a.settingsMu.Unlock()
+		return err
+	}
+	a.settingsMu.Unlock()
+	if s.MaxConcurrency != old.MaxConcurrency && s.MaxConcurrency > 0 {
+		oldLimit := int(a.semLimit.Load())
+		a.semLimit.Store(int32(s.MaxConcurrency))
+		if s.MaxConcurrency > oldLimit {
+			select {
+			case a.semWake <- struct{}{}:
+			default:
+			}
+		}
+	}
+	return nil
 }
 
 func (a *App) SelectDirectory() (string, error) {
@@ -340,7 +416,7 @@ func (a *App) CheckDependencies() DependencyStatus {
 }
 
 func (a *App) GetYtdlpVersion() string {
-	ctx, cancel := context.WithTimeout(a.ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(a.appContext(), 5*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, a.ytdlpPath(), "--version").Output()
 	if err != nil {
@@ -350,7 +426,7 @@ func (a *App) GetYtdlpVersion() string {
 }
 
 func (a *App) GetFfmpegVersion() string {
-	ctx, cancel := context.WithTimeout(a.ctx, 5*time.Second)
+	ctx, cancel := context.WithTimeout(a.appContext(), 5*time.Second)
 	defer cancel()
 	out, err := exec.CommandContext(ctx, a.ffmpegPath(), "-version").Output()
 	if err != nil {
@@ -364,6 +440,8 @@ func (a *App) GetFfmpegVersion() string {
 }
 
 func (a *App) UpdateDependencies() error {
+	a.dependencyMu.Lock()
+	defer a.dependencyMu.Unlock()
 	if err := a.downloadYtdlp(true); err != nil {
 		return err
 	}
@@ -402,12 +480,20 @@ func (a *App) GetVersionInfo() VersionInfo {
 
 func (a *App) CheckForUpdates() UpdateInfo {
 	info := UpdateInfo{}
-	if latest, err := fetchLatestYtdlpVersion(a.ctx); err == nil && latest != "" {
+	if latest, err := fetchLatestYtdlpVersion(a.appContext()); err == nil && latest != "" {
 		info.LatestYtdlpVersion = latest
 		current := strings.TrimPrefix(a.GetYtdlpVersion(), "v")
 		latestStr := strings.TrimPrefix(latest, "v")
 		if current != "" && latestStr != current {
 			info.YtdlpUpdateAvailable = true
+		}
+	}
+	if AppVersion != "" && AppVersion != "dev" && !strings.Contains(AppVersion, "-") {
+		if latest, err := fetchLatestKoalaPullVersion(a.appContext()); err == nil && latest != "" {
+			info.LatestKoalaPullVersion = latest
+			if latest != AppVersion {
+				info.KoalaPullUpdateAvailable = true
+			}
 		}
 	}
 	return info
@@ -426,6 +512,9 @@ func fetchLatestYtdlpVersion(ctx context.Context) (string, error) {
 		return "", err
 	}
 	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub API returned %s", resp.Status)
+	}
 	var result struct {
 		TagName string `json:"tag_name"`
 	}
@@ -433,6 +522,35 @@ func fetchLatestYtdlpVersion(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return result.TagName, nil
+}
+
+func fetchLatestKoalaPullVersion(ctx context.Context) (string, error) {
+	dlCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(dlCtx, http.MethodGet, "https://api.github.com/repos/Shik3i/KoalaPull/releases/latest", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("GitHub API returned %s", resp.Status)
+	}
+	var result struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+	return result.TagName, nil
+}
+
+func (a *App) OpenExternalLink(url string) {
+	wailsRuntime.BrowserOpenURL(a.appContext(), url)
 }
 
 func (a *App) emitProgress(dep string, pct int, status, errMsg string) {
@@ -444,7 +562,7 @@ func (a *App) emitProgress(dep string, pct int, status, errMsg string) {
 	if errMsg != "" {
 		ev.Error = errMsg
 	}
-	wailsRuntime.EventsEmit(a.ctx, "dependency-progress", ev)
+	wailsRuntime.EventsEmit(a.appContext(), "dependency-progress", ev)
 }
 
 func (a *App) emitDownloadProgress(downloadID string, percent float64, speed, eta, fileSize, status, errMsg, playlistStatus string) {
@@ -460,10 +578,15 @@ func (a *App) emitDownloadProgress(downloadID string, percent float64, speed, et
 	if errMsg != "" {
 		ev.Error = errMsg
 	}
-	wailsRuntime.EventsEmit(a.ctx, "download-progress", ev)
+	wailsRuntime.EventsEmit(a.appContext(), "download-progress", ev)
 }
 
 func (a *App) DownloadDependencies() error {
+	if a.startupErr != nil {
+		return fmt.Errorf("app setup failed: %w", a.startupErr)
+	}
+	a.dependencyMu.Lock()
+	defer a.dependencyMu.Unlock()
 	if err := a.downloadYtdlp(false); err != nil {
 		a.emitProgress("yt-dlp", 0, "error", err.Error())
 		return fmt.Errorf("yt-dlp download failed: %w", err)
@@ -484,7 +607,7 @@ func (a *App) downloadYtdlp(force bool) error {
 	}
 	url := ytdlpDownloadURL()
 	tmpPath := destPath + ".tmp"
-	dlCtx, cancel := context.WithTimeout(a.ctx, 10*time.Minute)
+	dlCtx, cancel := context.WithTimeout(a.appContext(), 10*time.Minute)
 	defer cancel()
 	if err := a.downloadFile(dlCtx, url, tmpPath, "yt-dlp"); err != nil {
 		os.Remove(tmpPath)
@@ -522,7 +645,7 @@ func (a *App) downloadFfmpeg(force bool) error {
 	}
 	defer os.RemoveAll(tmpDir)
 	archivePath := filepath.Join(tmpDir, "ffmpeg-archive")
-	dlCtx, cancel := context.WithTimeout(a.ctx, 10*time.Minute)
+	dlCtx, cancel := context.WithTimeout(a.appContext(), 10*time.Minute)
 	defer cancel()
 	if err := a.downloadFile(dlCtx, url, archivePath, "ffmpeg"); err != nil {
 		return err
@@ -554,7 +677,11 @@ func (a *App) downloadFile(ctx context.Context, url, destPath, depName string) e
 	if err != nil {
 		return fmt.Errorf("create file failed: %w", err)
 	}
-	defer out.Close()
+	defer func() {
+		if out != nil {
+			_ = out.Close()
+		}
+	}()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("http request failed: %w", err)
@@ -593,6 +720,10 @@ func (a *App) downloadFile(ctx context.Context, url, destPath, depName string) e
 			return fmt.Errorf("read failed: %w", readErr)
 		}
 	}
+	if err := out.Close(); err != nil {
+		return fmt.Errorf("close file failed: %w", err)
+	}
+	out = nil
 	return nil
 }
 
@@ -614,23 +745,30 @@ func extractFFmpegFromZip(archivePath, destDir string) error {
 		if err != nil {
 			return err
 		}
-		binName := strings.TrimSuffix(base, ".exe")
+		binName := ffmpegZipDestName(base, runtime.GOOS)
 		dst, err := os.Create(filepath.Join(destDir, binName))
 		if err != nil {
 			rc.Close()
 			return err
 		}
 		_, err = io.Copy(dst, rc)
-		if cerr := dst.Close(); cerr != nil {
-			rc.Close()
-			return errors.Join(err, cerr)
+		cerr := dst.Close()
+		rcerr := rc.Close()
+		if cerr != nil || rcerr != nil {
+			return errors.Join(err, cerr, rcerr)
 		}
-		rc.Close()
 		if err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func ffmpegZipDestName(base, goos string) string {
+	if goos == "windows" {
+		return base
+	}
+	return strings.TrimSuffix(base, ".exe")
 }
 
 func extractFFmpegFromTarXz(archivePath, destDir string) error {
@@ -647,33 +785,40 @@ func extractFFmpegFromTarXz(archivePath, destDir string) error {
 	}
 
 	var found bool
-	filepath.Walk(tmpDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil || found {
+	var walkErr error
+	walkErr = filepath.Walk(tmpDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
 			return err
+		}
+		if found {
+			return nil
 		}
 		if !info.IsDir() && info.Mode().IsRegular() && filepath.Base(path) == "ffmpeg" {
 			src, openErr := os.Open(path)
 			if openErr != nil {
 				return openErr
 			}
+			defer src.Close()
 			dst, createErr := os.Create(filepath.Join(destDir, "ffmpeg"))
 			if createErr != nil {
-				src.Close()
 				return createErr
 			}
 			_, copyErr := io.Copy(dst, src)
-			src.Close()
-			if cerr := dst.Close(); cerr != nil && copyErr == nil {
-				return cerr
-			}
+			closeErr := dst.Close()
 			if copyErr != nil {
 				return copyErr
+			}
+			if closeErr != nil {
+				return closeErr
 			}
 			found = true
 		}
 		return nil
 	})
 
+	if walkErr != nil {
+		return fmt.Errorf("walk temp dir: %w", walkErr)
+	}
 	if !found {
 		return fmt.Errorf("ffmpeg binary not found in archive")
 	}
@@ -735,9 +880,14 @@ type rawMetadata struct {
 
 func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	args := []string{"--no-check-formats", "--no-warnings", "--dump-json", "--skip-download", "--flat-playlist", "--", url}
-	cmd := exec.Command(a.ytdlpPath(), args...)
+	ctx, cancel := context.WithTimeout(a.appContext(), 30*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, a.ytdlpPath(), args...)
 	stdout, err := cmd.Output()
 	if err != nil {
+		if ctx.Err() != nil {
+			return nil, fmt.Errorf("yt-dlp metadata timed out: %w", ctx.Err())
+		}
 		if exitErr, ok := err.(*exec.ExitError); ok {
 			return nil, fmt.Errorf("yt-dlp failed: %s", string(exitErr.Stderr))
 		}
@@ -792,6 +942,9 @@ func (a *App) StartDownload(url, formatID, outputDir, container, subtitle, title
 	if url == "" || formatID == "" {
 		return "", fmt.Errorf("url and formatID are required")
 	}
+	if !isAllowedDownloadURL(url) {
+		return "", fmt.Errorf("url must use http or https")
+	}
 	if len(url) > 2048 || len(outputDir) > 4096 {
 		return "", fmt.Errorf("input too long")
 	}
@@ -826,13 +979,21 @@ func (a *App) StartDownload(url, formatID, outputDir, container, subtitle, title
 	}
 	args = append(args, "--", url)
 
-	ctx, cancel := context.WithTimeout(a.ctx, 1*time.Hour)
+	ctx, cancel := context.WithTimeout(a.appContext(), 1*time.Hour)
 	a.adMu.Lock()
 	a.activeDownloads[downloadID] = cancel
 	a.adMu.Unlock()
 
-	go a.runDownload(ctx, downloadID, args, title, url, formatID)
+	go a.runDownload(ctx, cancel, downloadID, args, title, url, formatID)
 	return downloadID, nil
+}
+
+func isAllowedDownloadURL(raw string) bool {
+	parsed, err := url.ParseRequestURI(raw)
+	if err != nil {
+		return false
+	}
+	return parsed.Scheme == "http" || parsed.Scheme == "https"
 }
 
 func (a *App) CancelDownload(downloadID string) {
@@ -844,8 +1005,9 @@ func (a *App) CancelDownload(downloadID string) {
 	}
 }
 
-func (a *App) runDownload(ctx context.Context, downloadID string, args []string, title, url, formatID string) {
+func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downloadID string, args []string, title, url, formatID string) {
 	defer func() {
+		cancel()
 		if r := recover(); r != nil {
 			println("runDownload panic:", fmt.Sprint(r))
 		}
@@ -854,16 +1016,11 @@ func (a *App) runDownload(ctx context.Context, downloadID string, args []string,
 		a.adMu.Unlock()
 	}()
 
-	a.semMu.Lock()
-	sem := a.downloadSemaphore
-	a.semMu.Unlock()
-	select {
-	case sem <- struct{}{}:
-	case <-ctx.Done():
+	if !a.semAcquire(ctx) {
 		a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
 		return
 	}
-	defer func() { <-sem }()
+	defer a.semRelease()
 
 	startTime := time.Now()
 	a.emitDownloadProgress(downloadID, 0, "", "", "", "starting", "", "")

@@ -52,12 +52,13 @@ jobs:
           sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
 
       - name: Install Wails CLI
-        run: go install github.com/wailsapp/wails/v2/cmd/wails@latest
+        run: go install github.com/wailsapp/wails/v2/cmd/wails@v2.12.0
 
       - name: Install jq
         run: |
+          if [ "$RUNNER_OS" = "Linux" ]; then sudo apt-get install -y jq; fi
           if [ "$RUNNER_OS" = "macOS" ]; then brew install jq; fi
-          if [ "$RUNNER_OS" = "Windows" ]; then choco install jq; fi
+          if [ "$RUNNER_OS" = "Windows" ]; then choco install jq -y; fi
         shell: bash
 
       - name: Inject version into wails.json
@@ -71,10 +72,7 @@ jobs:
           npm ci
 
       - name: Build
-        run: wails build -clean -ldflags "-X main.AppVersion=${{ github.ref_name }}"
-        env:
-          GOOS: ${{ matrix.goos }}
-          GOARCH: ${{ matrix.goarch }}
+        run: wails build -clean -platform ${{ matrix.goos }}/${{ matrix.goarch }} -ldflags "-X main.AppVersion=${{ github.ref_name }}"
 
       - name: Upload binaries
         uses: softprops/action-gh-release@v2
