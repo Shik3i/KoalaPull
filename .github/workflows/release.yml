@@ -5,6 +5,10 @@ on:
     tags:
       - "v*"
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: write
 
@@ -45,6 +49,13 @@ jobs:
           cache: "npm"
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Verify
+        run: ./scripts/verify.sh
+
       - name: Install Linux system deps
         if: runner.os == 'Linux'
         run: |
@@ -65,14 +76,6 @@ jobs:
         run: |
           VER="${{ github.ref_name }}"
           jq --arg v "$VER" '.info.productVersion = $v' wails.json > wails.json.tmp && mv wails.json.tmp wails.json
-
-      - name: Install frontend dependencies
-        run: |
-          cd frontend
-          npm ci
-
-      - name: Verify
-        run: ./scripts/verify.sh
 
       - name: Build
         run: wails build -clean -platform ${{ matrix.goos }}/${{ matrix.goarch }} -ldflags "-X main.AppVersion=${{ github.ref_name }}"
