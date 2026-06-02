@@ -2,8 +2,12 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -22,22 +26,15 @@ func TestFFmpegZipDestNamePreservesWindowsExecutableSuffix(t *testing.T) {
 }
 
 func TestFetchMetadataRespectsAppContextCancellation(t *testing.T) {
-	tempDir := t.TempDir()
-	binDir := filepath.Join(tempDir, "bin")
-	if err := os.MkdirAll(binDir, 0755); err != nil {
-		t.Fatalf("mkdir bin dir: %v", err)
-	}
-	ytdlp := filepath.Join(binDir, "yt-dlp")
-	script := "#!/bin/sh\nsleep 0.25\nprintf '%s\\n' '{\"id\":\"id\",\"title\":\"title\",\"formats\":[]}'\n"
-	if err := os.WriteFile(ytdlp, []byte(script), 0755); err != nil {
-		t.Fatalf("write fake yt-dlp: %v", err)
-	}
+	binDir := installFakeYtDlp(t)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
 	defer cancel()
 	app := NewApp()
 	app.ctx = ctx
 	app.binDir = binDir
+	t.Setenv("KOALAPULL_HELPER_MODE", "sleep-json")
+	t.Setenv("KOALAPULL_HELPER_DELAY_MS", "250")
 
 	start := time.Now()
 	_, err := app.FetchMetadata("https://example.invalid/video")
@@ -52,20 +49,12 @@ func TestFetchMetadataRespectsAppContextCancellation(t *testing.T) {
 }
 
 func TestFetchMetadataCancelsPreviousRequest(t *testing.T) {
-	tempDir := t.TempDir()
-	binDir := filepath.Join(tempDir, "bin")
-	if err := os.MkdirAll(binDir, 0755); err != nil {
-		t.Fatalf("mkdir bin dir: %v", err)
-	}
-	ytdlp := filepath.Join(binDir, "yt-dlp")
-	script := "#!/bin/sh\nsleep 1\nprintf '%s\\n' '{\"id\":\"id\",\"title\":\"title\",\"formats\":[]}'\n"
-	if err := os.WriteFile(ytdlp, []byte(script), 0755); err != nil {
-		t.Fatalf("write fake yt-dlp: %v", err)
-	}
-
+	binDir := installFakeYtDlp(t)
 	app := NewApp()
 	app.ctx = context.Background()
 	app.binDir = binDir
+	t.Setenv("KOALAPULL_HELPER_MODE", "sleep-json")
+	t.Setenv("KOALAPULL_HELPER_DELAY_MS", "1000")
 
 	firstDone := make(chan error, 1)
 	go func() {
@@ -83,6 +72,31 @@ func TestFetchMetadataCancelsPreviousRequest(t *testing.T) {
 		}
 	case <-time.After(300 * time.Millisecond):
 		t.Fatal("first FetchMetadata was not cancelled by second request")
+	}
+}
+
+func TestHelperProcess(_ *testing.T) {
+	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
+		return
+	}
+
+	switch os.Getenv("KOALAPULL_HELPER_MODE") {
+	case "sleep-json":
+		delay, err := time.ParseDuration(os.Getenv("KOALAPULL_HELPER_DELAY_MS") + "ms")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		time.Sleep(delay)
+		_ = json.NewEncoder(os.Stdout).Encode(rawMetadata{
+			ID:      "id",
+			Title:   "title",
+			Formats: []rawFormat{},
+		})
+		os.Exit(0)
+	default:
+		fmt.Fprintln(os.Stderr, "unknown helper mode")
+		os.Exit(2)
 	}
 }
 
@@ -169,4 +183,44 @@ func TestCollectRecentLinesReportsLongLineScannerError(t *testing.T) {
 	if len(lines) != 1 || lines[0] != line {
 		t.Fatalf("collectRecentLines did not preserve long line; len=%d", len(lines))
 	}
+}
+
+func installFakeYtDlp(t *testing.T) string {
+	t.Helper()
+	tempDir := t.TempDir()
+	binDir := filepath.Join(tempDir, "bin")
+	if err := os.MkdirAll(binDir, 0755); err != nil {
+		t.Fatalf("mkdir bin dir: %v", err)
+	}
+
+	srcPath, err := os.Executable()
+	if err != nil {
+		t.Fatalf("current executable: %v", err)
+	}
+	name := "yt-dlp"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	dstPath := filepath.Join(binDir, name)
+
+	src, err := os.Open(srcPath)
+	if err != nil {
+		t.Fatalf("open test binary: %v", err)
+	}
+	defer src.Close()
+
+	dst, err := os.OpenFile(dstPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
+	if err != nil {
+		t.Fatalf("create fake yt-dlp: %v", err)
+	}
+	if _, err := io.Copy(dst, src); err != nil {
+		dst.Close()
+		t.Fatalf("copy fake yt-dlp: %v", err)
+	}
+	if err := dst.Close(); err != nil {
+		t.Fatalf("close fake yt-dlp: %v", err)
+	}
+
+	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
+	return binDir
 }
