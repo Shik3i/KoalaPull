@@ -787,7 +787,6 @@ func (a *App) runDownload(ctx context.Context, downloadID string, args []string,
 				a.emitDownloadProgress(downloadID, lastPct, lastSpeed, lastETA, lastFileSz, "downloading", "", currentPS)
 			}
 		}
-		close(done)
 	}()
 
 	errLines := make([]string, 0, maxErrLines)
@@ -803,7 +802,6 @@ func (a *App) runDownload(ctx context.Context, downloadID string, args []string,
 				errLines = append(errLines, line)
 			}
 		}
-		close(errCh)
 	}()
 
 	<-done
