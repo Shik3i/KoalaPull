@@ -2,22 +2,30 @@ package main
 
 import (
 	"archive/zip"
+	"bufio"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"runtime"
+	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 type App struct {
-	ctx    context.Context
-	binDir string
+	ctx       context.Context
+	binDir    string
+	dlMu      sync.Mutex
+	dlCounter int
 }
 
 type DependencyStatus struct {
@@ -31,6 +39,37 @@ type DepProgress struct {
 	Status     string `json:"status"`
 	Error      string `json:"error,omitempty"`
 }
+
+type FormatInfo struct {
+	FormatID   string `json:"formatId"`
+	Ext        string `json:"ext"`
+	Width      int    `json:"width"`
+	Height     int    `json:"height"`
+	VCodec     string `json:"vcodec"`
+	ACodec     string `json:"acodec"`
+	Filesize   int64  `json:"filesize"`
+	FormatNote string `json:"formatNote"`
+}
+
+type VideoMetadata struct {
+	ID        string       `json:"id"`
+	Title     string       `json:"title"`
+	Thumbnail string       `json:"thumbnail"`
+	Uploader  string       `json:"uploader"`
+	Duration  float64      `json:"duration"`
+	Formats   []FormatInfo `json:"formats"`
+}
+
+type DownloadProgress struct {
+	DownloadID string  `json:"downloadId"`
+	Percent    float64 `json:"percent"`
+	Speed      string  `json:"speed"`
+	ETA        string  `json:"eta"`
+	Status     string  `json:"status"`
+	Error      string  `json:"error,omitempty"`
+}
+
+var progressRegex = regexp.MustCompile(`\[download\]\s+([\d.]+)%\s+of\s+~?[\d.]+\S+\s+at\s+([\d.]+\S+)\s+ETA\s+(\S+)`)
 
 func NewApp() *App {
 	return &App{}
@@ -64,10 +103,23 @@ func (a *App) ffmpegPath() string {
 	return filepath.Join(a.binDir, name)
 }
 
+func (a *App) ffmpegDir() string {
+	return filepath.Dir(a.ffmpegPath())
+}
+
 func fileExists(path string) bool {
 	_, err := os.Stat(path)
 	return err == nil
 }
+
+func (a *App) nextDownloadID() string {
+	a.dlMu.Lock()
+	defer a.dlMu.Unlock()
+	a.dlCounter++
+	return fmt.Sprintf("dl_%d_%d", time.Now().UnixMilli(), a.dlCounter)
+}
+
+// ---------- Dependency Management ----------
 
 func (a *App) CheckDependencies() DependencyStatus {
 	return DependencyStatus{
@@ -88,6 +140,20 @@ func (a *App) emitProgress(dep string, pct int, status, errMsg string) {
 	wailsRuntime.EventsEmit(a.ctx, "dependency-progress", ev)
 }
 
+func (a *App) emitDownloadProgress(downloadID string, percent float64, speed, eta, status, errMsg string) {
+	ev := DownloadProgress{
+		DownloadID: downloadID,
+		Percent:    percent,
+		Speed:      speed,
+		ETA:        eta,
+		Status:     status,
+	}
+	if errMsg != "" {
+		ev.Error = errMsg
+	}
+	wailsRuntime.EventsEmit(a.ctx, "download-progress", ev)
+}
+
 func (a *App) DownloadDependencies() error {
 	if err := a.downloadYtdlp(); err != nil {
 		a.emitProgress("yt-dlp", 0, "error", err.Error())
@@ -103,33 +169,27 @@ func (a *App) DownloadDependencies() error {
 func (a *App) downloadYtdlp() error {
 	a.emitProgress("yt-dlp", 0, "downloading", "")
 	destPath := a.ytdlpPath()
-
 	if fileExists(destPath) {
 		a.emitProgress("yt-dlp", 100, "completed", "")
 		return nil
 	}
-
 	url := ytdlpDownloadURL()
 	tmpPath := destPath + ".tmp"
 	if err := a.downloadFile(url, tmpPath, "yt-dlp"); err != nil {
 		os.Remove(tmpPath)
 		return err
 	}
-
 	if err := os.Rename(tmpPath, destPath); err != nil {
 		return fmt.Errorf("rename failed: %w", err)
 	}
-
 	if runtime.GOOS != "windows" {
 		if err := os.Chmod(destPath, 0755); err != nil {
 			return fmt.Errorf("chmod failed: %w", err)
 		}
 	}
-
 	if runtime.GOOS == "darwin" {
 		exec.Command("xattr", "-d", "com.apple.quarantine", destPath).Run()
 	}
-
 	a.emitProgress("yt-dlp", 100, "completed", "")
 	return nil
 }
@@ -137,24 +197,20 @@ func (a *App) downloadYtdlp() error {
 func (a *App) downloadFfmpeg() error {
 	a.emitProgress("ffmpeg", 0, "downloading", "")
 	destPath := a.ffmpegPath()
-
 	if fileExists(destPath) {
 		a.emitProgress("ffmpeg", 100, "completed", "")
 		return nil
 	}
-
 	url := ffmpegDownloadURL()
 	tmpDir, err := os.MkdirTemp("", "koalapull-ffmpeg")
 	if err != nil {
 		return fmt.Errorf("temp dir failed: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
-
 	archivePath := filepath.Join(tmpDir, "ffmpeg-archive")
 	if err := a.downloadFile(url, archivePath, "ffmpeg"); err != nil {
 		return err
 	}
-
 	destDir := filepath.Dir(destPath)
 	if runtime.GOOS == "windows" {
 		if err := extractFFmpegFromZip(archivePath, destDir); err != nil {
@@ -165,15 +221,12 @@ func (a *App) downloadFfmpeg() error {
 			return fmt.Errorf("tar extraction failed: %w", err)
 		}
 	}
-
 	if !fileExists(destPath) {
 		return fmt.Errorf("ffmpeg binary not found after extraction")
 	}
-
 	if runtime.GOOS != "windows" {
 		os.Chmod(destPath, 0755)
 	}
-
 	a.emitProgress("ffmpeg", 100, "completed", "")
 	return nil
 }
@@ -184,20 +237,16 @@ func (a *App) downloadFile(url, destPath, depName string) error {
 		return fmt.Errorf("create file failed: %w", err)
 	}
 	defer out.Close()
-
 	resp, err := http.Get(url)
 	if err != nil {
 		return fmt.Errorf("http get failed: %w", err)
 	}
 	defer resp.Body.Close()
-
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("bad status: %s", resp.Status)
 	}
-
 	total := resp.ContentLength
 	lastPct := -1
-
 	buf := make([]byte, 32*1024)
 	var written int64
 	for {
@@ -222,7 +271,6 @@ func (a *App) downloadFile(url, destPath, depName string) error {
 			return fmt.Errorf("read failed: %w", readErr)
 		}
 	}
-
 	return nil
 }
 
@@ -232,7 +280,6 @@ func extractFFmpegFromZip(archivePath, destDir string) error {
 		return err
 	}
 	defer r.Close()
-
 	for _, f := range r.File {
 		if f.FileInfo().IsDir() {
 			continue
@@ -244,14 +291,12 @@ func extractFFmpegFromZip(archivePath, destDir string) error {
 		if err != nil {
 			return err
 		}
-
 		binName := filepath.Base(f.Name)
 		dst, err := os.Create(filepath.Join(destDir, binName))
 		if err != nil {
 			rc.Close()
 			return err
 		}
-
 		_, err = io.Copy(dst, rc)
 		dst.Close()
 		rc.Close()
@@ -259,7 +304,6 @@ func extractFFmpegFromZip(archivePath, destDir string) error {
 			return err
 		}
 	}
-
 	return nil
 }
 
@@ -297,4 +341,161 @@ func ffmpegDownloadURL() string {
 	default:
 		return base + "/ffmpeg-master-latest-linux64-gpl.tar.xz"
 	}
+}
+
+// ---------- Metadata Fetching ----------
+
+type rawFormat struct {
+	FormatID   string `json:"format_id"`
+	Ext        string `json:"ext"`
+	Width      int    `json:"width"`
+	Height     int    `json:"height"`
+	VCodec     string `json:"vcodec"`
+	ACodec     string `json:"acodec"`
+	Filesize   int64  `json:"filesize"`
+	FormatNote string `json:"format_note"`
+}
+
+type rawMetadata struct {
+	ID        string      `json:"id"`
+	Title     string      `json:"title"`
+	Thumbnail string      `json:"thumbnail"`
+	Uploader  string      `json:"uploader"`
+	Duration  float64     `json:"duration"`
+	Formats   []rawFormat `json:"formats"`
+}
+
+func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
+	args := []string{"--dump-json", "--skip-download", url}
+	cmd := exec.Command(a.ytdlpPath(), args...)
+
+	stdout, err := cmd.Output()
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			return nil, fmt.Errorf("yt-dlp failed: %s", string(exitErr.Stderr))
+		}
+		return nil, fmt.Errorf("yt-dlp exec failed: %w", err)
+	}
+
+	var raw rawMetadata
+	if err := json.Unmarshal(stdout, &raw); err != nil {
+		return nil, fmt.Errorf("json parse failed: %w", err)
+	}
+
+	meta := &VideoMetadata{
+		ID:        raw.ID,
+		Title:     raw.Title,
+		Thumbnail: raw.Thumbnail,
+		Uploader:  raw.Uploader,
+		Duration:  raw.Duration,
+		Formats:   make([]FormatInfo, 0, len(raw.Formats)),
+	}
+	for _, f := range raw.Formats {
+		meta.Formats = append(meta.Formats, FormatInfo{
+			FormatID:   f.FormatID,
+			Ext:        f.Ext,
+			Width:      f.Width,
+			Height:     f.Height,
+			VCodec:     f.VCodec,
+			ACodec:     f.ACodec,
+			Filesize:   f.Filesize,
+			FormatNote: f.FormatNote,
+		})
+	}
+	return meta, nil
+}
+
+// ---------- Download Execution ----------
+
+func (a *App) StartDownload(url, formatID, outputDir string) (string, error) {
+	if outputDir == "" {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return "", fmt.Errorf("home dir: %w", err)
+		}
+		outputDir = filepath.Join(home, "Downloads", "KoalaPull")
+	}
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
+		return "", fmt.Errorf("output dir: %w", err)
+	}
+
+	downloadID := a.nextDownloadID()
+	template := filepath.Join(outputDir, "%(title)s [%(id)s].%(ext)s")
+
+	args := []string{
+		"-f", formatID,
+		"--ffmpeg-location", a.ffmpegDir(),
+		"--newline",
+		"-o", template,
+		url,
+	}
+
+	a.emitDownloadProgress(downloadID, 0, "", "", "starting", "")
+
+	go a.runDownload(downloadID, args)
+	return downloadID, nil
+}
+
+func (a *App) runDownload(downloadID string, args []string) {
+	cmd := exec.Command(a.ytdlpPath(), args...)
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		a.emitDownloadProgress(downloadID, 0, "", "", "error", fmt.Sprintf("pipe failed: %v", err))
+		return
+	}
+
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		a.emitDownloadProgress(downloadID, 0, "", "", "error", fmt.Sprintf("stdout pipe failed: %v", err))
+		return
+	}
+
+	if err := cmd.Start(); err != nil {
+		a.emitDownloadProgress(downloadID, 0, "", "", "error", fmt.Sprintf("start failed: %v", err))
+		return
+	}
+
+	done := make(chan struct{})
+	go func() {
+		scanner := bufio.NewScanner(stdout)
+		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if pct, speed, eta, ok := parseProgressLine(line); ok {
+				a.emitDownloadProgress(downloadID, pct, speed, eta, "downloading", "")
+			}
+		}
+		close(done)
+	}()
+
+	// Collect stderr in background
+	errBuf := &strings.Builder{}
+	go io.Copy(errBuf, stderr)
+
+	<-done
+	err = cmd.Wait()
+
+	if err != nil {
+		errMsg := strings.TrimSpace(errBuf.String())
+		if errMsg == "" {
+			errMsg = err.Error()
+		}
+		a.emitDownloadProgress(downloadID, 0, "", "", "error", errMsg)
+		return
+	}
+
+	a.emitDownloadProgress(downloadID, 100, "", "", "completed", "")
+}
+
+func parseProgressLine(line string) (percent float64, speed string, eta string, ok bool) {
+	matches := progressRegex.FindStringSubmatch(line)
+	if matches == nil {
+		return 0, "", "", false
+	}
+	pct, err := strconv.ParseFloat(matches[1], 64)
+	if err != nil {
+		return 0, "", "", false
+	}
+	return pct, strings.TrimSpace(matches[2]), strings.TrimSpace(matches[3]), true
 }
