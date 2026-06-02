@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect } from 'react'
 import {
   CheckDependencies, DownloadDependencies,
   FetchMetadata, StartDownload, CancelDownload,
-  GetSettings, UpdateSettings, SelectDirectory,
+  GetSettings, UpdateSettings, SelectDirectory, GetYtdlpVersion,
 } from "../wailsjs/go/main/App"
 import { EventsOn, EventsOff } from "../wailsjs/runtime/runtime"
 import './style.css'
@@ -94,6 +94,8 @@ function App() {
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null)
   const [selectedFormat, setSelectedFormat] = useState('bestvideo+bestaudio/best')
   const [formatOptions, setFormatOptions] = useState<FormatOption[]>([])
+  const [selectedContainer, setSelectedContainer] = useState('mp4')
+  const [selectedSubs, setSelectedSubs] = useState('none')
 
   const [depsReady, setDepsReady] = useState(false)
   const [checkingDeps, setCheckingDeps] = useState(true)
@@ -127,7 +129,6 @@ function App() {
         } else {
           setDepsReady(false)
           setCheckingDeps(false)
-          setInstallingDeps(true)
         }
       } catch {
         if (!cancelled) {
@@ -151,20 +152,27 @@ function App() {
     }
   }, [])
 
-  // Auto-trigger dependency install
+  // Trigger dependency install when user clicks the button
   useEffect(() => {
-    if (installingDeps && depsReady === false) {
-      DownloadDependencies()
-        .then(() => {
-          setDepsReady(true)
-          setInstallingDeps(false)
-        })
-        .catch((err: any) => {
-          setDepError(err?.message || 'Dependency installation failed')
-          setInstallingDeps(false)
-        })
-    }
+    if (!installingDeps || depsReady) return
+    let cancelled = false
+    DownloadDependencies()
+      .then(() => {
+        if (!cancelled) { setDepsReady(true); setInstallingDeps(false) }
+      })
+      .catch((err: any) => {
+        if (!cancelled) { setDepError(err?.message || 'Dependency installation failed'); setInstallingDeps(false) }
+      })
+    return () => { cancelled = true }
   }, [installingDeps, depsReady])
+
+  // Pre-warm yt-dlp when deps are ready; capture version for display
+  useEffect(() => {
+    if (!depsReady) return
+    GetYtdlpVersion().then((v: string) => {
+      if (v) setYtdlpVersion(v)
+    }).catch(() => {})
+  }, [depsReady])
 
   // Listen for download progress
   useEffect(() => {
@@ -213,7 +221,7 @@ function App() {
   const handleAddToQueue = async () => {
     if (!metadata) return
     try {
-      const downloadId = await StartDownload(url, selectedFormat, defaultOutputDir)
+      const downloadId = await StartDownload(url, selectedFormat, defaultOutputDir, selectedContainer, selectedSubs)
       setQueue((prev) => [
         ...prev,
         { id: downloadId, title: metadata.title, thumbnail: metadata.thumbnail, status: 'queued', progress: 0, speed: '', eta: '', errorMsg: '', playlistStatus: '' },
@@ -269,9 +277,9 @@ function App() {
         <div className="w-12 h-12 rounded-xl bg-accent flex items-center justify-center mb-5">
           <span className="text-black font-bold text-lg">KP</span>
         </div>
-        <h1 className="text-xl font-semibold tracking-tight mb-1">Setting up KoalaPull</h1>
+        <h1 className="text-xl font-semibold tracking-tight mb-1">KoalaPull Setup</h1>
         <p className="text-sm text-gray-400 mb-6 text-center max-w-sm">
-          Downloading required tools to your application data directory.
+          Required tools (yt-dlp, ffmpeg) need to be downloaded first.
         </p>
         <div className="w-full max-w-sm space-y-4">
           {['yt-dlp', 'ffmpeg'].map((dep) => {
@@ -289,11 +297,15 @@ function App() {
             )
           })}
         </div>
-        {installingDeps && (
+        {installingDeps ? (
           <p className="text-xs text-gray-500 mt-4 font-mono">
             {depProgress['yt-dlp'] === 100 && depProgress['ffmpeg'] === 100 ? 'Finalizing...' : 'Downloading...'}
           </p>
-        )}
+        ) : !depError ? (
+          <button onClick={() => setInstallingDeps(true)} className="btn-primary text-sm px-5 py-2 mt-2">
+            Download &amp; Install
+          </button>
+        ) : null}
         {depError && (
           <div className="mt-4 text-center">
             <p className="text-xs text-red-400 mb-2">{depError}</p>
@@ -410,7 +422,7 @@ function App() {
           <div className="bg-surface-light border border-surface-border rounded-lg overflow-hidden">
             <div className="flex gap-4 p-4">
               {metadata.thumbnail ? (
-                <img src={metadata.thumbnail} alt={metadata.title} className="w-44 h-24 rounded-md object-cover shrink-0 bg-surface-lighter" />
+                <img src={metadata.thumbnail} alt={metadata.title} loading="lazy" className="w-44 h-24 rounded-md object-cover shrink-0 bg-surface-lighter" />
               ) : (
                 <div className="w-44 h-24 bg-surface-lighter rounded-md shrink-0 flex items-center justify-center border border-surface-border">
                   <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -432,12 +444,12 @@ function App() {
                       <option key={opt.formatId} value={opt.formatId}>{opt.label}</option>
                     ))}
                   </select>
-                  <select className="select-dark text-xs flex-1 min-w-[100px] disabled:opacity-40 disabled:cursor-not-allowed" defaultValue="none" disabled={metadata.isPlaylist} title={metadata.isPlaylist ? 'Subtitles not supported for playlists' : ''}>
+                  <select value={selectedSubs} onChange={(e) => setSelectedSubs(e.target.value)} className="select-dark text-xs flex-1 min-w-[100px]">
                     <option value="none">No Subs</option>
                     <option value="auto">Auto-generated</option>
                     <option value="embed">Embed All</option>
                   </select>
-                  <select className="select-dark text-xs flex-1 min-w-[80px]" defaultValue="mp4">
+                  <select value={selectedContainer} onChange={(e) => setSelectedContainer(e.target.value)} className="select-dark text-xs flex-1 min-w-[80px]">
                     <option value="mp4">MP4</option>
                     <option value="mkv">MKV</option>
                     <option value="mp3">MP3</option>
@@ -480,7 +492,7 @@ function App() {
                 <div key={item.id} className="bg-surface-light border border-surface-border rounded-lg p-3 flex items-center gap-3">
                   <div className="w-16 h-10 bg-surface-lighter rounded shrink-0 flex items-center justify-center border border-surface-border overflow-hidden">
                     {item.thumbnail ? (
-                      <img src={item.thumbnail} alt="" className="w-full h-full object-cover" />
+                      <img src={item.thumbnail} alt="" loading="lazy" className="w-full h-full object-cover" />
                     ) : (
                       <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />

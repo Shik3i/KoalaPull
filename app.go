@@ -191,6 +191,14 @@ func (a *App) CheckDependencies() DependencyStatus {
 	}
 }
 
+func (a *App) GetYtdlpVersion() string {
+	out, err := exec.Command(a.ytdlpPath(), "--version").Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
+
 func (a *App) emitProgress(dep string, pct int, status, errMsg string) {
 	ev := DepProgress{
 		Dependency: dep,
@@ -276,7 +284,7 @@ func (a *App) downloadFfmpeg() error {
 		return err
 	}
 	destDir := filepath.Dir(destPath)
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
 		if err := extractFFmpegFromZip(archivePath, destDir); err != nil {
 			return fmt.Errorf("zip extraction failed: %w", err)
 		}
@@ -348,14 +356,15 @@ func extractFFmpegFromZip(archivePath, destDir string) error {
 		if f.FileInfo().IsDir() {
 			continue
 		}
-		if !strings.HasSuffix(f.Name, "ffmpeg.exe") && !strings.HasSuffix(f.Name, "ffprobe.exe") {
+		base := filepath.Base(f.Name)
+		if base != "ffmpeg" && base != "ffmpeg.exe" && base != "ffprobe" && base != "ffprobe.exe" {
 			continue
 		}
 		rc, err := f.Open()
 		if err != nil {
 			return err
 		}
-		binName := filepath.Base(f.Name)
+		binName := strings.TrimSuffix(base, ".exe")
 		dst, err := os.Create(filepath.Join(destDir, binName))
 		if err != nil {
 			rc.Close()
@@ -372,10 +381,38 @@ func extractFFmpegFromZip(archivePath, destDir string) error {
 }
 
 func extractFFmpegFromTarXz(archivePath, destDir string) error {
-	cmd := exec.Command("tar", "-xJf", archivePath, "-C", destDir, "--strip-components=2", "--wildcards", "*/bin/ffmpeg")
+	tmpDir, err := os.MkdirTemp("", "koalapull-ffmpeg-extract")
+	if err != nil {
+		return fmt.Errorf("temp dir failed: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	cmd := exec.Command("tar", "-xJf", archivePath, "-C", tmpDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("tar failed: %s: %w", string(output), err)
+	}
+
+	var found bool
+	filepath.Walk(tmpDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || found {
+			return err
+		}
+		if !info.IsDir() && info.Mode().IsRegular() && filepath.Base(path) == "ffmpeg" {
+			data, readErr := os.ReadFile(path)
+			if readErr != nil {
+				return readErr
+			}
+			if writeErr := os.WriteFile(filepath.Join(destDir, "ffmpeg"), data, 0755); writeErr != nil {
+				return writeErr
+			}
+			found = true
+		}
+		return nil
+	})
+
+	if !found {
+		return fmt.Errorf("ffmpeg binary not found in archive")
 	}
 	return nil
 }
@@ -393,17 +430,13 @@ func ytdlpDownloadURL() string {
 }
 
 func ffmpegDownloadURL() string {
-	base := "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest"
 	switch runtime.GOOS {
 	case "windows":
-		return base + "/ffmpeg-master-latest-win64-gpl.zip"
+		return "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
 	case "darwin":
-		if runtime.GOARCH == "arm64" {
-			return base + "/ffmpeg-master-latest-macos-arm64-gpl.tar.xz"
-		}
-		return base + "/ffmpeg-master-latest-macos-x86_64-gpl.tar.xz"
+		return "https://evermeet.cx/ffmpeg/get/zip"
 	default:
-		return base + "/ffmpeg-master-latest-linux64-gpl.tar.xz"
+		return "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
 	}
 }
 
@@ -438,7 +471,7 @@ type rawMetadata struct {
 }
 
 func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
-	args := []string{"--dump-json", "--skip-download", "--flat-playlist", url}
+	args := []string{"--no-check-formats", "--no-warnings", "--dump-json", "--skip-download", "--flat-playlist", url}
 	cmd := exec.Command(a.ytdlpPath(), args...)
 	stdout, err := cmd.Output()
 	if err != nil {
@@ -461,15 +494,6 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 			IsPlaylist: true,
 			EntryCount: len(raw.Entries),
 			Formats:    make([]FormatInfo, 0),
-		}
-		if len(raw.Entries) > 0 {
-			entryURL := raw.Entries[0].URL
-			if entryURL == "" {
-				entryURL = "https://www.youtube.com/watch?v=" + raw.Entries[0].ID
-			}
-			if formats, err := a.fetchFormatsForURL(entryURL); err == nil {
-				meta.Formats = formats
-			}
 		}
 		return meta, nil
 	}
@@ -497,38 +521,13 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	return meta, nil
 }
 
-func (a *App) fetchFormatsForURL(url string) ([]FormatInfo, error) {
-	args := []string{"--dump-json", "--skip-download", url}
-	cmd := exec.Command(a.ytdlpPath(), args...)
-	stdout, err := cmd.Output()
-	if err != nil {
-		return nil, err
-	}
-	var raw rawMetadata
-	if err := json.Unmarshal(stdout, &raw); err != nil {
-		return nil, err
-	}
-	formats := make([]FormatInfo, 0, len(raw.Formats))
-	for _, f := range raw.Formats {
-		formats = append(formats, FormatInfo{
-			FormatID:   f.FormatID,
-			Ext:        f.Ext,
-			Width:      f.Width,
-			Height:     f.Height,
-			VCodec:     f.VCodec,
-			ACodec:     f.ACodec,
-			Filesize:   f.Filesize,
-			FormatNote: f.FormatNote,
-		})
-	}
-	return formats, nil
-}
+
 
 // ---------- Download Execution ----------
 
 const maxErrLines = 20
 
-func (a *App) StartDownload(url, formatID, outputDir string) (string, error) {
+func (a *App) StartDownload(url, formatID, outputDir, container, subtitle string) (string, error) {
 	if outputDir == "" {
 		settings := a.GetSettings()
 		outputDir = settings.DefaultOutputDir
@@ -541,12 +540,24 @@ func (a *App) StartDownload(url, formatID, outputDir string) (string, error) {
 	template := filepath.Join(outputDir, "%(title)s [%(id)s].%(ext)s")
 
 	args := []string{
+		"--no-warnings",
 		"-f", formatID,
 		"--ffmpeg-location", a.ffmpegDir(),
 		"--newline",
 		"-o", template,
-		url,
 	}
+	if container == "mp3" {
+		args = append(args, "-x", "--audio-format", "mp3")
+	} else if container != "" && container != "none" {
+		args = append(args, "--merge-output-format", container)
+	}
+	switch subtitle {
+	case "auto":
+		args = append(args, "--write-auto-subs", "--sub-langs", "en", "--embed-subs")
+	case "embed":
+		args = append(args, "--sub-langs", "all", "--embed-subs")
+	}
+	args = append(args, url)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	a.adMu.Lock()

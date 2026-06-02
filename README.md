@@ -15,7 +15,7 @@ A clean, minimalist GUI download manager wrapping **yt-dlp**. Download videos, a
 
 ## Features
 
-- **Automated dependency management** — yt-dlp and ffmpeg are downloaded and isolated to your app data directory automatically on first launch.
+- **On-demand dependency setup** — yt-dlp and ffmpeg are downloaded and isolated to your app data directory on first launch after clicking "Download &amp; Install".
 - **Cross-platform** — macOS, Windows, and Linux builds with a consistent native look using Wails (WebView2 / WKWebView / WebKitGTK).
 - **Rich metadata preview** — Fetch video title, uploader, thumbnail, and available formats before downloading.
 - **Format selection** — Choose resolution, container (MP4/MKV/MP3), and subtitle options.

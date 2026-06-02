@@ -8,7 +8,7 @@ The UI is a single-page React application bootstrapped by Vite. It communicates 
 
 1. **Wails Bindings** (sync) — Direct async function calls to Go methods, e.g.:
    - `FetchMetadata(url)` → returns `VideoMetadata`
-   - `StartDownload(url, format, dir)` → returns `downloadId`
+   - `StartDownload(url, format, dir, container, subtitle)` → returns `downloadId`
    - `GetSettings()` / `UpdateSettings()` → read/write settings
 
 2. **Wails Events** (async) — Real-time streaming from Go to React:
