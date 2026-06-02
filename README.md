@@ -33,6 +33,7 @@ It is made for people who want the power of `yt-dlp` without living in the termi
 - **Theme support** - dark and light themes with saved preference.
 - **Auto-paste URLs** - optional clipboard detection for supported video links.
 - **Update notifications** - check for new `yt-dlp` releases from the Settings tab.
+- **Help tab** - quick app guide, common supported sites, and a link to the full `yt-dlp` list.
 - **Privacy-first** - bundled fonts, strict CSP, no telemetry, no analytics, no external CDNs.
 - **Keyboard shortcuts** - quick focus on the URL input with `Cmd/Ctrl+K` or `Cmd/Ctrl+L`.
 
@@ -91,6 +92,7 @@ wails dev
 3. Choose your format, container, and subtitle options.
 4. Add the job to the queue.
 5. Watch progress, speed, ETA, and playlist status in real time.
+6. Open the Help tab for a quick guide and supported sites overview.
 
 ## Settings
 
