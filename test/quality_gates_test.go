@@ -34,15 +34,38 @@ func TestMakefileUsesSharedVerifyScript(t *testing.T) {
 	}
 }
 
-func TestCIWorkflowRunsVerificationOnPushAndPullRequest(t *testing.T) {
+func TestCIWorkflowIsManualOnly(t *testing.T) {
 	data := mustReadRepoFile(t, ".github", "workflows", "ci.yml")
 	for _, want := range []string{
-		"pull_request:",
-		"push:",
+		"workflow_dispatch:",
 		"./scripts/verify.sh",
 	} {
 		if !strings.Contains(data, want) {
 			t.Fatalf(".github/workflows/ci.yml missing %q", want)
+		}
+	}
+	for _, forbidden := range []string{
+		"pull_request:",
+		"push:",
+		"tags:",
+	} {
+		if strings.Contains(data, forbidden) {
+			t.Fatalf(".github/workflows/ci.yml must not contain %q", forbidden)
+		}
+	}
+}
+
+func TestReleaseWorkflowOnlyRunsOnVersionTags(t *testing.T) {
+	data := mustReadRepoFile(t, ".github", "workflows", "release.yml")
+	if !strings.Contains(data, "tags:") || !strings.Contains(data, "- \"v*\"") {
+		t.Fatal("release workflow must only trigger on v* tags")
+	}
+	for _, forbidden := range []string{
+		"pull_request:",
+		"branches:",
+	} {
+		if strings.Contains(data, forbidden) {
+			t.Fatalf("release workflow must not contain %q", forbidden)
 		}
 	}
 }
