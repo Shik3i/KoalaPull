@@ -107,6 +107,19 @@ func TestReleaseWorkflowUsesWebkit241TagForLinuxBuild(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowUsesBashForInjectVersionStep(t *testing.T) {
+	data := mustReadRepoFile(t, ".github", "workflows", "release.yml")
+	for _, want := range []string{
+		"name: Inject version into wails.json",
+		"shell: bash",
+		"VER=\"${{ github.ref_name }}\"",
+	} {
+		if !strings.Contains(data, want) {
+			t.Fatalf("release workflow missing %q", want)
+		}
+	}
+}
+
 func TestFrontendPackageHasAutomatedTestScript(t *testing.T) {
 	data := mustReadRepoFile(t, "frontend", "package.json")
 	if !strings.Contains(data, "\"test\"") {
