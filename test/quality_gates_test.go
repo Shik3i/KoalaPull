@@ -77,6 +77,23 @@ func TestReleaseWorkflowRunsVerificationBeforeBuild(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowPackagesArtifactsBeforeUpload(t *testing.T) {
+	data := mustReadRepoFile(t, ".github", "workflows", "release.yml")
+	for _, want := range []string{
+		"name: Package artifact",
+		"asset_name=",
+		"artifact_path=",
+		"files: ${{ steps.package.outputs.artifact_path }}",
+	} {
+		if !strings.Contains(data, want) {
+			t.Fatalf("release workflow missing %q", want)
+		}
+	}
+	if strings.Contains(data, "files: build/bin/*") {
+		t.Fatal("release workflow must not upload raw build/bin/* paths")
+	}
+}
+
 func TestFrontendPackageHasAutomatedTestScript(t *testing.T) {
 	data := mustReadRepoFile(t, "frontend", "package.json")
 	if !strings.Contains(data, "\"test\"") {

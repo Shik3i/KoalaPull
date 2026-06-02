@@ -20,15 +20,19 @@ jobs:
           - os: ubuntu-latest
             goos: linux
             goarch: amd64
+            asset_ext: tar.gz
           - os: windows-latest
             goos: windows
             goarch: amd64
+            asset_ext: zip
           - os: macos-latest
             goos: darwin
             goarch: amd64
+            asset_ext: zip
           - os: macos-latest
             goos: darwin
             goarch: arm64
+            asset_ext: zip
 
     runs-on: ${{ matrix.os }}
 
@@ -80,7 +84,29 @@ jobs:
       - name: Build
         run: wails build -clean -platform ${{ matrix.goos }}/${{ matrix.goarch }} -ldflags "-X main.AppVersion=${{ github.ref_name }}"
 
+      - name: Package artifact
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          asset_name="koalapull-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.${{ matrix.asset_ext }}"
+
+          if [ "${{ matrix.goos }}" = "darwin" ]; then
+            artifact_path="release-assets/${asset_name}"
+            ditto -c -k --sequesterRsrc --keepParent build/bin/koalapull.app "$artifact_path"
+          elif [ "${{ matrix.goos }}" = "windows" ]; then
+            artifact_path="release-assets/${asset_name}"
+            powershell -Command "Compress-Archive -Path 'build/bin/koalapull.exe' -DestinationPath '$artifact_path'"
+          else
+            artifact_path="release-assets/${asset_name}"
+            tar -czf "$artifact_path" -C build/bin koalapull
+          fi
+
+          echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"
+          echo "artifact_path=$artifact_path" >> "$GITHUB_OUTPUT"
+
       - name: Upload binaries
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          files: build/bin/*
+          files: ${{ steps.package.outputs.artifact_path }}
