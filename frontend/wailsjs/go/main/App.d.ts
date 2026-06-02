@@ -21,6 +21,8 @@ export interface VideoMetadata {
   uploader: string;
   duration: number;
   formats: FormatInfo[];
+  isPlaylist: boolean;
+  entryCount: number;
 }
 
 export interface Settings {
@@ -31,6 +33,7 @@ export function CheckDependencies(): Promise<DependencyStatus>;
 export function DownloadDependencies(): Promise<void>;
 export function FetchMetadata(url: string): Promise<VideoMetadata>;
 export function StartDownload(url: string, formatID: string, outputDir: string): Promise<string>;
+export function CancelDownload(downloadID: string): Promise<void>;
 export function GetSettings(): Promise<Settings>;
 export function UpdateSettings(settings: Settings): Promise<void>;
 export function SelectDirectory(): Promise<string>;

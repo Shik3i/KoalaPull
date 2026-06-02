@@ -14,6 +14,10 @@ export function StartDownload(url, formatID, outputDir) {
     return window['go']['main']['App']['StartDownload'](url, formatID, outputDir);
 }
 
+export function CancelDownload(downloadID) {
+    return window['go']['main']['App']['CancelDownload'](downloadID);
+}
+
 export function GetSettings() {
     return window['go']['main']['App']['GetSettings']();
 }

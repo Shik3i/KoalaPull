@@ -22,11 +22,13 @@ import (
 )
 
 type App struct {
-	ctx       context.Context
-	configDir string
-	binDir    string
-	dlMu      sync.Mutex
-	dlCounter int
+	ctx            context.Context
+	configDir      string
+	binDir         string
+	dlMu           sync.Mutex
+	dlCounter      int
+	activeDownloads map[string]context.CancelFunc
+	adMu           sync.Mutex
 }
 
 type DependencyStatus struct {
@@ -53,28 +55,35 @@ type FormatInfo struct {
 }
 
 type VideoMetadata struct {
-	ID        string       `json:"id"`
-	Title     string       `json:"title"`
-	Thumbnail string       `json:"thumbnail"`
-	Uploader  string       `json:"uploader"`
-	Duration  float64      `json:"duration"`
-	Formats   []FormatInfo `json:"formats"`
+	ID         string       `json:"id"`
+	Title      string       `json:"title"`
+	Thumbnail  string       `json:"thumbnail"`
+	Uploader   string       `json:"uploader"`
+	Duration   float64      `json:"duration"`
+	Formats    []FormatInfo `json:"formats"`
+	IsPlaylist bool         `json:"isPlaylist"`
+	EntryCount int          `json:"entryCount"`
 }
 
 type DownloadProgress struct {
-	DownloadID string  `json:"downloadId"`
-	Percent    float64 `json:"percent"`
-	Speed      string  `json:"speed"`
-	ETA        string  `json:"eta"`
-	Status     string  `json:"status"`
-	Error      string  `json:"error,omitempty"`
+	DownloadID     string  `json:"downloadId"`
+	Percent        float64 `json:"percent"`
+	Speed          string  `json:"speed"`
+	ETA            string  `json:"eta"`
+	Status         string  `json:"status"`
+	Error          string  `json:"error,omitempty"`
+	PlaylistStatus string  `json:"playlistStatus,omitempty"`
 }
 
 type Settings struct {
 	DefaultOutputDir string `json:"defaultOutputDir"`
 }
 
+var downloadSemaphore = make(chan struct{}, 3)
+
 var progressRegex = regexp.MustCompile(`\[download\]\s+([\d.]+)%\s+of\s+~?[\d.]+\S+\s+at\s+([\d.]+\S+)\s+ETA\s+(\S+)`)
+
+var playlistItemRegex = regexp.MustCompile(`\[download\]\s+Downloading\s+(video|item)\s+(\d+)\s+of\s+(\d+)`)
 
 func NewApp() *App {
 	return &App{}
@@ -91,6 +100,7 @@ func (a *App) startup(ctx context.Context) {
 	if err := os.MkdirAll(a.binDir, 0755); err != nil {
 		println("Failed to create bin directory:", err.Error())
 	}
+	a.activeDownloads = make(map[string]context.CancelFunc)
 }
 
 func (a *App) ytdlpPath() string {
@@ -193,13 +203,14 @@ func (a *App) emitProgress(dep string, pct int, status, errMsg string) {
 	wailsRuntime.EventsEmit(a.ctx, "dependency-progress", ev)
 }
 
-func (a *App) emitDownloadProgress(downloadID string, percent float64, speed, eta, status, errMsg string) {
+func (a *App) emitDownloadProgress(downloadID string, percent float64, speed, eta, status, errMsg, playlistStatus string) {
 	ev := DownloadProgress{
-		DownloadID: downloadID,
-		Percent:    percent,
-		Speed:      speed,
-		ETA:        eta,
-		Status:     status,
+		DownloadID:     downloadID,
+		Percent:        percent,
+		Speed:          speed,
+		ETA:            eta,
+		Status:         status,
+		PlaylistStatus: playlistStatus,
 	}
 	if errMsg != "" {
 		ev.Error = errMsg
@@ -409,17 +420,25 @@ type rawFormat struct {
 	FormatNote string `json:"format_note"`
 }
 
+type rawEntry struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+	URL   string `json:"url"`
+}
+
 type rawMetadata struct {
 	ID        string      `json:"id"`
 	Title     string      `json:"title"`
 	Thumbnail string      `json:"thumbnail"`
 	Uploader  string      `json:"uploader"`
 	Duration  float64     `json:"duration"`
+	Type      string      `json:"_type"`
 	Formats   []rawFormat `json:"formats"`
+	Entries   []rawEntry  `json:"entries"`
 }
 
 func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
-	args := []string{"--dump-json", "--skip-download", url}
+	args := []string{"--dump-json", "--skip-download", "--flat-playlist", url}
 	cmd := exec.Command(a.ytdlpPath(), args...)
 	stdout, err := cmd.Output()
 	if err != nil {
@@ -432,6 +451,29 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	if err := json.Unmarshal(stdout, &raw); err != nil {
 		return nil, fmt.Errorf("json parse failed: %w", err)
 	}
+
+	if raw.Type == "playlist" {
+		meta := &VideoMetadata{
+			ID:         raw.ID,
+			Title:      raw.Title,
+			Thumbnail:  raw.Thumbnail,
+			Uploader:   raw.Uploader,
+			IsPlaylist: true,
+			EntryCount: len(raw.Entries),
+			Formats:    make([]FormatInfo, 0),
+		}
+		if len(raw.Entries) > 0 {
+			entryURL := raw.Entries[0].URL
+			if entryURL == "" {
+				entryURL = "https://www.youtube.com/watch?v=" + raw.Entries[0].ID
+			}
+			if formats, err := a.fetchFormatsForURL(entryURL); err == nil {
+				meta.Formats = formats
+			}
+		}
+		return meta, nil
+	}
+
 	meta := &VideoMetadata{
 		ID:        raw.ID,
 		Title:     raw.Title,
@@ -453,6 +495,33 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 		})
 	}
 	return meta, nil
+}
+
+func (a *App) fetchFormatsForURL(url string) ([]FormatInfo, error) {
+	args := []string{"--dump-json", "--skip-download", url}
+	cmd := exec.Command(a.ytdlpPath(), args...)
+	stdout, err := cmd.Output()
+	if err != nil {
+		return nil, err
+	}
+	var raw rawMetadata
+	if err := json.Unmarshal(stdout, &raw); err != nil {
+		return nil, err
+	}
+	formats := make([]FormatInfo, 0, len(raw.Formats))
+	for _, f := range raw.Formats {
+		formats = append(formats, FormatInfo{
+			FormatID:   f.FormatID,
+			Ext:        f.Ext,
+			Width:      f.Width,
+			Height:     f.Height,
+			VCodec:     f.VCodec,
+			ACodec:     f.ACodec,
+			Filesize:   f.Filesize,
+			FormatNote: f.FormatNote,
+		})
+	}
+	return formats, nil
 }
 
 // ---------- Download Execution ----------
@@ -479,40 +548,80 @@ func (a *App) StartDownload(url, formatID, outputDir string) (string, error) {
 		url,
 	}
 
-	a.emitDownloadProgress(downloadID, 0, "", "", "starting", "")
+	ctx, cancel := context.WithCancel(context.Background())
+	a.adMu.Lock()
+	a.activeDownloads[downloadID] = cancel
+	a.adMu.Unlock()
 
-	go a.runDownload(downloadID, args)
+	go a.runDownload(ctx, downloadID, args)
 	return downloadID, nil
 }
 
-func (a *App) runDownload(downloadID string, args []string) {
-	cmd := exec.Command(a.ytdlpPath(), args...)
+func (a *App) CancelDownload(downloadID string) {
+	a.adMu.Lock()
+	cancel, ok := a.activeDownloads[downloadID]
+	a.adMu.Unlock()
+	if ok {
+		cancel()
+	}
+}
+
+func (a *App) runDownload(ctx context.Context, downloadID string, args []string) {
+	defer func() {
+		a.adMu.Lock()
+		delete(a.activeDownloads, downloadID)
+		a.adMu.Unlock()
+	}()
+
+	select {
+	case downloadSemaphore <- struct{}{}:
+	case <-ctx.Done():
+		a.emitDownloadProgress(downloadID, 0, "", "", "cancelled", "", "")
+		return
+	}
+	defer func() { <-downloadSemaphore }()
+
+	a.emitDownloadProgress(downloadID, 0, "", "", "starting", "", "")
+
+	cmd := exec.CommandContext(ctx, a.ytdlpPath(), args...)
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
-		a.emitDownloadProgress(downloadID, 0, "", "", "error", fmt.Sprintf("pipe failed: %v", err))
+		a.emitDownloadProgress(downloadID, 0, "", "", "error", fmt.Sprintf("pipe failed: %v", err), "")
 		return
 	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
-		a.emitDownloadProgress(downloadID, 0, "", "", "error", fmt.Sprintf("stdout pipe failed: %v", err))
+		a.emitDownloadProgress(downloadID, 0, "", "", "error", fmt.Sprintf("stdout pipe failed: %v", err), "")
 		return
 	}
 
 	if err := cmd.Start(); err != nil {
-		a.emitDownloadProgress(downloadID, 0, "", "", "error", fmt.Sprintf("start failed: %v", err))
+		if ctx.Err() == context.Canceled {
+			a.emitDownloadProgress(downloadID, 0, "", "", "cancelled", "", "")
+			return
+		}
+		a.emitDownloadProgress(downloadID, 0, "", "", "error", fmt.Sprintf("start failed: %v", err), "")
 		return
 	}
 
 	done := make(chan struct{})
 	go func() {
+		currentPS := ""
+		lastPct := 0.0
+		lastSpeed := ""
+		lastETA := ""
 		scanner := bufio.NewScanner(stdout)
 		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 		for scanner.Scan() {
 			line := scanner.Text()
 			if pct, speed, eta, ok := parseProgressLine(line); ok {
-				a.emitDownloadProgress(downloadID, pct, speed, eta, "downloading", "")
+				lastPct, lastSpeed, lastETA = pct, speed, eta
+				a.emitDownloadProgress(downloadID, pct, speed, eta, "downloading", "", currentPS)
+			} else if ps := parsePlaylistStatus(line); ps != "" {
+				currentPS = ps
+				a.emitDownloadProgress(downloadID, lastPct, lastSpeed, lastETA, "downloading", "", currentPS)
 			}
 		}
 		close(done)
@@ -538,15 +647,19 @@ func (a *App) runDownload(downloadID string, args []string) {
 	err = cmd.Wait()
 
 	if err != nil {
+		if ctx.Err() == context.Canceled {
+			a.emitDownloadProgress(downloadID, 0, "", "", "cancelled", "", "")
+			return
+		}
 		errMsg := strings.Join(errLines, "\n")
 		if errMsg == "" {
 			errMsg = err.Error()
 		}
-		a.emitDownloadProgress(downloadID, 0, "", "", "error", errMsg)
+		a.emitDownloadProgress(downloadID, 0, "", "", "error", errMsg, "")
 		return
 	}
 
-	a.emitDownloadProgress(downloadID, 100, "", "", "completed", "")
+	a.emitDownloadProgress(downloadID, 100, "", "", "completed", "", "")
 }
 
 func parseProgressLine(line string) (percent float64, speed string, eta string, ok bool) {
@@ -559,4 +672,12 @@ func parseProgressLine(line string) (percent float64, speed string, eta string, 
 		return 0, "", "", false
 	}
 	return pct, strings.TrimSpace(matches[2]), strings.TrimSpace(matches[3]), true
+}
+
+func parsePlaylistStatus(line string) string {
+	matches := playlistItemRegex.FindStringSubmatch(line)
+	if matches == nil {
+		return ""
+	}
+	return fmt.Sprintf("%s %s of %s", matches[1], matches[2], matches[3])
 }

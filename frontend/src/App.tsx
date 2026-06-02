@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import {
   CheckDependencies, DownloadDependencies,
-  FetchMetadata, StartDownload,
+  FetchMetadata, StartDownload, CancelDownload,
   GetSettings, UpdateSettings, SelectDirectory,
 } from "../wailsjs/go/main/App"
 import { EventsOn, EventsOff } from "../wailsjs/runtime/runtime"
@@ -25,6 +25,8 @@ interface VideoMetadata {
   uploader: string
   duration: number
   formats: FormatInfo[]
+  isPlaylist: boolean
+  entryCount: number
 }
 
 interface QueueItem {
@@ -36,6 +38,7 @@ interface QueueItem {
   speed: string
   eta: string
   errorMsg: string
+  playlistStatus: string
 }
 
 interface DepProgress {
@@ -52,6 +55,7 @@ interface DownloadProgress {
   eta: string
   status: string
   error?: string
+  playlistStatus?: string
 }
 
 interface FormatOption {
@@ -168,15 +172,17 @@ function App() {
       setQueue((prev) =>
         prev.map((item) => {
           if (item.id !== data.downloadId) return item
-          if (data.status === 'completed') return { ...item, status: 'completed', progress: 100 }
+          if (data.status === 'completed') return { ...item, status: 'completed', progress: 100, playlistStatus: '' }
           if (data.status === 'error') {
             const msg = data.error || 'Download failed'
-            return { ...item, status: 'error', progress: 0, speed: '', eta: '', errorMsg: msg }
+            return { ...item, status: 'error', progress: 0, speed: '', eta: '', errorMsg: msg, playlistStatus: '' }
           }
-          if (data.status === 'starting') return { ...item, status: 'starting', progress: 0 }
+          if (data.status === 'cancelled') return { ...item, status: 'cancelled', progress: 0, speed: '', eta: '', playlistStatus: '' }
+          if (data.status === 'starting') return { ...item, status: 'starting', progress: 0, playlistStatus: data.playlistStatus || '' }
           return {
             ...item, status: data.status,
             progress: Math.round(data.percent), speed: data.speed, eta: data.eta,
+            playlistStatus: data.playlistStatus || '',
           }
         }),
       )
@@ -210,11 +216,19 @@ function App() {
       const downloadId = await StartDownload(url, selectedFormat, defaultOutputDir)
       setQueue((prev) => [
         ...prev,
-        { id: downloadId, title: metadata.title, thumbnail: metadata.thumbnail, status: 'queued', progress: 0, speed: '', eta: '', errorMsg: '' },
+        { id: downloadId, title: metadata.title, thumbnail: metadata.thumbnail, status: 'queued', progress: 0, speed: '', eta: '', errorMsg: '', playlistStatus: '' },
       ])
     } catch (err: any) {
       console.error('Failed to start download:', err)
     }
+  }
+
+  const handleCancel = (id: string) => {
+    CancelDownload(id).catch(() => {})
+  }
+
+  const handleClearCompleted = () => {
+    setQueue((prev) => prev.filter((item) => !['completed', 'error', 'cancelled'].includes(item.status)))
   }
 
   const handleChangeFolder = async () => {
@@ -230,7 +244,8 @@ function App() {
 
   const statusColors: Record<string, string> = {
     downloading: 'text-accent', starting: 'text-accent',
-    queued: 'text-gray-400', completed: 'text-green-400', error: 'text-red-400',
+    queued: 'text-gray-400', completed: 'text-green-400',
+    error: 'text-red-400', cancelled: 'text-yellow-400',
   }
 
   // Loading screen
@@ -406,13 +421,18 @@ function App() {
               <div className="flex-1 min-w-0">
                 <h2 className="text-base font-semibold truncate">{metadata.title}</h2>
                 <p className="text-sm text-gray-400 mt-0.5">{metadata.uploader}</p>
+                {metadata.isPlaylist && (
+                  <span className="inline-block mt-1 text-xs bg-accent/20 text-accent px-2 py-0.5 rounded font-medium">
+                    Playlist · {metadata.entryCount} videos
+                  </span>
+                )}
                 <div className="flex flex-wrap gap-2 mt-3">
                   <select value={selectedFormat} onChange={(e) => setSelectedFormat(e.target.value)} className="select-dark text-xs flex-1 min-w-[140px]">
                     {formatOptions.map((opt) => (
                       <option key={opt.formatId} value={opt.formatId}>{opt.label}</option>
                     ))}
                   </select>
-                  <select className="select-dark text-xs flex-1 min-w-[100px]" defaultValue="none">
+                  <select className="select-dark text-xs flex-1 min-w-[100px] disabled:opacity-40 disabled:cursor-not-allowed" defaultValue="none" disabled={metadata.isPlaylist} title={metadata.isPlaylist ? 'Subtitles not supported for playlists' : ''}>
                     <option value="none">No Subs</option>
                     <option value="auto">Auto-generated</option>
                     <option value="embed">Embed All</option>
@@ -436,9 +456,16 @@ function App() {
 
         {/* Download Queue */}
         <div>
-          <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
-            Downloads ({queue.length})
-          </h3>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
+              Downloads ({queue.length})
+            </h3>
+            {queue.some((i) => ['completed', 'error', 'cancelled'].includes(i.status)) && (
+              <button onClick={handleClearCompleted} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
+                Clear Completed
+              </button>
+            )}
+          </div>
           {queue.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-gray-600">
               <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -470,9 +497,11 @@ function App() {
                         {item.status === 'queued' && 'Queued'}
                         {item.status === 'completed' && 'Completed'}
                         {item.status === 'error' && 'Error'}
+                        {item.status === 'cancelled' && 'Cancelled'}
                       </span>
                       {item.speed && <span className="text-gray-500">{item.speed}</span>}
                       {item.eta && <span className="text-gray-500">ETA: {item.eta}</span>}
+                      {item.playlistStatus && <span className="text-gray-500">{item.playlistStatus}</span>}
                     </div>
 
                     {/* Progress Bar */}
@@ -496,6 +525,11 @@ function App() {
                         )}
                       </>
                     )}
+                    {item.status === 'cancelled' && (
+                      <div className="mt-1.5 w-full h-1 bg-surface-lighter rounded-full overflow-hidden">
+                        <div className="h-full bg-yellow-500 rounded-full" style={{ width: '100%' }} />
+                      </div>
+                    )}
                   </div>
 
                   {item.status === 'completed' && (
@@ -504,18 +538,32 @@ function App() {
                     </svg>
                   )}
                   {(item.status === 'downloading' || item.status === 'starting') && (
-                    <svg className="w-5 h-5 text-accent animate-pulse shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                    </svg>
+                    <div className="flex items-center gap-1">
+                      <svg className="w-5 h-5 text-accent animate-pulse shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                      </svg>
+                      <button onClick={() => handleCancel(item.id)} className="text-gray-500 hover:text-red-400 transition-colors p-0.5" title="Cancel">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
                   )}
                   {item.status === 'queued' && (
-                    <svg className="w-5 h-5 text-gray-500 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                    </svg>
+                    <button onClick={() => handleCancel(item.id)} className="text-gray-500 hover:text-red-400 transition-colors p-0.5 shrink-0" title="Cancel">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
                   )}
                   {item.status === 'error' && (
                     <svg className="w-5 h-5 text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                  )}
+                  {item.status === 'cancelled' && (
+                    <svg className="w-5 h-5 text-yellow-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                     </svg>
                   )}
                 </div>
