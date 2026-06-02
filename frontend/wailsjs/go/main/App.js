@@ -13,3 +13,15 @@ export function FetchMetadata(url) {
 export function StartDownload(url, formatID, outputDir) {
     return window['go']['main']['App']['StartDownload'](url, formatID, outputDir);
 }
+
+export function GetSettings() {
+    return window['go']['main']['App']['GetSettings']();
+}
+
+export function UpdateSettings(settings) {
+    return window['go']['main']['App']['UpdateSettings'](settings);
+}
+
+export function SelectDirectory() {
+    return window['go']['main']['App']['SelectDirectory']();
+}

@@ -23,7 +23,14 @@ export interface VideoMetadata {
   formats: FormatInfo[];
 }
 
+export interface Settings {
+  defaultOutputDir: string;
+}
+
 export function CheckDependencies(): Promise<DependencyStatus>;
 export function DownloadDependencies(): Promise<void>;
 export function FetchMetadata(url: string): Promise<VideoMetadata>;
 export function StartDownload(url: string, formatID: string, outputDir: string): Promise<string>;
+export function GetSettings(): Promise<Settings>;
+export function UpdateSettings(settings: Settings): Promise<void>;
+export function SelectDirectory(): Promise<string>;

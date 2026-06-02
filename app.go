@@ -23,6 +23,7 @@ import (
 
 type App struct {
 	ctx       context.Context
+	configDir string
 	binDir    string
 	dlMu      sync.Mutex
 	dlCounter int
@@ -69,6 +70,10 @@ type DownloadProgress struct {
 	Error      string  `json:"error,omitempty"`
 }
 
+type Settings struct {
+	DefaultOutputDir string `json:"defaultOutputDir"`
+}
+
 var progressRegex = regexp.MustCompile(`\[download\]\s+([\d.]+)%\s+of\s+~?[\d.]+\S+\s+at\s+([\d.]+\S+)\s+ETA\s+(\S+)`)
 
 func NewApp() *App {
@@ -81,7 +86,8 @@ func (a *App) startup(ctx context.Context) {
 	if err != nil {
 		configDir = os.TempDir()
 	}
-	a.binDir = filepath.Join(configDir, "KoalaPull", "bin")
+	a.configDir = filepath.Join(configDir, "KoalaPull")
+	a.binDir = filepath.Join(a.configDir, "bin")
 	if err := os.MkdirAll(a.binDir, 0755); err != nil {
 		println("Failed to create bin directory:", err.Error())
 	}
@@ -117,6 +123,53 @@ func (a *App) nextDownloadID() string {
 	defer a.dlMu.Unlock()
 	a.dlCounter++
 	return fmt.Sprintf("dl_%d_%d", time.Now().UnixMilli(), a.dlCounter)
+}
+
+// ---------- Settings ----------
+
+func (a *App) settingsPath() string {
+	return filepath.Join(a.configDir, "settings.json")
+}
+
+func defaultOutputDir() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return filepath.Join(os.TempDir(), "KoalaPull")
+	}
+	return filepath.Join(home, "Downloads", "KoalaPull")
+}
+
+func (a *App) GetSettings() Settings {
+	path := a.settingsPath()
+	data, err := os.ReadFile(path)
+	if err == nil {
+		var s Settings
+		if json.Unmarshal(data, &s) == nil && s.DefaultOutputDir != "" {
+			return s
+		}
+	}
+	s := Settings{DefaultOutputDir: defaultOutputDir()}
+	a.writeSettings(s)
+	return s
+}
+
+func (a *App) writeSettings(s Settings) {
+	data, _ := json.MarshalIndent(s, "", "  ")
+	os.WriteFile(a.settingsPath(), data, 0644)
+}
+
+func (a *App) UpdateSettings(s Settings) {
+	a.writeSettings(s)
+}
+
+func (a *App) SelectDirectory() (string, error) {
+	dir, err := wailsRuntime.OpenDirectoryDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: "Choose Download Directory",
+	})
+	if err != nil {
+		return "", err
+	}
+	return dir, nil
 }
 
 // ---------- Dependency Management ----------
@@ -368,7 +421,6 @@ type rawMetadata struct {
 func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	args := []string{"--dump-json", "--skip-download", url}
 	cmd := exec.Command(a.ytdlpPath(), args...)
-
 	stdout, err := cmd.Output()
 	if err != nil {
 		if exitErr, ok := err.(*exec.ExitError); ok {
@@ -376,12 +428,10 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 		}
 		return nil, fmt.Errorf("yt-dlp exec failed: %w", err)
 	}
-
 	var raw rawMetadata
 	if err := json.Unmarshal(stdout, &raw); err != nil {
 		return nil, fmt.Errorf("json parse failed: %w", err)
 	}
-
 	meta := &VideoMetadata{
 		ID:        raw.ID,
 		Title:     raw.Title,
@@ -407,13 +457,12 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 
 // ---------- Download Execution ----------
 
+const maxErrLines = 20
+
 func (a *App) StartDownload(url, formatID, outputDir string) (string, error) {
 	if outputDir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return "", fmt.Errorf("home dir: %w", err)
-		}
-		outputDir = filepath.Join(home, "Downloads", "KoalaPull")
+		settings := a.GetSettings()
+		outputDir = settings.DefaultOutputDir
 	}
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return "", fmt.Errorf("output dir: %w", err)
@@ -469,15 +518,27 @@ func (a *App) runDownload(downloadID string, args []string) {
 		close(done)
 	}()
 
-	// Collect stderr in background
-	errBuf := &strings.Builder{}
-	go io.Copy(errBuf, stderr)
+	errLines := make([]string, 0, maxErrLines)
+	errCh := make(chan struct{})
+	go func() {
+		scanner := bufio.NewScanner(stderr)
+		for scanner.Scan() {
+			line := scanner.Text()
+			if len(errLines) >= maxErrLines {
+				errLines = append(errLines[1:], line)
+			} else {
+				errLines = append(errLines, line)
+			}
+		}
+		close(errCh)
+	}()
 
 	<-done
+	<-errCh
 	err = cmd.Wait()
 
 	if err != nil {
-		errMsg := strings.TrimSpace(errBuf.String())
+		errMsg := strings.Join(errLines, "\n")
 		if errMsg == "" {
 			errMsg = err.Error()
 		}

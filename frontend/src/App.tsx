@@ -1,5 +1,9 @@
 import { useState, useEffect, useCallback } from 'react'
-import { CheckDependencies, DownloadDependencies, FetchMetadata, StartDownload } from "../wailsjs/go/main/App"
+import {
+  CheckDependencies, DownloadDependencies,
+  FetchMetadata, StartDownload,
+  GetSettings, UpdateSettings, SelectDirectory,
+} from "../wailsjs/go/main/App"
 import { EventsOn, EventsOff } from "../wailsjs/runtime/runtime"
 import './style.css'
 
@@ -31,6 +35,7 @@ interface QueueItem {
   progress: number
   speed: string
   eta: string
+  errorMsg: string
 }
 
 interface DepProgress {
@@ -54,27 +59,25 @@ interface FormatOption {
   formatId: string
 }
 
+interface AppSettings {
+  defaultOutputDir: string
+}
+
 function buildFormatOptions(formats: FormatInfo[]): FormatOption[] {
   const options: FormatOption[] = [
     { label: 'Best Video + Audio', formatId: 'bestvideo+bestaudio/best' },
   ]
-
   const seen = new Set<number>()
   const sorted = [...formats]
     .filter((f) => f.vcodec !== 'none' && f.vcodec !== '' && f.height > 0)
     .sort((a, b) => b.height - a.height)
-
   for (const f of sorted) {
     if (!seen.has(f.height)) {
       seen.add(f.height)
       const note = f.formatNote ? ` (${f.formatNote})` : ''
-      options.push({
-        label: `${f.height}p${note} · ${f.ext}`,
-        formatId: f.formatId,
-      })
+      options.push({ label: `${f.height}p${note} · ${f.ext}`, formatId: f.formatId })
     }
   }
-
   options.push({ label: 'Audio Only', formatId: 'bestaudio/best' })
   return options
 }
@@ -97,9 +100,19 @@ function App() {
 
   const [queue, setQueue] = useState<QueueItem[]>([])
 
+  const [showSettings, setShowSettings] = useState(false)
+  const [defaultOutputDir, setDefaultOutputDir] = useState('')
+
+  // Load settings
+  useEffect(() => {
+    GetSettings()
+      .then((s: AppSettings) => setDefaultOutputDir(s.defaultOutputDir))
+      .catch(() => {})
+  }, [])
+
+  // Dependency check
   useEffect(() => {
     let cancelled = false
-
     const run = async () => {
       try {
         const status = await CheckDependencies()
@@ -112,14 +125,13 @@ function App() {
           setCheckingDeps(false)
           setInstallingDeps(true)
         }
-      } catch (err) {
+      } catch {
         if (!cancelled) {
           setCheckingDeps(false)
           setDepError('Failed to check dependencies.')
         }
       }
     }
-
     const handleDepProgress = (data: DepProgress) => {
       setDepProgress((prev) => ({ ...prev, [data.dependency]: data.progress }))
       if (data.status === 'error') {
@@ -127,16 +139,15 @@ function App() {
         setInstallingDeps(false)
       }
     }
-
     EventsOn('dependency-progress', handleDepProgress)
     run()
-
     return () => {
       cancelled = true
       EventsOff('dependency-progress')
     }
   }, [])
 
+  // Auto-trigger dependency install
   useEffect(() => {
     if (installingDeps && depsReady === false) {
       DownloadDependencies()
@@ -151,37 +162,27 @@ function App() {
     }
   }, [installingDeps, depsReady])
 
+  // Listen for download progress
   useEffect(() => {
     const handleDlProgress = (data: DownloadProgress) => {
       setQueue((prev) =>
         prev.map((item) => {
           if (item.id !== data.downloadId) return item
-
-          if (data.status === 'completed') {
-            return { ...item, status: 'completed', progress: 100 }
-          }
+          if (data.status === 'completed') return { ...item, status: 'completed', progress: 100 }
           if (data.status === 'error') {
-            return { ...item, status: 'error', progress: 0, speed: '', eta: '', title: item.title + ' (failed)' }
+            const msg = data.error || 'Download failed'
+            return { ...item, status: 'error', progress: 0, speed: '', eta: '', errorMsg: msg }
           }
-          if (data.status === 'starting') {
-            return { ...item, status: 'starting', progress: 0 }
-          }
-
+          if (data.status === 'starting') return { ...item, status: 'starting', progress: 0 }
           return {
-            ...item,
-            status: data.status,
-            progress: Math.round(data.percent),
-            speed: data.speed,
-            eta: data.eta,
+            ...item, status: data.status,
+            progress: Math.round(data.percent), speed: data.speed, eta: data.eta,
           }
         }),
       )
     }
-
     EventsOn('download-progress', handleDlProgress)
-    return () => {
-      EventsOff('download-progress')
-    }
+    return () => { EventsOff('download-progress') }
   }, [])
 
   const handleFetch = async () => {
@@ -191,7 +192,6 @@ function App() {
     setFetched(false)
     setMetadata(null)
     setSelectedFormat('bestvideo+bestaudio/best')
-
     try {
       const meta = await FetchMetadata(url)
       setMetadata(meta)
@@ -206,34 +206,34 @@ function App() {
 
   const handleAddToQueue = async () => {
     if (!metadata) return
-
     try {
-      const downloadId = await StartDownload(url, selectedFormat, '')
+      const downloadId = await StartDownload(url, selectedFormat, defaultOutputDir)
       setQueue((prev) => [
         ...prev,
-        {
-          id: downloadId,
-          title: metadata.title,
-          thumbnail: metadata.thumbnail,
-          status: 'queued',
-          progress: 0,
-          speed: '',
-          eta: '',
-        },
+        { id: downloadId, title: metadata.title, thumbnail: metadata.thumbnail, status: 'queued', progress: 0, speed: '', eta: '', errorMsg: '' },
       ])
     } catch (err: any) {
       console.error('Failed to start download:', err)
     }
   }
 
-  const statusColors: Record<string, string> = {
-    downloading: 'text-accent',
-    starting: 'text-accent',
-    queued: 'text-gray-400',
-    completed: 'text-green-400',
-    error: 'text-red-400',
+  const handleChangeFolder = async () => {
+    try {
+      const dir = await SelectDirectory()
+      if (!dir) return
+      setDefaultOutputDir(dir)
+      await UpdateSettings({ defaultOutputDir: dir })
+    } catch {
+      // user cancelled
+    }
   }
 
+  const statusColors: Record<string, string> = {
+    downloading: 'text-accent', starting: 'text-accent',
+    queued: 'text-gray-400', completed: 'text-green-400', error: 'text-red-400',
+  }
+
+  // Loading screen
   if (checkingDeps) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-surface text-gray-200">
@@ -247,6 +247,7 @@ function App() {
     )
   }
 
+  // Setup screen
   if (!depsReady) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-surface text-gray-200 px-6">
@@ -267,10 +268,7 @@ function App() {
                   <span className="text-gray-500 font-mono">{pct}%</span>
                 </div>
                 <div className="w-full h-1.5 bg-surface-lighter rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-accent rounded-full transition-all duration-300 ease-out"
-                    style={{ width: `${pct}%` }}
-                  />
+                  <div className="h-full bg-accent rounded-full transition-all duration-300 ease-out" style={{ width: `${pct}%` }} />
                 </div>
               </div>
             )
@@ -284,9 +282,7 @@ function App() {
         {depError && (
           <div className="mt-4 text-center">
             <p className="text-xs text-red-400 mb-2">{depError}</p>
-            <button onClick={() => setInstallingDeps(true)} className="btn-primary text-xs px-4 py-1.5">
-              Retry
-            </button>
+            <button onClick={() => setInstallingDeps(true)} className="btn-primary text-xs px-4 py-1.5">Retry</button>
           </div>
         )}
       </div>
@@ -295,6 +291,7 @@ function App() {
 
   return (
     <div className="h-screen flex flex-col bg-surface text-gray-200 select-none">
+      {/* Header */}
       <header className="flex items-center justify-between px-6 py-3 border-b border-surface-border shrink-0">
         <div className="flex items-center gap-3">
           <div className="w-8 h-8 rounded-md bg-accent flex items-center justify-center">
@@ -302,9 +299,53 @@ function App() {
           </div>
           <h1 className="text-lg font-semibold tracking-tight">KoalaPull</h1>
         </div>
-        <span className="text-xs text-gray-500 font-mono">{ytdlpVersion ? `v${ytdlpVersion}` : ''}</span>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-gray-500 font-mono">{ytdlpVersion ? `v${ytdlpVersion}` : ''}</span>
+          <button
+            onClick={() => setShowSettings(true)}
+            className="text-gray-400 hover:text-gray-200 transition-colors"
+            title="Settings"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+            </svg>
+          </button>
+        </div>
       </header>
 
+      {/* Settings Modal */}
+      {showSettings && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowSettings(false)}>
+          <div
+            className="bg-surface-light border border-surface-border rounded-lg w-full max-w-md mx-4 p-5"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-sm font-semibold text-gray-200">Settings</h2>
+              <button onClick={() => setShowSettings(false)} className="text-gray-500 hover:text-gray-300 text-lg leading-none">&times;</button>
+            </div>
+
+            <label className="text-xs text-gray-400 mb-1.5 block">Download Location</label>
+            <div className="flex gap-2">
+              <div className="flex-1 bg-surface-lighter border border-surface-border rounded-md px-3 py-2 text-xs text-gray-300 truncate">
+                {defaultOutputDir}
+              </div>
+              <button onClick={handleChangeFolder} className="btn-primary text-xs px-3 py-1.5 shrink-0">
+                Change
+              </button>
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button onClick={() => setShowSettings(false)} className="text-xs text-gray-400 hover:text-gray-200 px-3 py-1.5">
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Main Content */}
       <main className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
         {/* URL Fetch */}
         <div className="flex gap-2">
@@ -339,9 +380,7 @@ function App() {
                 </svg>
                 Fetching
               </>
-            ) : (
-              'Fetch'
-            )}
+            ) : 'Fetch'}
           </button>
         </div>
 
@@ -356,11 +395,7 @@ function App() {
           <div className="bg-surface-light border border-surface-border rounded-lg overflow-hidden">
             <div className="flex gap-4 p-4">
               {metadata.thumbnail ? (
-                <img
-                  src={metadata.thumbnail}
-                  alt={metadata.title}
-                  className="w-44 h-24 rounded-md object-cover shrink-0 bg-surface-lighter"
-                />
+                <img src={metadata.thumbnail} alt={metadata.title} className="w-44 h-24 rounded-md object-cover shrink-0 bg-surface-lighter" />
               ) : (
                 <div className="w-44 h-24 bg-surface-lighter rounded-md shrink-0 flex items-center justify-center border border-surface-border">
                   <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -368,21 +403,13 @@ function App() {
                   </svg>
                 </div>
               )}
-
               <div className="flex-1 min-w-0">
                 <h2 className="text-base font-semibold truncate">{metadata.title}</h2>
                 <p className="text-sm text-gray-400 mt-0.5">{metadata.uploader}</p>
-
                 <div className="flex flex-wrap gap-2 mt-3">
-                  <select
-                    value={selectedFormat}
-                    onChange={(e) => setSelectedFormat(e.target.value)}
-                    className="select-dark text-xs flex-1 min-w-[140px]"
-                  >
+                  <select value={selectedFormat} onChange={(e) => setSelectedFormat(e.target.value)} className="select-dark text-xs flex-1 min-w-[140px]">
                     {formatOptions.map((opt) => (
-                      <option key={opt.formatId} value={opt.formatId}>
-                        {opt.label}
-                      </option>
+                      <option key={opt.formatId} value={opt.formatId}>{opt.label}</option>
                     ))}
                   </select>
                   <select className="select-dark text-xs flex-1 min-w-[100px]" defaultValue="none">
@@ -396,11 +423,7 @@ function App() {
                     <option value="mp3">MP3</option>
                   </select>
                 </div>
-
-                <button
-                  onClick={handleAddToQueue}
-                  className="btn-primary mt-3 text-sm flex items-center gap-1.5"
-                >
+                <button onClick={handleAddToQueue} className="btn-primary mt-3 text-sm flex items-center gap-1.5">
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                   </svg>
@@ -416,7 +439,6 @@ function App() {
           <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider mb-3">
             Downloads ({queue.length})
           </h3>
-
           {queue.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 text-gray-600">
               <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -428,10 +450,7 @@ function App() {
           ) : (
             <div className="space-y-2">
               {[...queue].reverse().map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-surface-light border border-surface-border rounded-lg p-3 flex items-center gap-3"
-                >
+                <div key={item.id} className="bg-surface-light border border-surface-border rounded-lg p-3 flex items-center gap-3">
                   <div className="w-16 h-10 bg-surface-lighter rounded shrink-0 flex items-center justify-center border border-surface-border overflow-hidden">
                     {item.thumbnail ? (
                       <img src={item.thumbnail} alt="" className="w-full h-full object-cover" />
@@ -442,7 +461,6 @@ function App() {
                       </svg>
                     )}
                   </div>
-
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium truncate">{item.title}</p>
                     <div className="flex items-center gap-3 mt-1 text-xs">
@@ -457,18 +475,26 @@ function App() {
                       {item.eta && <span className="text-gray-500">ETA: {item.eta}</span>}
                     </div>
 
+                    {/* Progress Bar */}
                     {(item.status === 'downloading' || item.status === 'starting') && (
                       <div className="mt-1.5 w-full h-1 bg-surface-lighter rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-accent rounded-full transition-all duration-300 ease-out"
-                          style={{ width: `${Math.max(item.progress, 2)}%` }}
-                        />
+                        <div className="h-full bg-accent rounded-full transition-all duration-300 ease-out" style={{ width: `${Math.max(item.progress, 2)}%` }} />
                       </div>
                     )}
                     {item.status === 'completed' && (
                       <div className="mt-1.5 w-full h-1 bg-surface-lighter rounded-full overflow-hidden">
                         <div className="h-full bg-green-400 rounded-full" style={{ width: '100%' }} />
                       </div>
+                    )}
+                    {item.status === 'error' && (
+                      <>
+                        <div className="mt-1.5 w-full h-1 bg-surface-lighter rounded-full overflow-hidden">
+                          <div className="h-full bg-red-500 rounded-full" style={{ width: '100%' }} />
+                        </div>
+                        {item.errorMsg && (
+                          <p className="mt-1 text-xs text-red-400 truncate">{item.errorMsg}</p>
+                        )}
+                      </>
                     )}
                   </div>
 
@@ -499,18 +525,19 @@ function App() {
         </div>
       </main>
 
+      {/* Footer */}
       <footer className="flex items-center justify-between px-6 py-2 border-t border-surface-border bg-surface-light shrink-0 text-xs text-gray-500">
         <div className="flex items-center gap-2">
           <span className="inline-block w-2 h-2 rounded-full bg-green-400" />
           <span>Ready</span>
         </div>
-        <button className="flex items-center gap-1.5 hover:text-gray-300 transition-colors">
-          <span>yt-dlp</span>
-          {ytdlpVersion && <span className="font-mono">v{ytdlpVersion}</span>}
-          <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-3">
+          <span className="text-gray-600">Save to: {defaultOutputDir ? defaultOutputDir.split('\\').pop()?.split('/').pop() : '...'}</span>
+          <button className="flex items-center gap-1.5 hover:text-gray-300 transition-colors">
+            <span>yt-dlp</span>
+            {ytdlpVersion && <span className="font-mono">v{ytdlpVersion}</span>}
+          </button>
+        </div>
       </footer>
     </div>
   )
