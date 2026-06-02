@@ -11,6 +11,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestFFmpegZipDestNamePreservesWindowsExecutableSuffix(t *testing.T) {
@@ -174,6 +175,14 @@ func TestValidateSettingsClampsUnsafeValues(t *testing.T) {
 	}
 }
 
+func TestValidateSettingsPreservesUTF8PathBoundaries(t *testing.T) {
+	raw := strings.Repeat("你", maxPathLength/3+10)
+	settings := validateSettings(Settings{DefaultOutputDir: raw, Theme: "dark", MaxConcurrency: 3})
+	if !utf8.ValidString(settings.DefaultOutputDir) {
+		t.Fatal("DefaultOutputDir is not valid UTF-8 after validation")
+	}
+}
+
 func TestCollectRecentLinesReportsLongLineScannerError(t *testing.T) {
 	line := strings.Repeat("x", 70*1024)
 	lines, err := collectRecentLines(strings.NewReader(line), 20)
@@ -182,6 +191,31 @@ func TestCollectRecentLinesReportsLongLineScannerError(t *testing.T) {
 	}
 	if len(lines) != 1 || lines[0] != line {
 		t.Fatalf("collectRecentLines did not preserve long line; len=%d", len(lines))
+	}
+}
+
+func TestParseProgressLine(t *testing.T) {
+	pct, size, speed, eta, ok := parseProgressLine("[download]  42.5% of ~12.34MiB at 1.23MiB/s ETA 00:10")
+	if !ok {
+		t.Fatal("parseProgressLine rejected a valid yt-dlp line")
+	}
+	if pct != 42.5 {
+		t.Fatalf("percent = %v, want 42.5", pct)
+	}
+	if size != "12.34MiB" {
+		t.Fatalf("file size = %q, want 12.34MiB", size)
+	}
+	if speed != "1.23MiB/s" {
+		t.Fatalf("speed = %q, want 1.23MiB/s", speed)
+	}
+	if eta != "00:10" {
+		t.Fatalf("eta = %q, want 00:10", eta)
+	}
+}
+
+func TestParsePlaylistStatus(t *testing.T) {
+	if got := parsePlaylistStatus("[download] Downloading video 3 of 14"); got != "video 3 of 14" {
+		t.Fatalf("playlist status = %q, want video 3 of 14", got)
 	}
 }
 

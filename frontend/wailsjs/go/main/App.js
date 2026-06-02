@@ -30,6 +30,10 @@ export function FetchMetadata(arg1) {
   return window['go']['main']['App']['FetchMetadata'](arg1);
 }
 
+export function GetAppVersion() {
+  return window['go']['main']['App']['GetAppVersion']();
+}
+
 export function GetFfmpegVersion() {
   return window['go']['main']['App']['GetFfmpegVersion']();
 }

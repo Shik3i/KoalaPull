@@ -49,6 +49,26 @@ Get the latest release for your platform from the [GitHub Releases page](https:/
 | **Windows** | `koalapull-windows-amd64.exe` |
 | **Linux** | `koalapull-linux-amd64.AppImage` |
 
+### Note for macOS Users (Unidentified Developer)
+
+KoalaPull is unsigned. macOS Gatekeeper may block it on first launch.
+
+**Method 1: The Right-Click Shortcut (Recommended)**
+
+1. Do not double-click the app.
+2. Right-click, or `Control`-click, the KoalaPull app.
+3. Choose **Open** from the menu.
+4. You will see a warning dialog, but this time it includes an **Open** button. Click it.
+5. KoalaPull will open normally from then on.
+
+**Method 2: System Settings**
+
+1. If you already double-clicked the app and saw the "cannot be opened" message, click **OK**.
+2. Open **System Settings** > **Privacy & Security**.
+3. Scroll down to the **Security** section.
+4. Find the message that says KoalaPull was blocked.
+5. Click **Open Anyway** and confirm with your Mac password.
+
 On first launch, KoalaPull will show a setup screen.
 Click **Download & Install** to fetch `yt-dlp` and `ffmpeg`.
 

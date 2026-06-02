@@ -22,6 +22,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+	"unicode/utf8"
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
@@ -341,7 +342,7 @@ func validateSettings(s Settings) Settings {
 		s.DefaultOutputDir = defaultOutputDir()
 	}
 	if len(s.DefaultOutputDir) > maxPathLength {
-		s.DefaultOutputDir = s.DefaultOutputDir[:maxPathLength]
+		s.DefaultOutputDir = truncateToValidUTF8Prefix(s.DefaultOutputDir, maxPathLength)
 	}
 	if s.Theme != "dark" && s.Theme != "light" {
 		s.Theme = "dark"
@@ -353,6 +354,20 @@ func validateSettings(s Settings) Settings {
 		s.MaxConcurrency = maxMaxConcurrency
 	}
 	return s
+}
+
+func truncateToValidUTF8Prefix(s string, maxBytes int) string {
+	if maxBytes <= 0 || len(s) <= maxBytes {
+		return s
+	}
+	cut := maxBytes
+	for cut > 0 && !utf8.RuneStart(s[cut]) {
+		cut--
+	}
+	if cut == 0 {
+		return ""
+	}
+	return s[:cut]
 }
 
 func (a *App) SelectDirectory() (string, error) {
@@ -445,7 +460,7 @@ func (a *App) CheckDependencies() DependencyStatus {
 func (a *App) GetYtdlpVersion() string {
 	ctx, cancel := context.WithTimeout(a.appContext(), 5*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, a.ytdlpPath(), "--version").Output()
+	out, err := commandContext(ctx, a.ytdlpPath(), "--version").Output()
 	if err != nil {
 		return ""
 	}
@@ -455,7 +470,7 @@ func (a *App) GetYtdlpVersion() string {
 func (a *App) GetFfmpegVersion() string {
 	ctx, cancel := context.WithTimeout(a.appContext(), 5*time.Second)
 	defer cancel()
-	out, err := exec.CommandContext(ctx, a.ffmpegPath(), "-version").Output()
+	out, err := commandContext(ctx, a.ffmpegPath(), "-version").Output()
 	if err != nil {
 		return ""
 	}
@@ -484,11 +499,11 @@ func (a *App) OpenOutputDir() error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = exec.Command("open", dir)
+		cmd = command("open", dir)
 	case "windows":
-		cmd = exec.Command("explorer", dir)
+		cmd = command("explorer", dir)
 	default:
-		cmd = exec.Command("xdg-open", dir)
+		cmd = command("xdg-open", dir)
 	}
 	if err := cmd.Start(); err != nil {
 		return err
@@ -507,6 +522,10 @@ func (a *App) GetVersionInfo() VersionInfo {
 		Ffmpeg: a.GetFfmpegVersion(),
 		App:    AppVersion,
 	}
+}
+
+func (a *App) GetAppVersion() string {
+	return AppVersion
 }
 
 func (a *App) CheckForUpdates() UpdateInfo {
@@ -658,7 +677,7 @@ func (a *App) downloadYtdlp(force bool) error {
 		}
 	}
 	if runtime.GOOS == "darwin" {
-		if err := exec.Command("xattr", "-d", "com.apple.quarantine", destPath).Run(); err != nil {
+		if err := command("xattr", "-d", "com.apple.quarantine", destPath).Run(); err != nil {
 			println("xattr warning:", err.Error())
 		}
 	}
@@ -866,7 +885,7 @@ func extractFFmpegFromZip(archivePath, destDir string) error {
 }
 
 func validateTarXzArchive(archivePath string) error {
-	cmd := exec.Command("tar", "-tJf", archivePath)
+	cmd := command("tar", "-tJf", archivePath)
 	out, err := cmd.Output()
 	if err != nil {
 		return fmt.Errorf("tar list failed: %w", err)
@@ -910,7 +929,7 @@ func extractFFmpegFromTarXz(archivePath, destDir string) error {
 		return err
 	}
 
-	cmd := exec.Command("tar", "-xJf", archivePath, "-C", tmpDir)
+	cmd := command("tar", "-xJf", archivePath, "-C", tmpDir)
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		return fmt.Errorf("tar failed: %s: %w", string(output), err)
@@ -1024,7 +1043,7 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	args := []string{"--no-check-formats", "--no-warnings", "--dump-json", "--skip-download", "--flat-playlist", "--", url}
 	ctx, cancel, seq := a.newMetadataContext()
 	defer a.clearMetadataContext(cancel, seq)
-	cmd := exec.CommandContext(ctx, a.ytdlpPath(), args...)
+	cmd := commandContext(ctx, a.ytdlpPath(), args...)
 	stdout, err := cmd.Output()
 	if err != nil {
 		if ctx.Err() != nil {
@@ -1188,7 +1207,7 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 	startTime := time.Now()
 	a.emitDownloadProgress(downloadID, 0, "", "", "", "starting", "", "")
 
-	cmd := exec.CommandContext(ctx, a.ytdlpPath(), args...)
+	cmd := commandContext(ctx, a.ytdlpPath(), args...)
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
@@ -1215,50 +1234,77 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 		return
 	}
 
-	done := make(chan struct{})
-	var stdoutScanErr error
-	go func() {
-		defer func() { recover(); close(done) }()
-		currentPS := ""
-		lastPct := 0.0
-		lastSpeed := ""
-		lastETA := ""
-		lastFileSz := ""
-		scanner := bufio.NewScanner(stdout)
+	type downloadLine struct {
+		source string
+		line   string
+		err    error
+	}
+
+	lineCh := make(chan downloadLine, 128)
+	var readWG sync.WaitGroup
+	scanPipe := func(source string, r io.Reader) {
+		defer readWG.Done()
+		scanner := bufio.NewScanner(r)
 		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 		for scanner.Scan() {
-			line := scanner.Text()
-			if matches := sizeLineRegex.FindStringSubmatch(line); matches != nil {
-				lastFileSz = matches[1]
-				a.adMu.Lock()
-				a.lastFileSize[downloadID] = matches[1]
-				a.adMu.Unlock()
+			lineCh <- downloadLine{source: source, line: scanner.Text()}
+		}
+		if scanErr := scanner.Err(); scanErr != nil {
+			lineCh <- downloadLine{source: source, err: scanErr}
+		}
+	}
+	readWG.Add(2)
+	go scanPipe("stdout", stdout)
+	go scanPipe("stderr", stderr)
+	go func() {
+		readWG.Wait()
+		close(lineCh)
+	}()
+
+	currentPS := ""
+	lastPct := 0.0
+	lastSpeed := ""
+	lastETA := ""
+	lastFileSz := ""
+	errLines := make([]string, 0, maxErrLines)
+	var stdoutScanErr error
+	var stderrScanErr error
+	for item := range lineCh {
+		if item.err != nil {
+			if item.source == "stderr" {
+				stderrScanErr = item.err
+			} else {
+				stdoutScanErr = item.err
 			}
-			if pct, fileSz, speed, eta, ok := parseProgressLine(line); ok {
-				lastPct, lastSpeed, lastETA, lastFileSz = pct, speed, eta, fileSz
-				a.adMu.Lock()
-				a.lastSpeed[downloadID] = speed
-				a.lastFileSize[downloadID] = fileSz
-				a.adMu.Unlock()
-				a.emitDownloadProgress(downloadID, pct, speed, eta, fileSz, "downloading", "", currentPS)
-			} else if ps := parsePlaylistStatus(line); ps != "" {
-				currentPS = ps
-				a.emitDownloadProgress(downloadID, lastPct, lastSpeed, lastETA, lastFileSz, "downloading", "", currentPS)
+			continue
+		}
+		line := item.line
+		if item.source == "stderr" {
+			if len(errLines) >= maxErrLines {
+				errLines = append(errLines[1:], line)
+			} else {
+				errLines = append(errLines, line)
 			}
 		}
-		stdoutScanErr = scanner.Err()
-	}()
+		if matches := sizeLineRegex.FindStringSubmatch(line); matches != nil {
+			lastFileSz = matches[1]
+			a.adMu.Lock()
+			a.lastFileSize[downloadID] = matches[1]
+			a.adMu.Unlock()
+		}
+		if pct, fileSz, speed, eta, ok := parseProgressLine(line); ok {
+			lastPct, lastSpeed, lastETA, lastFileSz = pct, speed, eta, fileSz
+			a.adMu.Lock()
+			a.lastSpeed[downloadID] = speed
+			a.lastFileSize[downloadID] = fileSz
+			a.adMu.Unlock()
+			a.emitDownloadProgress(downloadID, pct, speed, eta, fileSz, "downloading", "", currentPS)
+		} else if ps := parsePlaylistStatus(line); ps != "" {
+			currentPS = ps
+			a.emitDownloadProgress(downloadID, lastPct, lastSpeed, lastETA, lastFileSz, "downloading", "", currentPS)
+		}
+	}
 
-	errLines := make([]string, 0, maxErrLines)
-	var stderrScanErr error
-	errCh := make(chan struct{})
-	go func() {
-		defer func() { recover(); close(errCh) }()
-		errLines, stderrScanErr = collectRecentLines(stderr, maxErrLines)
-	}()
-
-	<-done
-	<-errCh
 	err = cmd.Wait()
 	if err == nil {
 		err = errors.Join(stdoutScanErr, stderrScanErr)

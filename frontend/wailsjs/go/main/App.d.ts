@@ -16,6 +16,8 @@ export function DownloadDependencies():Promise<void>;
 
 export function FetchMetadata(arg1:string):Promise<main.VideoMetadata>;
 
+export function GetAppVersion():Promise<string>;
+
 export function GetFfmpegVersion():Promise<string>;
 
 export function GetHistory():Promise<Array<main.HistoryEntry>>;

@@ -1,9 +1,9 @@
-import { useRef, useState, useEffect, useCallback, useMemo, Component } from 'react'
+import { useRef, useState, useEffect, useMemo, Component } from 'react'
 import {
   CheckDependencies, DownloadDependencies,
   FetchMetadata, StartDownload, CancelDownload,
   GetSettings, UpdateSettings, SelectDirectory,
-  GetYtdlpVersion, GetVersionInfo, GetHistory,
+  GetAppVersion, GetVersionInfo, GetHistory,
   ClearHistory, DeleteHistoryEntry,
   UpdateDependencies, OpenOutputDir, CheckForUpdates, OpenExternalLink,
 } from "../wailsjs/go/main/App"
@@ -39,10 +39,42 @@ interface DownloadProgress {
 interface FormatOption { label: string; formatId: string }
 interface AppSettings { defaultOutputDir: string; theme: string; maxConcurrency: number; autoPasteURL: boolean }
 interface VersionInfo { ytdlp: string; ffmpeg: string; app: string }
+interface SupportedSite {
+  name: string
+  blurb: string
+  badge: string
+  color: string
+  href: string
+}
 
-type Tab = 'downloads' | 'history' | 'settings'
+type Tab = 'downloads' | 'history' | 'settings' | 'help'
 
 let historyRequestId = 0
+
+const supportedSites: SupportedSite[] = [
+  { name: 'YouTube', blurb: 'Video, Shorts, playlists, live', badge: 'YT', color: '#ff0033', href: 'https://www.youtube.com' },
+  { name: 'Twitch', blurb: 'Streams, VODs, clips', badge: 'TW', color: '#9146ff', href: 'https://www.twitch.tv' },
+  { name: 'Vimeo', blurb: 'Clean video hosting', badge: 'VM', color: '#1ab7ea', href: 'https://vimeo.com' },
+  { name: 'SoundCloud', blurb: 'Music and audio', badge: 'SC', color: '#ff5500', href: 'https://soundcloud.com' },
+  { name: 'TikTok', blurb: 'Short video downloads', badge: 'TT', color: '#00f2ea', href: 'https://www.tiktok.com' },
+  { name: 'Instagram', blurb: 'Reels, posts, stories', badge: 'IG', color: '#e1306c', href: 'https://www.instagram.com' },
+  { name: 'Facebook', blurb: 'Videos and live clips', badge: 'FB', color: '#1877f2', href: 'https://www.facebook.com' },
+  { name: 'Reddit', blurb: 'Host videos and clips', badge: 'RD', color: '#ff4500', href: 'https://www.reddit.com' },
+]
+
+function SiteBadge({ site }: { site: SupportedSite }) {
+  return (
+    <div className="flex items-start gap-3 rounded-xl p-3 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+      <div className="w-10 h-10 rounded-lg flex items-center justify-center shrink-0 font-semibold text-xs tracking-wider" style={{ background: site.color, color: '#fff' }}>
+        {site.badge}
+      </div>
+      <div className="min-w-0">
+        <p className="text-sm font-medium leading-5">{site.name}</p>
+        <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{site.blurb}</p>
+      </div>
+    </div>
+  )
+}
 
 function buildFormatOptions(formats: FormatInfo[]): FormatOption[] {
   const options: FormatOption[] = [
@@ -154,7 +186,6 @@ function App() {
   const [installingDeps, setInstallingDeps] = useState(false)
   const [depProgress, setDepProgress] = useState<Record<string, number>>({})
   const [depError, setDepError] = useState('')
-  const [ytdlpVersion, setYtdlpVersion] = useState('')
 
   const [queue, setQueue] = useState<QueueItem[]>([])
 
@@ -166,10 +197,13 @@ function App() {
   const [history, setHistory] = useState<main.HistoryEntry[]>([])
   const [historySearch, setHistorySearch] = useState('')
   const [historyLoading, setHistoryLoading] = useState(false)
-  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
+  const [appVersion, setAppVersion] = useState('')
+  const [toolVersions, setToolVersions] = useState<VersionInfo | null>(null)
+  const [toolVersionsLoading, setToolVersionsLoading] = useState(true)
   const [updatingDeps, setUpdatingDeps] = useState(false)
   const [updatesError, setUpdatesError] = useState('')
   const [updateInfo, setUpdateInfo] = useState<main.UpdateInfo | null>(null)
+  const [updateLoading, setUpdateLoading] = useState(true)
 
   const activeCount = queue.filter((i) => ['queued', 'starting', 'downloading'].includes(i.status)).length
 
@@ -190,6 +224,7 @@ function App() {
     { id: 'downloads', label: 'Downloads', icon: '⬇' },
     { id: 'history', label: 'History', icon: '⏱' },
     { id: 'settings', label: 'Settings', icon: '⚙' },
+    { id: 'help', label: 'Help', icon: '?' },
   ]
 
   useEffect(() => {
@@ -206,6 +241,39 @@ function App() {
       })
       .catch((err) => { console.warn('GetSettings failed:', err) })
   }, [])
+
+  const loadAppVersion = async () => {
+    try {
+      const v = await GetAppVersion()
+      setAppVersion(v || '')
+    } catch (err) {
+      console.warn('loadAppVersion failed:', err)
+    }
+  }
+
+  const loadToolVersions = async () => {
+    try {
+      const v = await GetVersionInfo()
+      setToolVersions(v)
+    } catch (err) {
+      console.warn('loadToolVersions failed:', err)
+    } finally {
+      setToolVersionsLoading(false)
+    }
+  }
+
+  const loadUpdateInfo = async () => {
+    try {
+      const u = await CheckForUpdates()
+      setUpdateInfo(u)
+      setUpdatesError('')
+    } catch (err) {
+      console.warn('loadUpdateInfo failed:', err)
+      setUpdatesError('Update check unavailable')
+    } finally {
+      setUpdateLoading(false)
+    }
+  }
 
   useEffect(() => {
     let cancelled = false
@@ -243,8 +311,13 @@ function App() {
   }, [installingDeps, depsReady])
 
   useEffect(() => {
+    void loadAppVersion()
+  }, [])
+
+  useEffect(() => {
     if (!depsReady) return
-    GetYtdlpVersion().then((v: string) => { if (v) setYtdlpVersion(v) }).catch((err: any) => { console.warn('GetYtdlpVersion:', err?.message || err) })
+    void loadToolVersions()
+    void loadUpdateInfo()
   }, [depsReady])
 
   useEffect(() => {
@@ -385,10 +458,6 @@ function App() {
   const handleTabSwitch = (tab: Tab) => {
     setActiveTab(tab)
     if (tab === 'history') loadHistory()
-    if (tab === 'settings') {
-      GetVersionInfo().then((v: VersionInfo) => setVersionInfo(v)).catch((err) => { console.warn('GetVersionInfo failed:', err) })
-      CheckForUpdates().then((u) => setUpdateInfo(u)).catch((err) => { console.warn('CheckForUpdates failed:', err) })
-    }
   }
 
   const statusColors: Record<string, string> = {
@@ -492,12 +561,18 @@ function fmtTime(t: string): string {
             </div>
           ))}
         </nav>
-        <div className="px-5 py-3 border-t text-xs" style={{ borderColor: 'var(--color-surface-border)', color: 'var(--text-muted)' }}>
-          <div className="flex items-center gap-1.5 mb-1">
-            <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: '#22c55e' }} />
-            <span>yt-dlp {ytdlpVersion ? `v${ytdlpVersion}` : ''}</span>
-          </div>
-          <div style={{ color: 'var(--text-muted)' }}>Save: {defaultOutputDir ? defaultOutputDir.split('/').pop() : '...'}</div>
+        <div className="px-4 py-3 border-t" style={{ borderColor: 'var(--color-surface-border)' }}>
+          <button
+            onClick={() => OpenExternalLink('https://github.com/Shik3i/KoalaPull').catch((err) => { console.warn('OpenExternalLink failed:', err) })}
+            className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors text-left"
+            style={{ color: 'var(--text-muted)' }}
+            title="Open KoalaPull on GitHub"
+          >
+            <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.38.6.11.79-.26.79-.58v-2.23c-3.34.73-4.03-1.41-4.03-1.41-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49 1 .11-.78.42-1.31.76-1.61-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.53-1.53.12-3.18 0 0 1-.32 3.3 1.23.96-.27 1.98-.4 3-.4s2.05.13 3.01.4c2.29-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.48 5.92.43.37.82 1.1.82 2.22v3.29c0 .32.19.69.8.57C20.56 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z" />
+            </svg>
+            <span className="font-mono text-xs">{appVersion ? `v${appVersion}` : '...'}</span>
+          </button>
         </div>
       </aside>
 
@@ -788,7 +863,7 @@ function fmtTime(t: string): string {
               <section>
                 <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>Download Location</h3>
                 <div className="flex gap-2">
-                  <div className="flex-1 rounded-md px-3 py-2 text-xs truncate" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)', color: 'var(--text-secondary)' }}>
+                  <div className="flex-1 rounded-md px-3 py-2 text-xs leading-5 break-all whitespace-normal" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)', color: 'var(--text-secondary)' }}>
                     {defaultOutputDir}
                   </div>
                   <button onClick={handleChangeFolder} className="btn-primary text-xs px-3 py-1.5 shrink-0">Change</button>
@@ -846,18 +921,16 @@ function fmtTime(t: string): string {
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center gap-2">
                     <span className="w-20" style={{ color: 'var(--text-muted)' }}>KoalaPull</span>
-                    <a
-                      href="https://github.com/Shik3i/KoalaPull"
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      onClick={() => OpenExternalLink('https://github.com/Shik3i/KoalaPull').catch(() => {})}
                       className="font-mono hover:underline inline-flex items-center gap-1"
                       style={{ color: 'var(--color-accent)' }}
                     >
                       <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/>
+                        <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.38.6.11.79-.26.79-.58v-2.23c-3.34.73-4.03-1.41-4.03-1.41-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49 1 .11-.78.42-1.31.76-1.61-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.53-1.53.12-3.18 0 0 1-.32 3.3 1.23.96-.27 1.98-.4 3-.4s2.05.13 3.01.4c2.29-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.48 5.92.43.37.82 1.1.82 2.22v3.29c0 .32.19.69.8.57C20.56 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z"/>
                       </svg>
-                      {versionInfo?.app || '-'}
-                    </a>
+                      {appVersion || '-'}
+                    </button>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="w-20" style={{ color: 'var(--text-muted)' }}>yt-dlp</span>
@@ -868,7 +941,7 @@ function fmtTime(t: string): string {
                       className="font-mono hover:underline inline-flex items-center gap-1"
                       style={{ color: 'var(--color-accent)' }}
                     >
-                      {versionInfo?.ytdlp || '-'}
+                      {toolVersions?.ytdlp || '-'}
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ opacity: 0.6 }}>
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
@@ -883,7 +956,7 @@ function fmtTime(t: string): string {
                       className="font-mono hover:underline inline-flex items-center gap-1"
                       style={{ color: 'var(--color-accent)' }}
                     >
-                      {versionInfo?.ffmpeg || '-'}
+                      {toolVersions?.ffmpeg || '-'}
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ opacity: 0.6 }}>
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
@@ -903,26 +976,26 @@ function fmtTime(t: string): string {
                         {updateInfo.koalaPullUpdateAvailable ? (
                           <div>
                             <span style={{ color: '#fbbf24' }}>KoalaPull {updateInfo.latestKoalaPullVersion} available</span>
-                            <span className="ml-2" style={{ color: 'var(--text-muted)' }}>(current: {versionInfo?.app || '?'})</span>
+                            <span className="ml-2" style={{ color: 'var(--text-muted)' }}>(current: {appVersion || '?'})</span>
                             <button
                               onClick={() => OpenExternalLink('https://github.com/Shik3i/KoalaPull/releases/latest').catch(() => {})}
                               className="btn-primary text-xs px-3 py-1 ml-3"
                             >View Release</button>
                           </div>
                         ) : (
-                          <p>KoalaPull is up to date ({versionInfo?.app || '?'})</p>
+                          <p>KoalaPull is up to date ({appVersion || '?'})</p>
                         )}
                       </div>
 
                       {/* yt-dlp */}
                       <div>
-                        {updateInfo.ytdlpUpdateAvailable ? (
+                      {updateInfo.ytdlpUpdateAvailable ? (
                           <div>
                             <span style={{ color: '#fbbf24' }}>yt-dlp {updateInfo.latestYtdlpVersion} available</span>
-                            <span className="ml-2" style={{ color: 'var(--text-muted)' }}>(current: v{versionInfo?.ytdlp || '?'})</span>
+                            <span className="ml-2" style={{ color: 'var(--text-muted)' }}>(current: v{toolVersions?.ytdlp || '?'})</span>
                           </div>
                         ) : (
-                          <p>yt-dlp is up to date (v{versionInfo?.ytdlp || '?'})</p>
+                          <p>yt-dlp is up to date (v{toolVersions?.ytdlp || '?'})</p>
                         )}
                         <button
                           onClick={async () => {
@@ -930,11 +1003,7 @@ function fmtTime(t: string): string {
                             setUpdatesError('')
                             try {
                               await UpdateDependencies()
-                              const v = await GetVersionInfo()
-                              setVersionInfo(v)
-                              if (v.ytdlp) setYtdlpVersion(v.ytdlp)
-                              const u = await CheckForUpdates()
-                              setUpdateInfo(u)
+                              await Promise.all([loadToolVersions(), loadUpdateInfo()])
                             } catch (err: any) {
                               setUpdatesError(err?.message || 'Update failed')
                             } finally {
@@ -948,12 +1017,70 @@ function fmtTime(t: string): string {
                         </button>
                       </div>
                     </>
+                  ) : updateLoading ? (
+                    <p>Checking updates...</p>
                   ) : (
-                    <p>Loading...</p>
+                    <p>Update check unavailable</p>
                   )}
                   {updatesError && (
                     <p className="mt-2" style={{ color: '#f87171' }}>{updatesError}</p>
                   )}
+                </div>
+              </section>
+            </div>
+          </div>
+        )}
+
+        {/* --- Help Tab --- */}
+        {activeTab === 'help' && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--color-surface-border)' }}>
+              <h2 className="text-base font-semibold">Help</h2>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 max-w-4xl">
+              <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+                <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>What KoalaPull does</h3>
+                <p className="text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+                  Paste a link, fetch metadata, pick a format, then queue downloads. KoalaPull wraps yt-dlp so the common flows stay simple in a native desktop UI.
+                </p>
+                <ul className="mt-3 space-y-2 text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  <li>• Video, audio, playlists, subtitles, and metadata.</li>
+                  <li>• Queue with parallel downloads and live progress.</li>
+                  <li>• History, themes, and local yt-dlp / ffmpeg setup.</li>
+                </ul>
+              </section>
+
+              <section>
+                <div className="flex items-end justify-between gap-4 mb-3">
+                  <div>
+                    <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Common sites</h3>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>A small grab bag of the big names yt-dlp usually handles well.</p>
+                  </div>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>More below</span>
+                </div>
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  {supportedSites.map((site) => (
+                    <a key={site.name} href={site.href} target="_blank" rel="noopener noreferrer" className="block">
+                      <SiteBadge site={site} />
+                    </a>
+                  ))}
+                </div>
+              </section>
+
+              <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>And many more</h3>
+                    <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>
+                      Full yt-dlp list lives in the upstream repo.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => OpenExternalLink('https://github.com/yt-dlp/yt-dlp/blob/master/supportedsites.md').catch((err) => { console.warn('OpenExternalLink failed:', err) })}
+                    className="btn-primary text-xs px-3 py-1.5"
+                  >
+                    supportedsites.md
+                  </button>
                 </div>
               </section>
             </div>
