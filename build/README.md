@@ -1,35 +1,27 @@
 # Build Directory
 
-The build directory is used to house all the build files and assets for your application. 
+This directory holds platform-specific assets used by `wails build` to produce native packages.
 
-The structure is:
+## Layout
 
-* bin - Output directory
-* darwin - macOS specific files
-* windows - Windows specific files
+```
+build/
+├── appicon.png            # Source icon (256×256 PNG, converted to platform formats)
+├── darwin/
+│   ├── Info.plist         # macOS app bundle metadata (CFBundleName, etc.)
+│   └── Info.dev.plist     # Same as above, used during `wails dev`
+├── windows/
+│   ├── icon.ico           # Windows application icon
+│   ├── info.json          # Windows file version metadata (right-click → Properties)
+│   ├── installer/         # Windows installer assets (NSIS/inno)
+│   └── wails.exe.manifest # Windows application manifest (DPIAware, etc.)
+└── bin/                   # Build output (gitignored)
+    ├── koalapull          # macOS / Linux binary
+    └── koalapull.exe      # Windows binary
+```
 
-## Mac
+## Customisation
 
-The `darwin` directory holds files specific to Mac builds.
-These may be customised and used as part of the build. To return these files to the default state, simply delete them
-and
-build with `wails build`.
-
-The directory contains the following files:
-
-- `Info.plist` - the main plist file used for Mac builds. It is used when building using `wails build`.
-- `Info.dev.plist` - same as the main plist file but used when building using `wails dev`.
-
-## Windows
-
-The `windows` directory contains the manifest and rc files used when building with `wails build`.
-These may be customised for your application. To return these files to the default state, simply delete them and
-build with `wails build`.
-
-- `icon.ico` - The icon used for the application. This is used when building using `wails build`. If you wish to
-  use a different icon, simply replace this file with your own. If it is missing, a new `icon.ico` file
-  will be created using the `appicon.png` file in the build directory.
-- `installer/*` - The files used to create the Windows installer. These are used when building using `wails build`.
-- `info.json` - Application details used for Windows builds. The data here will be used by the Windows installer,
-  as well as the application itself (right click the exe -> properties -> details)
-- `wails.exe.manifest` - The main application manifest file.
+- Replace `appicon.png` with your own 256×256 PNG. Wails will convert it to the platform formats on next build.
+- Edit `darwin/Info.plist` to change the macOS bundle identifier, version, or category.
+- Edit `windows/info.json` to change the Windows file version, copyright, or description.
