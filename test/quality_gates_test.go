@@ -10,14 +10,17 @@ import (
 func TestVerifyScriptExistsAndRunsRequiredChecks(t *testing.T) {
 	data := mustReadRepoFile(t, "scripts", "verify.sh")
 	for _, want := range []string{
-		"go test -count=1 ./...",
-		"go vet ./...",
 		"npm run test",
 		"npm run build",
+		"go test -count=1 ./...",
+		"go vet ./...",
 	} {
 		if !strings.Contains(data, want) {
 			t.Fatalf("scripts/verify.sh missing %q", want)
 		}
+	}
+	if strings.Index(data, "npm run build") > strings.Index(data, "go test -count=1 ./...") {
+		t.Fatal("scripts/verify.sh must build frontend before go test so embedded frontend/dist exists")
 	}
 }
 
