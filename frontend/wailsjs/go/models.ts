@@ -40,8 +40,59 @@ export namespace main {
 	        this.formatNote = source["formatNote"];
 	    }
 	}
+	export class HistoryEntry {
+	    downloadId: string;
+	    url: string;
+	    title: string;
+	    formatId: string;
+	    fileSize: string;
+	    avgSpeed: string;
+	    status: string;
+	    errorMsg?: string;
+	    // Go type: time
+	    startTime: any;
+	    // Go type: time
+	    endTime: any;
+	
+	    static createFrom(source: any = {}) {
+	        return new HistoryEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.downloadId = source["downloadId"];
+	        this.url = source["url"];
+	        this.title = source["title"];
+	        this.formatId = source["formatId"];
+	        this.fileSize = source["fileSize"];
+	        this.avgSpeed = source["avgSpeed"];
+	        this.status = source["status"];
+	        this.errorMsg = source["errorMsg"];
+	        this.startTime = this.convertValues(source["startTime"], null);
+	        this.endTime = this.convertValues(source["endTime"], null);
+	    }
+	
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
+	}
 	export class Settings {
 	    defaultOutputDir: string;
+	    theme: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -50,6 +101,23 @@ export namespace main {
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.defaultOutputDir = source["defaultOutputDir"];
+	        this.theme = source["theme"];
+	    }
+	}
+	export class VersionInfo {
+	    ytdlp: string;
+	    ffmpeg: string;
+	    app: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new VersionInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ytdlp = source["ytdlp"];
+	        this.ffmpeg = source["ffmpeg"];
+	        this.app = source["app"];
 	    }
 	}
 	export class VideoMetadata {

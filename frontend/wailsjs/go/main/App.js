@@ -10,6 +10,14 @@ export function CheckDependencies() {
   return window['go']['main']['App']['CheckDependencies']();
 }
 
+export function ClearHistory() {
+  return window['go']['main']['App']['ClearHistory']();
+}
+
+export function DeleteHistoryEntry(arg1) {
+  return window['go']['main']['App']['DeleteHistoryEntry'](arg1);
+}
+
 export function DownloadDependencies() {
   return window['go']['main']['App']['DownloadDependencies']();
 }
@@ -18,8 +26,20 @@ export function FetchMetadata(arg1) {
   return window['go']['main']['App']['FetchMetadata'](arg1);
 }
 
+export function GetFfmpegVersion() {
+  return window['go']['main']['App']['GetFfmpegVersion']();
+}
+
+export function GetHistory() {
+  return window['go']['main']['App']['GetHistory']();
+}
+
 export function GetSettings() {
   return window['go']['main']['App']['GetSettings']();
+}
+
+export function GetVersionInfo() {
+  return window['go']['main']['App']['GetVersionInfo']();
 }
 
 export function GetYtdlpVersion() {
@@ -30,8 +50,8 @@ export function SelectDirectory() {
   return window['go']['main']['App']['SelectDirectory']();
 }
 
-export function StartDownload(arg1, arg2, arg3, arg4, arg5) {
-  return window['go']['main']['App']['StartDownload'](arg1, arg2, arg3, arg4, arg5);
+export function StartDownload(arg1, arg2, arg3, arg4, arg5, arg6) {
+  return window['go']['main']['App']['StartDownload'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
 export function UpdateSettings(arg1) {

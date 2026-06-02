@@ -4,9 +4,38 @@
 @tailwind components;
 @tailwind utilities;
 
+:root,
+[data-theme="dark"] {
+  --color-surface: #111111;
+  --color-surface-light: #1a1a1a;
+  --color-surface-lighter: #252525;
+  --color-surface-border: #2a2a2a;
+  --color-accent: #00d4aa;
+  --color-accent-bright: #00e8ba;
+  --color-accent-dim: #00bf99;
+  --text-primary: #e5e7eb;
+  --text-secondary: #9ca3af;
+  --text-muted: #6b7280;
+}
+
+[data-theme="light"] {
+  --color-surface: #f8fafc;
+  --color-surface-light: #f1f5f9;
+  --color-surface-lighter: #e2e8f0;
+  --color-surface-border: #cbd5e1;
+  --color-accent: #059669;
+  --color-accent-bright: #10b981;
+  --color-accent-dim: #047857;
+  --text-primary: #1e293b;
+  --text-secondary: #475569;
+  --text-muted: #94a3b8;
+}
+
 @layer base {
   body {
-    @apply bg-surface text-gray-200 font-sans antialiased;
+    @apply antialiased;
+    background: var(--color-surface);
+    color: var(--text-primary);
     margin: 0;
     overflow: hidden;
   }
@@ -15,35 +44,67 @@
     width: 6px;
   }
   ::-webkit-scrollbar-track {
-    @apply bg-surface;
+    background: var(--color-surface);
   }
   ::-webkit-scrollbar-thumb {
-    @apply bg-surface-border rounded-full;
+    background: var(--color-surface-border);
+    border-radius: 9999px;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-600;
+    background: #9ca3af;
   }
 }
 
 @layer components {
   .btn-primary {
-    @apply bg-accent text-black font-semibold px-5 py-2 rounded-md
-           hover:bg-accent-bright active:bg-accent-dim
-           transition-colors duration-150 ease-in-out
-           disabled:opacity-40 disabled:cursor-not-allowed;
+    @apply font-semibold px-5 py-2 rounded-md transition-colors duration-150 ease-in-out disabled:opacity-40 disabled:cursor-not-allowed;
+    background: var(--color-accent);
+    color: #000;
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: var(--color-accent-bright);
+  }
+  .btn-primary:active:not(:disabled) {
+    background: var(--color-accent-dim);
   }
 
   .select-dark {
-    @apply bg-surface-lighter text-gray-300 border border-surface-border
-           rounded-md px-3 py-2 text-sm
-           focus:outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent/50
-           appearance-none cursor-pointer;
+    @apply rounded-md px-3 py-2 text-sm appearance-none cursor-pointer;
+    background: var(--color-surface-lighter);
+    color: var(--text-secondary);
+    border: 1px solid var(--color-surface-border);
+  }
+  .select-dark:focus {
+    outline: none;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 50%, transparent);
+    border-color: color-mix(in srgb, var(--color-accent) 50%, transparent);
   }
 
   .input-dark {
-    @apply bg-surface-lighter text-gray-200 border border-surface-border
-           rounded-md px-4 py-2.5 text-sm
-           placeholder-gray-500
-           focus:outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent/50;
+    @apply rounded-md px-4 py-2.5 text-sm;
+    background: var(--color-surface-lighter);
+    color: var(--text-primary);
+    border: 1px solid var(--color-surface-border);
+  }
+  .input-dark::placeholder {
+    color: var(--text-muted);
+  }
+  .input-dark:focus {
+    outline: none;
+    box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 50%, transparent);
+    border-color: color-mix(in srgb, var(--color-accent) 50%, transparent);
+  }
+
+  .sidebar-tab {
+    @apply flex items-center gap-3 px-4 py-2.5 text-sm rounded-lg transition-colors duration-150 cursor-pointer;
+    color: var(--text-secondary);
+  }
+  .sidebar-tab:hover {
+    background: var(--color-surface-lighter);
+    color: var(--text-primary);
+  }
+  .sidebar-tab.active {
+    background: color-mix(in srgb, var(--color-accent) 15%, transparent);
+    color: var(--color-accent);
   }
 }

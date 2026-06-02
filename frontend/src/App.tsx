@@ -2,70 +2,43 @@ import { useState, useEffect } from 'react'
 import {
   CheckDependencies, DownloadDependencies,
   FetchMetadata, StartDownload, CancelDownload,
-  GetSettings, UpdateSettings, SelectDirectory, GetYtdlpVersion,
+  GetSettings, UpdateSettings, SelectDirectory,
+  GetYtdlpVersion, GetVersionInfo, GetHistory,
+  ClearHistory, DeleteHistoryEntry,
 } from "../wailsjs/go/main/App"
 import { EventsOn, EventsOff } from "../wailsjs/runtime/runtime"
+import type { main } from "../wailsjs/go/models"
 import './style.css'
 
 interface FormatInfo {
-  formatId: string
-  ext: string
-  width: number
-  height: number
-  vcodec: string
-  acodec: string
-  filesize: number
-  formatNote: string
+  formatId: string; ext: string; width: number; height: number
+  vcodec: string; acodec: string; filesize: number; formatNote: string
 }
 
 interface VideoMetadata {
-  id: string
-  title: string
-  thumbnail: string
-  uploader: string
-  duration: number
-  formats: FormatInfo[]
-  isPlaylist: boolean
-  entryCount: number
+  id: string; title: string; thumbnail: string; uploader: string
+  duration: number; formats: FormatInfo[]; isPlaylist: boolean; entryCount: number
 }
 
 interface QueueItem {
-  id: string
-  title: string
-  thumbnail: string
-  status: string
-  progress: number
-  speed: string
-  eta: string
-  errorMsg: string
-  playlistStatus: string
+  id: string; title: string; thumbnail: string; status: string
+  progress: number; speed: string; eta: string; errorMsg: string; playlistStatus: string
 }
 
 interface DepProgress {
-  dependency: string
-  progress: number
-  status: string
-  error?: string
+  dependency: string; progress: number; status: string; error?: string
 }
 
 interface DownloadProgress {
-  downloadId: string
-  percent: number
-  speed: string
-  eta: string
-  status: string
-  error?: string
-  playlistStatus?: string
+  downloadId: string; percent: number; speed: string; eta: string
+  status: string; error?: string; playlistStatus?: string
 }
 
-interface FormatOption {
-  label: string
-  formatId: string
-}
+interface FormatOption { label: string; formatId: string }
+interface AppSettings { defaultOutputDir: string; theme: string }
+interface VersionInfo { ytdlp: string; ffmpeg: string; app: string }
 
-interface AppSettings {
-  defaultOutputDir: string
-}
+type Tab = 'downloads' | 'history' | 'settings'
 
 function buildFormatOptions(formats: FormatInfo[]): FormatOption[] {
   const options: FormatOption[] = [
@@ -87,6 +60,7 @@ function buildFormatOptions(formats: FormatInfo[]): FormatOption[] {
 }
 
 function App() {
+  const [activeTab, setActiveTab] = useState<Tab>('downloads')
   const [url, setUrl] = useState('')
   const [fetched, setFetched] = useState(false)
   const [fetching, setFetching] = useState(false)
@@ -108,15 +82,30 @@ function App() {
 
   const [showSettings, setShowSettings] = useState(false)
   const [defaultOutputDir, setDefaultOutputDir] = useState('')
+  const [theme, setTheme] = useState('dark')
 
-  // Load settings
+  const [history, setHistory] = useState<main.HistoryEntry[]>([])
+  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
+
+  const tabs: { id: Tab; label: string; icon: string }[] = [
+    { id: 'downloads', label: 'Downloads', icon: '⬇' },
+    { id: 'history', label: 'History', icon: '⏱' },
+    { id: 'settings', label: 'Settings', icon: '⚙' },
+  ]
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme)
+  }, [theme])
+
   useEffect(() => {
     GetSettings()
-      .then((s: AppSettings) => setDefaultOutputDir(s.defaultOutputDir))
+      .then((s: AppSettings) => {
+        setDefaultOutputDir(s.defaultOutputDir)
+        setTheme(s.theme || 'dark')
+      })
       .catch(() => {})
   }, [])
 
-  // Dependency check
   useEffect(() => {
     let cancelled = false
     const run = async () => {
@@ -131,50 +120,32 @@ function App() {
           setCheckingDeps(false)
         }
       } catch {
-        if (!cancelled) {
-          setCheckingDeps(false)
-          setDepError('Failed to check dependencies.')
-        }
+        if (!cancelled) { setCheckingDeps(false); setDepError('Failed to check dependencies.') }
       }
     }
     const handleDepProgress = (data: DepProgress) => {
       setDepProgress((prev) => ({ ...prev, [data.dependency]: data.progress }))
-      if (data.status === 'error') {
-        setDepError(data.error || 'Download failed')
-        setInstallingDeps(false)
-      }
+      if (data.status === 'error') { setDepError(data.error || 'Download failed'); setInstallingDeps(false) }
     }
     EventsOn('dependency-progress', handleDepProgress)
     run()
-    return () => {
-      cancelled = true
-      EventsOff('dependency-progress')
-    }
+    return () => { cancelled = true; EventsOff('dependency-progress') }
   }, [])
 
-  // Trigger dependency install when user clicks the button
   useEffect(() => {
     if (!installingDeps || depsReady) return
     let cancelled = false
     DownloadDependencies()
-      .then(() => {
-        if (!cancelled) { setDepsReady(true); setInstallingDeps(false) }
-      })
-      .catch((err: any) => {
-        if (!cancelled) { setDepError(err?.message || 'Dependency installation failed'); setInstallingDeps(false) }
-      })
+      .then(() => { if (!cancelled) { setDepsReady(true); setInstallingDeps(false) } })
+      .catch((err: any) => { if (!cancelled) { setDepError(err?.message || 'Dependency installation failed'); setInstallingDeps(false) } })
     return () => { cancelled = true }
   }, [installingDeps, depsReady])
 
-  // Pre-warm yt-dlp when deps are ready; capture version for display
   useEffect(() => {
     if (!depsReady) return
-    GetYtdlpVersion().then((v: string) => {
-      if (v) setYtdlpVersion(v)
-    }).catch(() => {})
+    GetYtdlpVersion().then((v: string) => { if (v) setYtdlpVersion(v) }).catch(() => {})
   }, [depsReady])
 
-  // Listen for download progress
   useEffect(() => {
     const handleDlProgress = (data: DownloadProgress) => {
       setQueue((prev) =>
@@ -221,7 +192,7 @@ function App() {
   const handleAddToQueue = async () => {
     if (!metadata) return
     try {
-      const downloadId = await StartDownload(url, selectedFormat, defaultOutputDir, selectedContainer, selectedSubs)
+      const downloadId = await StartDownload(url, selectedFormat, defaultOutputDir, selectedContainer, selectedSubs, metadata.title)
       setQueue((prev) => [
         ...prev,
         { id: downloadId, title: metadata.title, thumbnail: metadata.thumbnail, status: 'queued', progress: 0, speed: '', eta: '', errorMsg: '', playlistStatus: '' },
@@ -231,9 +202,7 @@ function App() {
     }
   }
 
-  const handleCancel = (id: string) => {
-    CancelDownload(id).catch(() => {})
-  }
+  const handleCancel = (id: string) => { CancelDownload(id).catch(() => {}) }
 
   const handleClearCompleted = () => {
     setQueue((prev) => prev.filter((item) => !['completed', 'error', 'cancelled'].includes(item.status)))
@@ -244,9 +213,35 @@ function App() {
       const dir = await SelectDirectory()
       if (!dir) return
       setDefaultOutputDir(dir)
-      await UpdateSettings({ defaultOutputDir: dir })
-    } catch {
-      // user cancelled
+      await UpdateSettings({ defaultOutputDir: dir, theme })
+    } catch { /* user cancelled */ }
+  }
+
+  const loadHistory = async () => {
+    try {
+      const h = await GetHistory()
+      setHistory(h)
+    } catch { /* ignore */ }
+  }
+
+  const handleClearHistory = async () => {
+    try { await ClearHistory(); setHistory([]) } catch { /* ignore */ }
+  }
+
+  const handleDeleteHistoryEntry = async (id: string) => {
+    try { await DeleteHistoryEntry(id); setHistory((prev) => prev.filter((e) => e.downloadId !== id)) } catch { /* ignore */ }
+  }
+
+  const handleThemeChange = async (newTheme: string) => {
+    setTheme(newTheme)
+    await UpdateSettings({ defaultOutputDir, theme: newTheme })
+  }
+
+  const handleTabSwitch = (tab: Tab) => {
+    setActiveTab(tab)
+    if (tab === 'history') loadHistory()
+    if (tab === 'settings') {
+      GetVersionInfo().then((v: VersionInfo) => setVersionInfo(v)).catch(() => {})
     }
   }
 
@@ -256,29 +251,34 @@ function App() {
     error: 'text-red-400', cancelled: 'text-yellow-400',
   }
 
-  // Loading screen
+  function fmtTime(t: string): string {
+    const d = new Date(t)
+    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+  }
+
+  // --- Loading Screen ---
   if (checkingDeps) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-surface text-gray-200">
-        <div className="w-8 h-8 rounded-md bg-accent flex items-center justify-center mb-4">
+      <div className="h-screen flex flex-col items-center justify-center" style={{ background: 'var(--color-surface)', color: 'var(--text-primary)' }}>
+        <div className="w-8 h-8 rounded-md flex items-center justify-center mb-4" style={{ background: 'var(--color-accent)' }}>
           <span className="text-black font-bold text-sm">KP</span>
         </div>
         <h1 className="text-lg font-semibold tracking-tight mb-1">KoalaPull</h1>
-        <p className="text-sm text-gray-500">Checking dependencies...</p>
-        <div className="mt-4 w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+        <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>Checking dependencies...</p>
+        <div className="mt-4 w-6 h-6 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--color-accent)', borderTopColor: 'transparent' }} />
       </div>
     )
   }
 
-  // Setup screen
+  // --- Setup Screen ---
   if (!depsReady) {
     return (
-      <div className="h-screen flex flex-col items-center justify-center bg-surface text-gray-200 px-6">
-        <div className="w-12 h-12 rounded-xl bg-accent flex items-center justify-center mb-5">
+      <div className="h-screen flex flex-col items-center justify-center px-6" style={{ background: 'var(--color-surface)', color: 'var(--text-primary)' }}>
+        <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5" style={{ background: 'var(--color-accent)' }}>
           <span className="text-black font-bold text-lg">KP</span>
         </div>
         <h1 className="text-xl font-semibold tracking-tight mb-1">KoalaPull Setup</h1>
-        <p className="text-sm text-gray-400 mb-6 text-center max-w-sm">
+        <p className="text-sm mb-6 text-center max-w-sm" style={{ color: 'var(--text-secondary)' }}>
           Required tools (yt-dlp, ffmpeg) need to be downloaded first.
         </p>
         <div className="w-full max-w-sm space-y-4">
@@ -287,18 +287,18 @@ function App() {
             return (
               <div key={dep}>
                 <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="text-gray-400">{dep}</span>
-                  <span className="text-gray-500 font-mono">{pct}%</span>
+                  <span style={{ color: 'var(--text-secondary)' }}>{dep}</span>
+                  <span className="font-mono" style={{ color: 'var(--text-muted)' }}>{pct}%</span>
                 </div>
-                <div className="w-full h-1.5 bg-surface-lighter rounded-full overflow-hidden">
-                  <div className="h-full bg-accent rounded-full transition-all duration-300 ease-out" style={{ width: `${pct}%` }} />
+                <div className="w-full h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
+                  <div className="h-full rounded-full transition-all duration-300 ease-out" style={{ width: `${pct}%`, background: 'var(--color-accent)' }} />
                 </div>
               </div>
             )
           })}
         </div>
         {installingDeps ? (
-          <p className="text-xs text-gray-500 mt-4 font-mono">
+          <p className="text-xs mt-4 font-mono" style={{ color: 'var(--text-muted)' }}>
             {depProgress['yt-dlp'] === 100 && depProgress['ffmpeg'] === 100 ? 'Finalizing...' : 'Downloading...'}
           </p>
         ) : !depError ? (
@@ -308,7 +308,7 @@ function App() {
         ) : null}
         {depError && (
           <div className="mt-4 text-center">
-            <p className="text-xs text-red-400 mb-2">{depError}</p>
+            <p className="text-xs mb-2" style={{ color: '#f87171' }}>{depError}</p>
             <button onClick={() => setInstallingDeps(true)} className="btn-primary text-xs px-4 py-1.5">Retry</button>
           </div>
         )}
@@ -316,289 +316,359 @@ function App() {
     )
   }
 
+  // --- Main App ---
   return (
-    <div className="h-screen flex flex-col bg-surface text-gray-200 select-none">
-      {/* Header */}
-      <header className="flex items-center justify-between px-6 py-3 border-b border-surface-border shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-8 h-8 rounded-md bg-accent flex items-center justify-center">
-            <span className="text-black font-bold text-sm">KP</span>
+    <div className="h-screen flex" style={{ background: 'var(--color-surface)', color: 'var(--text-primary)' }}>
+      {/* Sidebar */}
+      <aside className="w-52 shrink-0 flex flex-col border-r" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+        <div className="flex items-center gap-2.5 px-5 py-4 border-b" style={{ borderColor: 'var(--color-surface-border)' }}>
+          <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: 'var(--color-accent)' }}>
+            <span className="text-black font-bold text-xs">KP</span>
           </div>
-          <h1 className="text-lg font-semibold tracking-tight">KoalaPull</h1>
+          <span className="font-semibold text-sm">KoalaPull</span>
         </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-gray-500 font-mono">{ytdlpVersion ? `v${ytdlpVersion}` : ''}</span>
-          <button
-            onClick={() => setShowSettings(true)}
-            className="text-gray-400 hover:text-gray-200 transition-colors"
-            title="Settings"
-          >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-            </svg>
-          </button>
-        </div>
-      </header>
-
-      {/* Settings Modal */}
-      {showSettings && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60" onClick={() => setShowSettings(false)}>
-          <div
-            className="bg-surface-light border border-surface-border rounded-lg w-full max-w-md mx-4 p-5"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-semibold text-gray-200">Settings</h2>
-              <button onClick={() => setShowSettings(false)} className="text-gray-500 hover:text-gray-300 text-lg leading-none">&times;</button>
+        <nav className="flex-1 px-3 py-4 space-y-1" style={{ color: 'var(--text-secondary)' }}>
+          {tabs.map((t) => (
+            <div key={t.id} onClick={() => handleTabSwitch(t.id)} className={`sidebar-tab ${activeTab === t.id ? 'active' : ''}`}>
+              <span className="text-base">{t.icon}</span>
+              <span>{t.label}</span>
             </div>
-
-            <label className="text-xs text-gray-400 mb-1.5 block">Download Location</label>
-            <div className="flex gap-2">
-              <div className="flex-1 bg-surface-lighter border border-surface-border rounded-md px-3 py-2 text-xs text-gray-300 truncate">
-                {defaultOutputDir}
-              </div>
-              <button onClick={handleChangeFolder} className="btn-primary text-xs px-3 py-1.5 shrink-0">
-                Change
-              </button>
-            </div>
-
-            <div className="mt-5 flex justify-end">
-              <button onClick={() => setShowSettings(false)} className="text-xs text-gray-400 hover:text-gray-200 px-3 py-1.5">
-                Close
-              </button>
-            </div>
+          ))}
+        </nav>
+        <div className="px-5 py-3 border-t text-xs" style={{ borderColor: 'var(--color-surface-border)', color: 'var(--text-muted)' }}>
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="inline-block w-1.5 h-1.5 rounded-full" style={{ background: '#22c55e' }} />
+            <span>yt-dlp {ytdlpVersion ? `v${ytdlpVersion}` : ''}</span>
           </div>
+          <div style={{ color: 'var(--text-muted)' }}>Save: {defaultOutputDir ? defaultOutputDir.split('/').pop() : '...'}</div>
         </div>
-      )}
+      </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-        {/* URL Fetch */}
-        <div className="flex gap-2">
-          <div className="flex-1 relative">
-            <input
-              type="text"
-              value={url}
-              onChange={(e) => setUrl(e.target.value)}
-              onKeyDown={(e) => { if (e.key === 'Enter') handleFetch() }}
-              placeholder="Paste a video or playlist URL..."
-              className="input-dark w-full pr-10"
-            />
-            {url && (
-              <button
-                onClick={() => setUrl('')}
-                className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-lg leading-none"
-              >
-                &times;
-              </button>
-            )}
-          </div>
-          <button
-            onClick={handleFetch}
-            disabled={fetching || !url.trim()}
-            className="btn-primary shrink-0 flex items-center gap-2"
-          >
-            {fetching ? (
-              <>
-                <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
-                Fetching
-              </>
-            ) : 'Fetch'}
-          </button>
-        </div>
-
-        {fetchError && (
-          <div className="bg-red-900/20 border border-red-700/30 rounded-lg px-4 py-3 text-sm text-red-300">
-            {fetchError}
-          </div>
-        )}
-
-        {/* Rich Metadata Card */}
-        {fetched && metadata && (
-          <div className="bg-surface-light border border-surface-border rounded-lg overflow-hidden">
-            <div className="flex gap-4 p-4">
-              {metadata.thumbnail ? (
-                <img src={metadata.thumbnail} alt={metadata.title} loading="lazy" className="w-44 h-24 rounded-md object-cover shrink-0 bg-surface-lighter" />
-              ) : (
-                <div className="w-44 h-24 bg-surface-lighter rounded-md shrink-0 flex items-center justify-center border border-surface-border">
-                  <svg className="w-8 h-8 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                  </svg>
+      <main className="flex-1 flex flex-col overflow-hidden">
+        {/* --- Downloads Tab --- */}
+        {activeTab === 'downloads' && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--color-surface-border)' }}>
+              <div className="flex gap-2">
+                <div className="flex-1 relative">
+                  <input
+                    type="text" value={url}
+                    onChange={(e) => setUrl(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === 'Enter') handleFetch() }}
+                    placeholder="Paste a video or playlist URL..."
+                    className="input-dark w-full pr-10"
+                  />
+                  {url && (
+                    <button
+                      onClick={() => setUrl('')}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-lg leading-none"
+                      style={{ color: 'var(--text-muted)' }}
+                    >&times;</button>
+                  )}
+                </div>
+                <button onClick={handleFetch} disabled={fetching || !url.trim()} className="btn-primary shrink-0 flex items-center gap-2">
+                  {fetching ? (
+                    <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg> Fetching</>
+                  ) : 'Fetch'}
+                </button>
+              </div>
+              {fetchError && (
+                <div className="mt-3 px-4 py-3 rounded-lg text-sm" style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5' }}>
+                  {fetchError}
                 </div>
               )}
-              <div className="flex-1 min-w-0">
-                <h2 className="text-base font-semibold truncate">{metadata.title}</h2>
-                <p className="text-sm text-gray-400 mt-0.5">{metadata.uploader}</p>
-                {metadata.isPlaylist && (
-                  <span className="inline-block mt-1 text-xs bg-accent/20 text-accent px-2 py-0.5 rounded font-medium">
-                    Playlist · {metadata.entryCount} videos
-                  </span>
-                )}
-                <div className="flex flex-wrap gap-2 mt-3">
-                  <select value={selectedFormat} onChange={(e) => setSelectedFormat(e.target.value)} className="select-dark text-xs flex-1 min-w-[140px]">
-                    {formatOptions.map((opt) => (
-                      <option key={opt.formatId} value={opt.formatId}>{opt.label}</option>
-                    ))}
-                  </select>
-                  <select value={selectedSubs} onChange={(e) => setSelectedSubs(e.target.value)} className="select-dark text-xs flex-1 min-w-[100px]">
-                    <option value="none">No Subs</option>
-                    <option value="auto">Auto-generated</option>
-                    <option value="embed">Embed All</option>
-                  </select>
-                  <select value={selectedContainer} onChange={(e) => setSelectedContainer(e.target.value)} className="select-dark text-xs flex-1 min-w-[80px]">
-                    <option value="mp4">MP4</option>
-                    <option value="mkv">MKV</option>
-                    <option value="mp3">MP3</option>
-                  </select>
+            </div>
+
+            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+              {fetched && metadata && (
+                <div className="rounded-lg overflow-hidden" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
+                  <div className="flex gap-4 p-4">
+                    {metadata.thumbnail ? (
+                      <img src={metadata.thumbnail} alt={metadata.title} loading="lazy" className="w-44 h-24 rounded-md object-cover shrink-0" style={{ background: 'var(--color-surface-lighter)' }} />
+                    ) : (
+                      <div className="w-44 h-24 rounded-md shrink-0 flex items-center justify-center" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}>
+                        <svg className="w-8 h-8" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                        </svg>
+                      </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <h2 className="text-base font-semibold truncate">{metadata.title}</h2>
+                      <p className="text-sm mt-0.5" style={{ color: 'var(--text-secondary)' }}>{metadata.uploader}</p>
+                      {metadata.isPlaylist && (
+                        <span className="inline-block mt-1 text-xs px-2 py-0.5 rounded font-medium" style={{ background: 'color-mix(in srgb, var(--color-accent) 20%, transparent)', color: 'var(--color-accent)' }}>
+                          Playlist · {metadata.entryCount} videos
+                        </span>
+                      )}
+                      <div className="flex flex-wrap gap-2 mt-3">
+                        <select value={selectedFormat} onChange={(e) => setSelectedFormat(e.target.value)} className="select-dark text-xs flex-1 min-w-[140px]">
+                          {formatOptions.map((opt) => (
+                            <option key={opt.formatId} value={opt.formatId}>{opt.label}</option>
+                          ))}
+                        </select>
+                        <select value={selectedSubs} onChange={(e) => setSelectedSubs(e.target.value)} className="select-dark text-xs flex-1 min-w-[100px]">
+                          <option value="none">No Subs</option>
+                          <option value="auto">Auto-generated</option>
+                          <option value="embed">Embed All</option>
+                        </select>
+                        <select value={selectedContainer} onChange={(e) => setSelectedContainer(e.target.value)} className="select-dark text-xs flex-1 min-w-[80px]">
+                          <option value="mp4">MP4</option>
+                          <option value="mkv">MKV</option>
+                          <option value="mp3">MP3</option>
+                        </select>
+                      </div>
+                      <button onClick={handleAddToQueue} className="btn-primary mt-3 text-sm flex items-center gap-1.5">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        Add to Queue
+                      </button>
+                    </div>
+                  </div>
                 </div>
-                <button onClick={handleAddToQueue} className="btn-primary mt-3 text-sm flex items-center gap-1.5">
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                  </svg>
-                  Add to Queue
-                </button>
+              )}
+
+              <div>
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-sm font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
+                    Downloads ({queue.length})
+                  </h3>
+                  {queue.some((i) => ['completed', 'error', 'cancelled'].includes(i.status)) && (
+                    <button onClick={handleClearCompleted} className="text-xs transition-colors" style={{ color: 'var(--text-muted)' }}>Clear Completed</button>
+                  )}
+                </div>
+                {queue.length === 0 ? (
+                  <div className="flex flex-col items-center justify-center py-12" style={{ color: 'var(--text-muted)' }}>
+                    <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
+                    </svg>
+                    <p className="text-sm">No downloads yet</p>
+                    <p className="text-xs mt-1">Paste a URL above to get started</p>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {[...queue].reverse().map((item) => (
+                      <div key={item.id} className="rounded-lg p-3 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
+                        <div className="w-16 h-10 rounded shrink-0 flex items-center justify-center overflow-hidden" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}>
+                          {item.thumbnail ? (
+                            <img src={item.thumbnail} alt="" loading="lazy" className="w-full h-full object-cover" />
+                          ) : (
+                            <svg className="w-5 h-5" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                          )}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium truncate">{item.title}</p>
+                          <div className="flex items-center gap-3 mt-1 text-xs">
+                            <span className={statusColors[item.status]}>
+                              {item.status === 'downloading' && `Downloading - ${item.progress}%`}
+                              {item.status === 'starting' && 'Starting...'}
+                              {item.status === 'queued' && 'Queued'}
+                              {item.status === 'completed' && 'Completed'}
+                              {item.status === 'error' && 'Error'}
+                              {item.status === 'cancelled' && 'Cancelled'}
+                            </span>
+                            {item.speed && <span style={{ color: 'var(--text-muted)' }}>{item.speed}</span>}
+                            {item.eta && <span style={{ color: 'var(--text-muted)' }}>ETA: {item.eta}</span>}
+                            {item.playlistStatus && <span style={{ color: 'var(--text-muted)' }}>{item.playlistStatus}</span>}
+                          </div>
+                          {(item.status === 'downloading' || item.status === 'starting') && (
+                            <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
+                              <div className="h-full rounded-full transition-all duration-300 ease-out" style={{ width: `${Math.max(item.progress, 2)}%`, background: 'var(--color-accent)' }} />
+                            </div>
+                          )}
+                          {item.status === 'completed' && (
+                            <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
+                              <div className="h-full rounded-full" style={{ width: '100%', background: '#22c55e' }} />
+                            </div>
+                          )}
+                          {item.status === 'error' && (
+                            <>
+                              <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
+                                <div className="h-full rounded-full" style={{ width: '100%', background: '#ef4444' }} />
+                              </div>
+                              {item.errorMsg && <p className="mt-1 text-xs truncate" style={{ color: '#f87171' }}>{item.errorMsg}</p>}
+                            </>
+                          )}
+                          {item.status === 'cancelled' && (
+                            <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
+                              <div className="h-full rounded-full" style={{ width: '100%', background: '#eab308' }} />
+                            </div>
+                          )}
+                        </div>
+                        {item.status === 'completed' && (
+                          <svg className="w-5 h-5 shrink-0" style={{ color: '#22c55e' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        )}
+                        {(item.status === 'downloading' || item.status === 'starting') && (
+                          <div className="flex items-center gap-1">
+                            <svg className="w-5 h-5 animate-pulse shrink-0" style={{ color: 'var(--color-accent)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+                            </svg>
+                            <button onClick={() => handleCancel(item.id)} className="transition-colors p-0.5" style={{ color: 'var(--text-muted)' }} title="Cancel">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                              </svg>
+                            </button>
+                          </div>
+                        )}
+                        {item.status === 'queued' && (
+                          <button onClick={() => handleCancel(item.id)} className="transition-colors p-0.5 shrink-0" style={{ color: 'var(--text-muted)' }} title="Cancel">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        )}
+                        {item.status === 'error' && (
+                          <svg className="w-5 h-5 shrink-0" style={{ color: '#ef4444' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                          </svg>
+                        )}
+                        {item.status === 'cancelled' && (
+                          <svg className="w-5 h-5 shrink-0" style={{ color: '#eab308' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
         )}
 
-        {/* Download Queue */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-sm font-medium text-gray-400 uppercase tracking-wider">
-              Downloads ({queue.length})
-            </h3>
-            {queue.some((i) => ['completed', 'error', 'cancelled'].includes(i.status)) && (
-              <button onClick={handleClearCompleted} className="text-xs text-gray-500 hover:text-gray-300 transition-colors">
-                Clear Completed
-              </button>
-            )}
-          </div>
-          {queue.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-gray-600">
-              <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
-              </svg>
-              <p className="text-sm">No downloads yet</p>
-              <p className="text-xs mt-1">Paste a URL above to get started</p>
+        {/* --- History Tab --- */}
+        {activeTab === 'history' && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--color-surface-border)' }}>
+              <h2 className="text-base font-semibold">Download History</h2>
+              {history.length > 0 && (
+                <button onClick={handleClearHistory} className="btn-primary text-xs px-3 py-1.5">Clear All</button>
+              )}
             </div>
-          ) : (
-            <div className="space-y-2">
-              {[...queue].reverse().map((item) => (
-                <div key={item.id} className="bg-surface-light border border-surface-border rounded-lg p-3 flex items-center gap-3">
-                  <div className="w-16 h-10 bg-surface-lighter rounded shrink-0 flex items-center justify-center border border-surface-border overflow-hidden">
-                    {item.thumbnail ? (
-                      <img src={item.thumbnail} alt="" loading="lazy" className="w-full h-full object-cover" />
-                    ) : (
-                      <svg className="w-5 h-5 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                    )}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium truncate">{item.title}</p>
-                    <div className="flex items-center gap-3 mt-1 text-xs">
-                      <span className={statusColors[item.status]}>
-                        {item.status === 'downloading' && `Downloading - ${item.progress}%`}
-                        {item.status === 'starting' && 'Starting...'}
-                        {item.status === 'queued' && 'Queued'}
-                        {item.status === 'completed' && 'Completed'}
-                        {item.status === 'error' && 'Error'}
-                        {item.status === 'cancelled' && 'Cancelled'}
-                      </span>
-                      {item.speed && <span className="text-gray-500">{item.speed}</span>}
-                      {item.eta && <span className="text-gray-500">ETA: {item.eta}</span>}
-                      {item.playlistStatus && <span className="text-gray-500">{item.playlistStatus}</span>}
-                    </div>
-
-                    {/* Progress Bar */}
-                    {(item.status === 'downloading' || item.status === 'starting') && (
-                      <div className="mt-1.5 w-full h-1 bg-surface-lighter rounded-full overflow-hidden">
-                        <div className="h-full bg-accent rounded-full transition-all duration-300 ease-out" style={{ width: `${Math.max(item.progress, 2)}%` }} />
-                      </div>
-                    )}
-                    {item.status === 'completed' && (
-                      <div className="mt-1.5 w-full h-1 bg-surface-lighter rounded-full overflow-hidden">
-                        <div className="h-full bg-green-400 rounded-full" style={{ width: '100%' }} />
-                      </div>
-                    )}
-                    {item.status === 'error' && (
-                      <>
-                        <div className="mt-1.5 w-full h-1 bg-surface-lighter rounded-full overflow-hidden">
-                          <div className="h-full bg-red-500 rounded-full" style={{ width: '100%' }} />
+            <div className="flex-1 overflow-y-auto px-6 py-4">
+              {history.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--text-muted)' }}>
+                  <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <p className="text-sm">No download history yet</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {history.map((entry) => (
+                    <div key={entry.downloadId} className="rounded-lg p-3.5 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium truncate">{entry.title || 'Untitled'}</p>
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+                          <span>Started: {fmtTime(entry.startTime)}</span>
+                          <span>Ended: {fmtTime(entry.endTime)}</span>
+                          {entry.fileSize && <span>Size: {entry.fileSize}</span>}
+                          {entry.avgSpeed && <span>Speed: {entry.avgSpeed}</span>}
+                          <span className={`font-medium ${entry.status === 'completed' ? 'text-green-400' : entry.status === 'cancelled' ? 'text-yellow-400' : 'text-red-400'}`}>
+                            {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
+                          </span>
                         </div>
-                        {item.errorMsg && (
-                          <p className="mt-1 text-xs text-red-400 truncate">{item.errorMsg}</p>
+                        {entry.errorMsg && (
+                          <p className="mt-1 text-xs truncate" style={{ color: '#f87171' }}>{entry.errorMsg}</p>
                         )}
-                      </>
-                    )}
-                    {item.status === 'cancelled' && (
-                      <div className="mt-1.5 w-full h-1 bg-surface-lighter rounded-full overflow-hidden">
-                        <div className="h-full bg-yellow-500 rounded-full" style={{ width: '100%' }} />
                       </div>
-                    )}
-                  </div>
-
-                  {item.status === 'completed' && (
-                    <svg className="w-5 h-5 text-green-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                    </svg>
-                  )}
-                  {(item.status === 'downloading' || item.status === 'starting') && (
-                    <div className="flex items-center gap-1">
-                      <svg className="w-5 h-5 text-accent animate-pulse shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                      </svg>
-                      <button onClick={() => handleCancel(item.id)} className="text-gray-500 hover:text-red-400 transition-colors p-0.5" title="Cancel">
+                      <button
+                        onClick={() => handleDeleteHistoryEntry(entry.downloadId)}
+                        className="shrink-0 transition-colors p-1 rounded"
+                        style={{ color: 'var(--text-muted)' }}
+                        title="Delete entry"
+                      >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
                       </button>
                     </div>
-                  )}
-                  {item.status === 'queued' && (
-                    <button onClick={() => handleCancel(item.id)} className="text-gray-500 hover:text-red-400 transition-colors p-0.5 shrink-0" title="Cancel">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                      </svg>
-                    </button>
-                  )}
-                  {item.status === 'error' && (
-                    <svg className="w-5 h-5 text-red-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                    </svg>
-                  )}
-                  {item.status === 'cancelled' && (
-                    <svg className="w-5 h-5 text-yellow-400 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  )}
+                  ))}
                 </div>
-              ))}
+              )}
             </div>
-          )}
-        </div>
-      </main>
+          </div>
+        )}
 
-      {/* Footer */}
-      <footer className="flex items-center justify-between px-6 py-2 border-t border-surface-border bg-surface-light shrink-0 text-xs text-gray-500">
-        <div className="flex items-center gap-2">
-          <span className="inline-block w-2 h-2 rounded-full bg-green-400" />
-          <span>Ready</span>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-gray-600">Save to: {defaultOutputDir ? defaultOutputDir.split('\\').pop()?.split('/').pop() : '...'}</span>
-          <button className="flex items-center gap-1.5 hover:text-gray-300 transition-colors">
-            <span>yt-dlp</span>
-            {ytdlpVersion && <span className="font-mono">v{ytdlpVersion}</span>}
-          </button>
-        </div>
-      </footer>
+        {/* --- Settings Tab --- */}
+        {activeTab === 'settings' && (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--color-surface-border)' }}>
+              <h2 className="text-base font-semibold">Settings</h2>
+            </div>
+            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 max-w-2xl">
+              {/* Theme */}
+              <section>
+                <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>Appearance</h3>
+                <div className="flex gap-3">
+                  {['dark', 'light'].map((t) => (
+                    <button
+                      key={t}
+                      onClick={() => handleThemeChange(t)}
+                      className="flex-1 rounded-lg py-3 px-4 text-sm font-medium transition-colors"
+                      style={{
+                        background: theme === t ? 'color-mix(in srgb, var(--color-accent) 20%, transparent)' : 'var(--color-surface-lighter)',
+                        border: theme === t ? '1px solid var(--color-accent)' : '1px solid var(--color-surface-border)',
+                        color: theme === t ? 'var(--color-accent)' : 'var(--text-secondary)',
+                      }}
+                    >
+                      {t === 'dark' ? '🌙 Dark' : '☀ Light'}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              {/* Download Location */}
+              <section>
+                <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>Download Location</h3>
+                <div className="flex gap-2">
+                  <div className="flex-1 rounded-md px-3 py-2 text-xs truncate" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)', color: 'var(--text-secondary)' }}>
+                    {defaultOutputDir}
+                  </div>
+                  <button onClick={handleChangeFolder} className="btn-primary text-xs px-3 py-1.5 shrink-0">Change</button>
+                </div>
+              </section>
+
+              {/* Version Info */}
+              <section>
+                <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>Versions</h3>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="w-20" style={{ color: 'var(--text-muted)' }}>KoalaPull</span>
+                    <span className="font-mono">{versionInfo?.app || '-'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-20" style={{ color: 'var(--text-muted)' }}>yt-dlp</span>
+                    <span className="font-mono">{versionInfo?.ytdlp || '-'}</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-20" style={{ color: 'var(--text-muted)' }}>ffmpeg</span>
+                    <span className="font-mono">{versionInfo?.ffmpeg || '-'}</span>
+                  </div>
+                </div>
+              </section>
+
+              {/* Updates */}
+              <section>
+                <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>Updates</h3>
+                <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
+                  <p>Check for new versions of yt-dlp and ffmpeg. App self-update coming soon.</p>
+                  <button className="btn-primary text-xs px-4 py-1.5 mt-3">Check for Updates</button>
+                </div>
+              </section>
+            </div>
+          </div>
+        )}
+      </main>
     </div>
   )
 }

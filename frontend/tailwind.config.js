@@ -4,25 +4,29 @@ export default {
     "./index.html",
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
-  darkMode: 'class',
   theme: {
     extend: {
       colors: {
         surface: {
-          DEFAULT: '#111111',
-          light: '#1a1a1a',
-          lighter: '#222222',
-          border: '#2a2a2a',
+          DEFAULT: 'var(--color-surface)',
+          light: 'var(--color-surface-light)',
+          lighter: 'var(--color-surface-lighter)',
+          border: 'var(--color-surface-border)',
         },
         accent: {
-          DEFAULT: '#00d4aa',
-          dim: '#00b894',
-          bright: '#00f5c8',
+          DEFAULT: 'var(--color-accent)',
+          dim: 'var(--color-accent-dim)',
+          bright: 'var(--color-accent-bright)',
         },
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
         mono: ['JetBrains Mono', 'Fira Code', 'monospace'],
+      },
+      textColor: {
+        primary: 'var(--text-primary)',
+        secondary: 'var(--text-secondary)',
+        muted: 'var(--text-muted)',
       },
     },
   },

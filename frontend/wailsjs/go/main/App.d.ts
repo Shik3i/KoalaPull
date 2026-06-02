@@ -6,16 +6,26 @@ export function CancelDownload(arg1:string):Promise<void>;
 
 export function CheckDependencies():Promise<main.DependencyStatus>;
 
+export function ClearHistory():Promise<void>;
+
+export function DeleteHistoryEntry(arg1:string):Promise<void>;
+
 export function DownloadDependencies():Promise<void>;
 
 export function FetchMetadata(arg1:string):Promise<main.VideoMetadata>;
 
+export function GetFfmpegVersion():Promise<string>;
+
+export function GetHistory():Promise<Array<main.HistoryEntry>>;
+
 export function GetSettings():Promise<main.Settings>;
+
+export function GetVersionInfo():Promise<main.VersionInfo>;
 
 export function GetYtdlpVersion():Promise<string>;
 
 export function SelectDirectory():Promise<string>;
 
-export function StartDownload(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string):Promise<string>;
+export function StartDownload(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<string>;
 
 export function UpdateSettings(arg1:main.Settings):Promise<void>;
