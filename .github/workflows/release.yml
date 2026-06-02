@@ -57,6 +57,7 @@ jobs:
       - name: Install jq
         run: |
           if [ "$RUNNER_OS" = "macOS" ]; then brew install jq; fi
+          if [ "$RUNNER_OS" = "Windows" ]; then choco install jq; fi
         shell: bash
 
       - name: Inject version into wails.json

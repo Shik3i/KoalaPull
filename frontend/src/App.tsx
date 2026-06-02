@@ -41,6 +41,8 @@ interface VersionInfo { ytdlp: string; ffmpeg: string; app: string }
 
 type Tab = 'downloads' | 'history' | 'settings'
 
+const parseBytesRe = /^([\d.]+)\s*([KMG]i?B?b?)?/
+
 function buildFormatOptions(formats: FormatInfo[]): FormatOption[] {
   const options: FormatOption[] = [
     { label: 'Best Video + Audio', formatId: 'bestvideo+bestaudio/best' },
@@ -168,7 +170,7 @@ function App() {
 
   const activeCount = queue.filter((i) => ['queued', 'starting', 'downloading'].includes(i.status)).length
 
-  const totalEta = (() => {
+  const totalEta = useMemo(() => {
     let rem = 0, spd = 0
     for (const item of queue) {
       if (item.status !== 'downloading') continue
@@ -177,7 +179,7 @@ function App() {
       if (sz > 0 && s > 0) { rem += sz * (1 - item.progress / 100); spd += s }
     }
     return spd > 0 ? formatTotalEta(rem / spd) : ''
-  })()
+  }, [queue])
 
   const reversedQueue = useMemo(() => queue.slice().reverse(), [queue])
 
@@ -199,7 +201,7 @@ function App() {
         setMaxConcurrency(s.maxConcurrency || 3)
         setAutoPasteEnabled(!!s.autoPasteURL)
       })
-      .catch(() => {})
+      .catch((err) => { console.warn('GetSettings failed:', err) })
   }, [])
 
   useEffect(() => {
@@ -264,7 +266,7 @@ function App() {
         if (ytRegex.test(trimmed)) {
           setUrl(trimmed)
         }
-      } catch { /* ignore clipboard errors */ }
+      } catch { /* clipboard errors are benign */ }
     }
     checkClipboard()
   }, [depsReady, autoPasteEnabled, activeTab])
@@ -325,7 +327,7 @@ function App() {
     }
   }
 
-  const handleCancel = (id: string) => { CancelDownload(id).catch(() => {}) }
+  const handleCancel = (id: string) => { CancelDownload(id).catch((err) => { console.warn('CancelDownload failed:', err) }) }
 
   const handleClearCompleted = () => {
     setQueue((prev) => prev.filter((item) => !['completed', 'error', 'cancelled'].includes(item.status)))
@@ -347,30 +349,30 @@ function App() {
       const h = await GetHistory()
       if (cancelled) return
       setHistory(h)
-    } catch { /* ignore */ }
+    } catch (err) { console.warn('loadHistory failed:', err) }
     if (!cancelled) setHistoryLoading(false)
   }
 
   const handleClearHistory = async () => {
-    try { await ClearHistory(); setHistory([]) } catch { /* ignore */ }
+    try { await ClearHistory(); setHistory([]) } catch (err) { console.warn('ClearHistory failed:', err) }
   }
 
   const handleDeleteHistoryEntry = async (id: string) => {
-    try { await DeleteHistoryEntry(id); setHistory((prev) => prev.filter((e) => e.downloadId !== id)) } catch { /* ignore */ }
+    try { await DeleteHistoryEntry(id); setHistory((prev) => prev.filter((e) => e.downloadId !== id)) } catch (err) { console.warn('DeleteHistoryEntry failed:', err) }
   }
 
   const handleThemeChange = async (newTheme: string) => {
     setTheme(newTheme)
     try {
       await UpdateSettings({ defaultOutputDir, theme: newTheme, maxConcurrency, autoPasteURL: autoPasteEnabled })
-    } catch { /* ignore */ }
+    } catch (err) { console.warn('handleThemeChange failed:', err) }
   }
 
   const handleTabSwitch = (tab: Tab) => {
     setActiveTab(tab)
     if (tab === 'history') loadHistory()
     if (tab === 'settings') {
-      GetVersionInfo().then((v: VersionInfo) => setVersionInfo(v)).catch(() => {})
+      GetVersionInfo().then((v: VersionInfo) => setVersionInfo(v)).catch((err) => { console.warn('GetVersionInfo failed:', err) })
     }
   }
 
@@ -387,7 +389,7 @@ function fmtTime(t: string): string {
 
 function parseBytes(s: string): number {
   if (!s) return 0
-  const m = s.match(/^([\d.]+)\s*([KMG]i?B?b?)?/)
+  const m = s.match(parseBytesRe)
   if (!m) return 0
   const num = parseFloat(m[1])
   const unit = (m[2] || '').toLowerCase()
@@ -672,7 +674,7 @@ function formatTotalEta(seconds: number): string {
                         </div>
                         {item.status === 'completed' && (
                           <div className="flex items-center gap-1.5">
-                            <button onClick={() => OpenOutputDir().catch(() => {})} className="transition-colors p-1 rounded" style={{ color: 'var(--text-muted)' }} title="Open output folder">
+                            <button onClick={() => OpenOutputDir().catch((err) => { console.warn('OpenOutputDir failed:', err) })} className="transition-colors p-1 rounded" style={{ color: 'var(--text-muted)' }} title="Open output folder">
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
                               </svg>
@@ -812,7 +814,7 @@ function formatTotalEta(seconds: number): string {
                     onChange={async (e) => {
                       const v = Math.max(1, Math.min(10, parseInt(e.target.value) || 1))
                       setMaxConcurrency(v)
-                      try { await UpdateSettings({ defaultOutputDir, theme, maxConcurrency: v, autoPasteURL: autoPasteEnabled }) } catch { /* ignore */ }
+                      try { await UpdateSettings({ defaultOutputDir, theme, maxConcurrency: v, autoPasteURL: autoPasteEnabled }) } catch (err) { console.warn('UpdateSettings failed:', err) }
                     }}
                     className="input-dark text-xs w-16 text-center"
                   />
@@ -830,7 +832,7 @@ function formatTotalEta(seconds: number): string {
                     onClick={async () => {
                       const next = !autoPasteEnabled
                       setAutoPasteEnabled(next)
-                      try { await UpdateSettings({ defaultOutputDir, theme, maxConcurrency, autoPasteURL: next }) } catch { /* ignore */ }
+                      try { await UpdateSettings({ defaultOutputDir, theme, maxConcurrency, autoPasteURL: next }) } catch (err) { console.warn('UpdateSettings failed:', err) }
                     }}
                     className="relative w-10 h-5 rounded-full transition-colors shrink-0"
                     style={{

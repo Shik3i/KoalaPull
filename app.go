@@ -24,17 +24,17 @@ import (
 var AppVersion = "dev"
 
 type App struct {
-	ctx              context.Context
-	configDir        string
-	binDir           string
-	dlMu             sync.Mutex
-	dlCounter        int
-	activeDownloads  map[string]context.CancelFunc
-	adMu             sync.Mutex
-	lastFileSize     map[string]string
-	lastSpeed        map[string]string
+	ctx               context.Context
+	configDir         string
+	binDir            string
+	dlMu              sync.Mutex
+	dlCounter         int
+	activeDownloads   map[string]context.CancelFunc
+	adMu              sync.Mutex
+	lastFileSize      map[string]string
+	lastSpeed         map[string]string
 	downloadSemaphore chan struct{}
-	historyMu        sync.Mutex
+	historyMu         sync.Mutex
 }
 
 type DependencyStatus struct {
@@ -123,11 +123,7 @@ func NewApp() *App {
 }
 
 func (a *App) initSemaphore() {
-	max := a.GetSettings().MaxConcurrency
-	if max < 1 {
-		max = 3
-	}
-	a.downloadSemaphore = make(chan struct{}, max)
+	a.downloadSemaphore = make(chan struct{}, a.GetSettings().MaxConcurrency)
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -223,7 +219,11 @@ func (a *App) writeSettings(s Settings) {
 }
 
 func (a *App) UpdateSettings(s Settings) {
+	old := a.GetSettings()
 	a.writeSettings(s)
+	if s.MaxConcurrency != old.MaxConcurrency && s.MaxConcurrency > 0 {
+		a.downloadSemaphore = make(chan struct{}, s.MaxConcurrency)
+	}
 }
 
 func (a *App) SelectDirectory() (string, error) {
@@ -242,7 +242,7 @@ func (a *App) historyPath() string {
 	return filepath.Join(a.configDir, "history.json")
 }
 
-func (a *App) GetHistory() []HistoryEntry {
+func (a *App) getHistoryLocked() []HistoryEntry {
 	path := a.historyPath()
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -255,33 +255,53 @@ func (a *App) GetHistory() []HistoryEntry {
 	return entries
 }
 
+func (a *App) GetHistory() []HistoryEntry {
+	a.historyMu.Lock()
+	defer a.historyMu.Unlock()
+	return a.getHistoryLocked()
+}
+
 func (a *App) saveHistoryEntry(entry HistoryEntry) {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
-	entries := a.GetHistory()
+	entries := a.getHistoryLocked()
 	entries = append([]HistoryEntry{entry}, entries...)
-	data, _ := json.MarshalIndent(entries, "", "  ")
-	os.WriteFile(a.historyPath(), data, 0644)
+	data, err := json.MarshalIndent(entries, "", "  ")
+	if err != nil {
+		println("saveHistoryEntry marshal error:", err.Error())
+		return
+	}
+	if err := os.WriteFile(a.historyPath(), data, 0644); err != nil {
+		println("saveHistoryEntry write error:", err.Error())
+	}
 }
 
 func (a *App) ClearHistory() {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
-	os.WriteFile(a.historyPath(), []byte("[]"), 0644)
+	if err := os.WriteFile(a.historyPath(), []byte("[]"), 0644); err != nil {
+		println("ClearHistory write error:", err.Error())
+	}
 }
 
 func (a *App) DeleteHistoryEntry(downloadID string) {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
-	entries := a.GetHistory()
+	entries := a.getHistoryLocked()
 	filtered := make([]HistoryEntry, 0, len(entries))
 	for _, e := range entries {
 		if e.DownloadID != downloadID {
 			filtered = append(filtered, e)
 		}
 	}
-	data, _ := json.MarshalIndent(filtered, "", "  ")
-	os.WriteFile(a.historyPath(), data, 0644)
+	data, err := json.MarshalIndent(filtered, "", "  ")
+	if err != nil {
+		println("DeleteHistoryEntry marshal error:", err.Error())
+		return
+	}
+	if err := os.WriteFile(a.historyPath(), data, 0644); err != nil {
+		println("DeleteHistoryEntry write error:", err.Error())
+	}
 }
 
 // ---------- Dependency Management ----------
@@ -314,12 +334,10 @@ func (a *App) GetFfmpegVersion() string {
 }
 
 func (a *App) UpdateDependencies() error {
-	os.Remove(a.ytdlpPath())
-	os.Remove(a.ffmpegPath())
-	if err := a.downloadYtdlp(); err != nil {
+	if err := a.downloadYtdlp(true); err != nil {
 		return err
 	}
-	return a.downloadFfmpeg()
+	return a.downloadFfmpeg(true)
 }
 
 func (a *App) OpenOutputDir() error {
@@ -377,27 +395,27 @@ func (a *App) emitDownloadProgress(downloadID string, percent float64, speed, et
 }
 
 func (a *App) DownloadDependencies() error {
-	if err := a.downloadYtdlp(); err != nil {
+	if err := a.downloadYtdlp(false); err != nil {
 		a.emitProgress("yt-dlp", 0, "error", err.Error())
 		return fmt.Errorf("yt-dlp download failed: %w", err)
 	}
-	if err := a.downloadFfmpeg(); err != nil {
+	if err := a.downloadFfmpeg(false); err != nil {
 		a.emitProgress("ffmpeg", 0, "error", err.Error())
 		return fmt.Errorf("ffmpeg download failed: %w", err)
 	}
 	return nil
 }
 
-func (a *App) downloadYtdlp() error {
+func (a *App) downloadYtdlp(force bool) error {
 	a.emitProgress("yt-dlp", 0, "downloading", "")
 	destPath := a.ytdlpPath()
-	if fileExists(destPath) {
+	if !force && fileExists(destPath) {
 		a.emitProgress("yt-dlp", 100, "completed", "")
 		return nil
 	}
 	url := ytdlpDownloadURL()
 	tmpPath := destPath + ".tmp"
-	dlCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	dlCtx, cancel := context.WithTimeout(a.ctx, 10*time.Minute)
 	defer cancel()
 	if err := a.downloadFile(dlCtx, url, tmpPath, "yt-dlp"); err != nil {
 		os.Remove(tmpPath)
@@ -412,16 +430,18 @@ func (a *App) downloadYtdlp() error {
 		}
 	}
 	if runtime.GOOS == "darwin" {
-		exec.Command("xattr", "-d", "com.apple.quarantine", destPath).Run()
+		if err := exec.Command("xattr", "-d", "com.apple.quarantine", destPath).Run(); err != nil {
+			println("xattr warning:", err.Error())
+		}
 	}
 	a.emitProgress("yt-dlp", 100, "completed", "")
 	return nil
 }
 
-func (a *App) downloadFfmpeg() error {
+func (a *App) downloadFfmpeg(force bool) error {
 	a.emitProgress("ffmpeg", 0, "downloading", "")
 	destPath := a.ffmpegPath()
-	if fileExists(destPath) {
+	if !force && fileExists(destPath) {
 		a.emitProgress("ffmpeg", 100, "completed", "")
 		return nil
 	}
@@ -432,7 +452,7 @@ func (a *App) downloadFfmpeg() error {
 	}
 	defer os.RemoveAll(tmpDir)
 	archivePath := filepath.Join(tmpDir, "ffmpeg-archive")
-	dlCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	dlCtx, cancel := context.WithTimeout(a.ctx, 10*time.Minute)
 	defer cancel()
 	if err := a.downloadFile(dlCtx, url, archivePath, "ffmpeg"); err != nil {
 		return err
@@ -531,7 +551,10 @@ func extractFFmpegFromZip(archivePath, destDir string) error {
 			return err
 		}
 		_, err = io.Copy(dst, rc)
-		dst.Close()
+		if cerr := dst.Close(); cerr != nil {
+			rc.Close()
+			return cerr
+		}
 		rc.Close()
 		if err != nil {
 			return err
@@ -717,7 +740,7 @@ func (a *App) StartDownload(url, formatID, outputDir, container, subtitle, title
 	}
 	args = append(args, "--", url)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Hour)
+	ctx, cancel := context.WithTimeout(a.ctx, 1*time.Hour)
 	a.adMu.Lock()
 	a.activeDownloads[downloadID] = cancel
 	a.adMu.Unlock()
@@ -742,13 +765,14 @@ func (a *App) runDownload(ctx context.Context, downloadID string, args []string,
 		a.adMu.Unlock()
 	}()
 
+	sem := a.downloadSemaphore
 	select {
-	case a.downloadSemaphore <- struct{}{}:
+	case sem <- struct{}{}:
 	case <-ctx.Done():
 		a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
 		return
 	}
-	defer func() { <-a.downloadSemaphore }()
+	defer func() { <-sem }()
 
 	startTime := time.Now()
 	a.emitDownloadProgress(downloadID, 0, "", "", "", "starting", "", "")
