@@ -94,6 +94,19 @@ func TestReleaseWorkflowPackagesArtifactsBeforeUpload(t *testing.T) {
 	}
 }
 
+func TestReleaseWorkflowUsesWebkit241TagForLinuxBuild(t *testing.T) {
+	data := mustReadRepoFile(t, ".github", "workflows", "release.yml")
+	for _, want := range []string{
+		"build_tags=",
+		"webkit2_41",
+		"wails build -clean -tags \"$build_tags\"",
+	} {
+		if !strings.Contains(data, want) {
+			t.Fatalf("release workflow missing %q", want)
+		}
+	}
+}
+
 func TestFrontendPackageHasAutomatedTestScript(t *testing.T) {
 	data := mustReadRepoFile(t, "frontend", "package.json")
 	if !strings.Contains(data, "\"test\"") {
