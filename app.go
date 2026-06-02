@@ -34,6 +34,7 @@ type App struct {
 	lastFileSize     map[string]string
 	lastSpeed        map[string]string
 	downloadSemaphore chan struct{}
+	historyMu        sync.Mutex
 }
 
 type DependencyStatus struct {
@@ -133,7 +134,12 @@ func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	configDir, err := os.UserConfigDir()
 	if err != nil {
-		configDir = os.TempDir()
+		home, homeErr := os.UserHomeDir()
+		if homeErr == nil {
+			configDir = filepath.Join(home, ".config")
+		} else {
+			configDir = os.TempDir()
+		}
 	}
 	a.configDir = filepath.Join(configDir, "KoalaPull")
 	a.binDir = filepath.Join(a.configDir, "bin")
@@ -211,8 +217,9 @@ func (a *App) GetSettings() Settings {
 }
 
 func (a *App) writeSettings(s Settings) {
-	data, _ := json.MarshalIndent(s, "", "  ")
-	os.WriteFile(a.settingsPath(), data, 0644)
+	if data, err := json.MarshalIndent(s, "", "  "); err == nil {
+		os.WriteFile(a.settingsPath(), data, 0644)
+	}
 }
 
 func (a *App) UpdateSettings(s Settings) {
@@ -249,6 +256,8 @@ func (a *App) GetHistory() []HistoryEntry {
 }
 
 func (a *App) saveHistoryEntry(entry HistoryEntry) {
+	a.historyMu.Lock()
+	defer a.historyMu.Unlock()
 	entries := a.GetHistory()
 	entries = append([]HistoryEntry{entry}, entries...)
 	data, _ := json.MarshalIndent(entries, "", "  ")
@@ -256,10 +265,14 @@ func (a *App) saveHistoryEntry(entry HistoryEntry) {
 }
 
 func (a *App) ClearHistory() {
+	a.historyMu.Lock()
+	defer a.historyMu.Unlock()
 	os.WriteFile(a.historyPath(), []byte("[]"), 0644)
 }
 
 func (a *App) DeleteHistoryEntry(downloadID string) {
+	a.historyMu.Lock()
+	defer a.historyMu.Unlock()
 	entries := a.GetHistory()
 	filtered := make([]HistoryEntry, 0, len(entries))
 	for _, e := range entries {
@@ -384,7 +397,9 @@ func (a *App) downloadYtdlp() error {
 	}
 	url := ytdlpDownloadURL()
 	tmpPath := destPath + ".tmp"
-	if err := a.downloadFile(url, tmpPath, "yt-dlp"); err != nil {
+	dlCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	if err := a.downloadFile(dlCtx, url, tmpPath, "yt-dlp"); err != nil {
 		os.Remove(tmpPath)
 		return err
 	}
@@ -417,7 +432,9 @@ func (a *App) downloadFfmpeg() error {
 	}
 	defer os.RemoveAll(tmpDir)
 	archivePath := filepath.Join(tmpDir, "ffmpeg-archive")
-	if err := a.downloadFile(url, archivePath, "ffmpeg"); err != nil {
+	dlCtx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+	defer cancel()
+	if err := a.downloadFile(dlCtx, url, archivePath, "ffmpeg"); err != nil {
 		return err
 	}
 	destDir := filepath.Dir(destPath)
@@ -434,19 +451,25 @@ func (a *App) downloadFfmpeg() error {
 		return fmt.Errorf("ffmpeg binary not found after extraction")
 	}
 	if runtime.GOOS != "windows" {
-		os.Chmod(destPath, 0755)
+		if err := os.Chmod(destPath, 0755); err != nil {
+			return fmt.Errorf("chmod failed: %w", err)
+		}
 	}
 	a.emitProgress("ffmpeg", 100, "completed", "")
 	return nil
 }
 
-func (a *App) downloadFile(url, destPath, depName string) error {
+func (a *App) downloadFile(ctx context.Context, url, destPath, depName string) error {
 	out, err := os.Create(destPath)
 	if err != nil {
 		return fmt.Errorf("create file failed: %w", err)
 	}
 	defer out.Close()
-	resp, err := http.Get(url)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if err != nil {
+		return fmt.Errorf("http request failed: %w", err)
+	}
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return fmt.Errorf("http get failed: %w", err)
 	}
@@ -608,7 +631,7 @@ type rawMetadata struct {
 }
 
 func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
-	args := []string{"--no-check-formats", "--no-warnings", "--dump-json", "--skip-download", "--flat-playlist", url}
+	args := []string{"--no-check-formats", "--no-warnings", "--dump-json", "--skip-download", "--flat-playlist", "--", url}
 	cmd := exec.Command(a.ytdlpPath(), args...)
 	stdout, err := cmd.Output()
 	if err != nil {
@@ -692,9 +715,9 @@ func (a *App) StartDownload(url, formatID, outputDir, container, subtitle, title
 	case "embed":
 		args = append(args, "--sub-langs", "all", "--embed-subs")
 	}
-	args = append(args, url)
+	args = append(args, "--", url)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Hour)
 	a.adMu.Lock()
 	a.activeDownloads[downloadID] = cancel
 	a.adMu.Unlock()

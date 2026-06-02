@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useCallback, Component } from 'react'
+import { useRef, useState, useEffect, useCallback, useMemo, Component } from 'react'
 import {
   CheckDependencies, DownloadDependencies,
   FetchMetadata, StartDownload, CancelDownload,
@@ -179,6 +179,8 @@ function App() {
     return spd > 0 ? formatTotalEta(rem / spd) : ''
   })()
 
+  const reversedQueue = useMemo(() => queue.slice().reverse(), [queue])
+
   const tabs: { id: Tab; label: string; icon: string }[] = [
     { id: 'downloads', label: 'Downloads', icon: '⬇' },
     { id: 'history', label: 'History', icon: '⏱' },
@@ -340,11 +342,13 @@ function App() {
 
   const loadHistory = async () => {
     setHistoryLoading(true)
+    let cancelled = false
     try {
       const h = await GetHistory()
+      if (cancelled) return
       setHistory(h)
     } catch { /* ignore */ }
-    setHistoryLoading(false)
+    if (!cancelled) setHistoryLoading(false)
   }
 
   const handleClearHistory = async () => {
@@ -615,7 +619,7 @@ function formatTotalEta(seconds: number): string {
                   </div>
                 ) : (
                   <div className="space-y-2">
-                    {[...queue].reverse().map((item) => (
+                    {reversedQueue.map((item) => (
                       <div key={item.id} className="rounded-lg p-3 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
                         <div className="w-16 h-10 rounded shrink-0 flex items-center justify-center overflow-hidden" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}>
                           {item.thumbnail ? (
