@@ -7,7 +7,7 @@ import {
   ClearHistory, DeleteHistoryEntry,
   UpdateDependencies, OpenOutputDir, CheckForUpdates, OpenExternalLink,
 } from "../wailsjs/go/main/App"
-import { EventsOn, EventsOff, ClipboardGetText } from "../wailsjs/runtime/runtime"
+import { EventsOn, ClipboardGetText } from "../wailsjs/runtime/runtime"
 import type { main } from "../wailsjs/go/models"
 import './style.css'
 
@@ -229,9 +229,9 @@ function App() {
       setDepProgress((prev) => ({ ...prev, [data.dependency]: data.progress }))
       if (data.status === 'error') { setDepError(data.error || 'Download failed'); setInstallingDeps(false) }
     }
-    EventsOn('dependency-progress', handleDepProgress)
+    const offDepProgress = EventsOn('dependency-progress', handleDepProgress)
     run()
-    return () => { cancelled = true; EventsOff('dependency-progress') }
+    return () => { cancelled = true; offDepProgress() }
   }, [])
 
   useEffect(() => {
@@ -303,8 +303,8 @@ function App() {
         return next
       })
     }
-    EventsOn('download-progress', handleDlProgress)
-    return () => { EventsOff('download-progress') }
+    const offDownloadProgress = EventsOn('download-progress', handleDlProgress)
+    return () => { offDownloadProgress() }
   }, [])
 
   const handleFetch = async () => {
@@ -400,6 +400,7 @@ function App() {
 
 function fmtTime(t: string): string {
   const d = new Date(t)
+  if (Number.isNaN(d.getTime())) return '-'
   return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 }
 
@@ -478,14 +479,14 @@ function formatTotalEta(seconds: number): string {
             {depProgress['yt-dlp'] === 100 && depProgress['ffmpeg'] === 100 ? 'Finalizing...' : 'Downloading...'}
           </p>
         ) : !depError ? (
-          <button onClick={() => setInstallingDeps(true)} className="btn-primary text-sm px-5 py-2 mt-2">
+            <button onClick={() => { setDepError(''); setDepProgress({}); setInstallingDeps(true) }} className="btn-primary text-sm px-5 py-2 mt-2">
             Download &amp; Install
           </button>
         ) : null}
         {depError && (
           <div className="mt-4 text-center">
             <p className="text-xs mb-2" style={{ color: '#f87171' }}>{depError}</p>
-            <button onClick={() => setInstallingDeps(true)} className="btn-primary text-xs px-4 py-1.5">Retry</button>
+            <button onClick={() => { setDepError(''); setDepProgress({}); setInstallingDeps(true) }} className="btn-primary text-xs px-4 py-1.5">Retry</button>
           </div>
         )}
       </div>
@@ -966,8 +967,9 @@ function formatTotalEta(seconds: number): string {
                               setUpdateInfo(u)
                             } catch (err: any) {
                               setUpdatesError(err?.message || 'Update failed')
+                            } finally {
+                              setUpdatingDeps(false)
                             }
-                            setUpdatingDeps(false)
                           }}
                           disabled={updatingDeps}
                           className="btn-primary text-xs px-4 py-1.5 mt-2"

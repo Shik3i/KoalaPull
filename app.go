@@ -4,6 +4,8 @@ import (
 	"archive/zip"
 	"bufio"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -43,6 +45,9 @@ type App struct {
 	semLimit        atomic.Int32
 	semWake         chan struct{}
 	historyMu       sync.Mutex
+	metadataMu      sync.Mutex
+	metadataCancel  context.CancelFunc
+	metadataSeq     uint64
 }
 
 type DependencyStatus struct {
@@ -129,6 +134,13 @@ var sizeLineRegex = regexp.MustCompile(`\[download\]\s+100%\s+of\s+~?([\d.]+\S+)
 
 var playlistItemRegex = regexp.MustCompile(`\[download\]\s+Downloading\s+(video|item)\s+(\d+)\s+of\s+(\d+)`)
 
+const (
+	defaultMaxConcurrency = 3
+	maxMaxConcurrency     = 10
+	maxInputLength        = 2048
+	maxPathLength         = 4096
+)
+
 func NewApp() *App {
 	a := &App{
 		activeDownloads: make(map[string]context.CancelFunc),
@@ -136,7 +148,7 @@ func NewApp() *App {
 		lastSpeed:       make(map[string]string),
 		semWake:         make(chan struct{}, 1),
 	}
-	a.semLimit.Store(3)
+	a.semLimit.Store(defaultMaxConcurrency)
 	return a
 }
 
@@ -274,16 +286,10 @@ func (a *App) getSettingsLocked() Settings {
 	if err == nil {
 		var s Settings
 		if json.Unmarshal(data, &s) == nil {
-			if s.Theme == "" {
-				s.Theme = "dark"
-			}
-			if s.MaxConcurrency < 1 {
-				s.MaxConcurrency = 3
-			}
-			return s
+			return validateSettings(s)
 		}
 	}
-	s := Settings{DefaultOutputDir: defaultOutputDir(), Theme: "dark", MaxConcurrency: 3, AutoPasteURL: false}
+	s := validateSettings(Settings{DefaultOutputDir: defaultOutputDir(), Theme: "dark", MaxConcurrency: defaultMaxConcurrency, AutoPasteURL: false})
 	if err := a.writeSettingsLocked(s); err != nil {
 		println("writeSettings error:", err.Error())
 	}
@@ -297,6 +303,7 @@ func (a *App) writeSettings(s Settings) error {
 }
 
 func (a *App) writeSettingsLocked(s Settings) error {
+	s = validateSettings(s)
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal settings: %w", err)
@@ -308,6 +315,7 @@ func (a *App) writeSettingsLocked(s Settings) error {
 }
 
 func (a *App) UpdateSettings(s Settings) error {
+	s = validateSettings(s)
 	a.settingsMu.Lock()
 	old := a.getSettingsLocked()
 	if err := a.writeSettingsLocked(s); err != nil {
@@ -326,6 +334,25 @@ func (a *App) UpdateSettings(s Settings) error {
 		}
 	}
 	return nil
+}
+
+func validateSettings(s Settings) Settings {
+	if s.DefaultOutputDir == "" {
+		s.DefaultOutputDir = defaultOutputDir()
+	}
+	if len(s.DefaultOutputDir) > maxPathLength {
+		s.DefaultOutputDir = s.DefaultOutputDir[:maxPathLength]
+	}
+	if s.Theme != "dark" && s.Theme != "light" {
+		s.Theme = "dark"
+	}
+	if s.MaxConcurrency < 1 {
+		s.MaxConcurrency = defaultMaxConcurrency
+	}
+	if s.MaxConcurrency > maxMaxConcurrency {
+		s.MaxConcurrency = maxMaxConcurrency
+	}
+	return s
 }
 
 func (a *App) SelectDirectory() (string, error) {
@@ -466,7 +493,11 @@ func (a *App) OpenOutputDir() error {
 	if err := cmd.Start(); err != nil {
 		return err
 	}
-	go cmd.Wait()
+	go func() {
+		if err := cmd.Wait(); err != nil {
+			println("OpenOutputDir wait error:", err.Error())
+		}
+	}()
 	return nil
 }
 
@@ -613,6 +644,10 @@ func (a *App) downloadYtdlp(force bool) error {
 		os.Remove(tmpPath)
 		return err
 	}
+	if err := verifyYtdlpChecksum(dlCtx, tmpPath, filepath.Base(url)); err != nil {
+		os.Remove(tmpPath)
+		return err
+	}
 	if err := os.Rename(tmpPath, destPath); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("rename failed: %w", err)
@@ -727,6 +762,72 @@ func (a *App) downloadFile(ctx context.Context, url, destPath, depName string) e
 	return nil
 }
 
+func verifyYtdlpChecksum(ctx context.Context, filePath, assetName string) error {
+	expected, err := fetchChecksumForAsset(ctx, ytdlpChecksumsURL(), assetName)
+	if err != nil {
+		return fmt.Errorf("fetch yt-dlp checksum: %w", err)
+	}
+	actual, err := sha256File(filePath)
+	if err != nil {
+		return fmt.Errorf("hash yt-dlp: %w", err)
+	}
+	if actual != expected {
+		return fmt.Errorf("yt-dlp checksum mismatch")
+	}
+	return nil
+}
+
+func fetchChecksumForAsset(ctx context.Context, checksumURL, assetName string) (string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checksumURL, nil)
+	if err != nil {
+		return "", err
+	}
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("bad checksum status: %s", resp.Status)
+	}
+	scanner := bufio.NewScanner(resp.Body)
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		fields := strings.Fields(scanner.Text())
+		if len(fields) < 2 {
+			continue
+		}
+		name := strings.TrimPrefix(fields[len(fields)-1], "./")
+		if filepath.Base(name) == assetName {
+			sum := strings.ToLower(fields[0])
+			if len(sum) != sha256.Size*2 {
+				return "", fmt.Errorf("invalid checksum length for %s", assetName)
+			}
+			if _, err := hex.DecodeString(sum); err != nil {
+				return "", fmt.Errorf("invalid checksum for %s: %w", assetName, err)
+			}
+			return sum, nil
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", err
+	}
+	return "", fmt.Errorf("checksum for %s not found", assetName)
+}
+
+func sha256File(path string) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	h := sha256.New()
+	if _, err := io.Copy(h, file); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
 func extractFFmpegFromZip(archivePath, destDir string) error {
 	r, err := zip.OpenReader(archivePath)
 	if err != nil {
@@ -764,6 +865,33 @@ func extractFFmpegFromZip(archivePath, destDir string) error {
 	return nil
 }
 
+func validateTarXzArchive(archivePath string) error {
+	cmd := exec.Command("tar", "-tJf", archivePath)
+	out, err := cmd.Output()
+	if err != nil {
+		return fmt.Errorf("tar list failed: %w", err)
+	}
+	scanner := bufio.NewScanner(strings.NewReader(string(out)))
+	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	for scanner.Scan() {
+		if err := validateArchiveMemberName(scanner.Text()); err != nil {
+			return err
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return err
+	}
+	return nil
+}
+
+func validateArchiveMemberName(name string) error {
+	cleaned := filepath.Clean(name)
+	if name == "" || filepath.IsAbs(name) || strings.HasPrefix(cleaned, "..") || filepath.VolumeName(name) != "" {
+		return fmt.Errorf("unsafe archive path: %q", name)
+	}
+	return nil
+}
+
 func ffmpegZipDestName(base, goos string) string {
 	if goos == "windows" {
 		return base
@@ -777,6 +905,10 @@ func extractFFmpegFromTarXz(archivePath, destDir string) error {
 		return fmt.Errorf("temp dir failed: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
+
+	if err := validateTarXzArchive(archivePath); err != nil {
+		return err
+	}
 
 	cmd := exec.Command("tar", "-xJf", archivePath, "-C", tmpDir)
 	output, err := cmd.CombinedOutput()
@@ -837,6 +969,10 @@ func ytdlpDownloadURL() string {
 	}
 }
 
+func ytdlpChecksumsURL() string {
+	return "https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS"
+}
+
 func ffmpegDownloadURL() string {
 	switch runtime.GOOS {
 	case "windows":
@@ -879,9 +1015,15 @@ type rawMetadata struct {
 }
 
 func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
+	if url == "" || len(url) > maxInputLength {
+		return nil, fmt.Errorf("url is required and must be at most %d characters", maxInputLength)
+	}
+	if !isAllowedDownloadURL(url) {
+		return nil, fmt.Errorf("url must use http or https")
+	}
 	args := []string{"--no-check-formats", "--no-warnings", "--dump-json", "--skip-download", "--flat-playlist", "--", url}
-	ctx, cancel := context.WithTimeout(a.appContext(), 30*time.Second)
-	defer cancel()
+	ctx, cancel, seq := a.newMetadataContext()
+	defer a.clearMetadataContext(cancel, seq)
 	cmd := exec.CommandContext(ctx, a.ytdlpPath(), args...)
 	stdout, err := cmd.Output()
 	if err != nil {
@@ -934,6 +1076,27 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	return meta, nil
 }
 
+func (a *App) newMetadataContext() (context.Context, context.CancelFunc, uint64) {
+	a.metadataMu.Lock()
+	defer a.metadataMu.Unlock()
+	if a.metadataCancel != nil {
+		a.metadataCancel()
+	}
+	ctx, cancel := context.WithTimeout(a.appContext(), 30*time.Second)
+	a.metadataCancel = cancel
+	a.metadataSeq++
+	return ctx, cancel, a.metadataSeq
+}
+
+func (a *App) clearMetadataContext(cancel context.CancelFunc, seq uint64) {
+	a.metadataMu.Lock()
+	defer a.metadataMu.Unlock()
+	if a.metadataSeq == seq {
+		a.metadataCancel = nil
+	}
+	cancel()
+}
+
 // ---------- Download Execution ----------
 
 const maxErrLines = 20
@@ -945,7 +1108,7 @@ func (a *App) StartDownload(url, formatID, outputDir, container, subtitle, title
 	if !isAllowedDownloadURL(url) {
 		return "", fmt.Errorf("url must use http or https")
 	}
-	if len(url) > 2048 || len(outputDir) > 4096 {
+	if len(url) > maxInputLength || len(outputDir) > maxPathLength {
 		return "", fmt.Errorf("input too long")
 	}
 	if outputDir == "" {
@@ -1053,6 +1216,7 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 	}
 
 	done := make(chan struct{})
+	var stdoutScanErr error
 	go func() {
 		defer func() { recover(); close(done) }()
 		currentPS := ""
@@ -1082,26 +1246,23 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 				a.emitDownloadProgress(downloadID, lastPct, lastSpeed, lastETA, lastFileSz, "downloading", "", currentPS)
 			}
 		}
+		stdoutScanErr = scanner.Err()
 	}()
 
 	errLines := make([]string, 0, maxErrLines)
+	var stderrScanErr error
 	errCh := make(chan struct{})
 	go func() {
 		defer func() { recover(); close(errCh) }()
-		scanner := bufio.NewScanner(stderr)
-		for scanner.Scan() {
-			line := scanner.Text()
-			if len(errLines) >= maxErrLines {
-				errLines = append(errLines[1:], line)
-			} else {
-				errLines = append(errLines, line)
-			}
-		}
+		errLines, stderrScanErr = collectRecentLines(stderr, maxErrLines)
 	}()
 
 	<-done
 	<-errCh
 	err = cmd.Wait()
+	if err == nil {
+		err = errors.Join(stdoutScanErr, stderrScanErr)
+	}
 
 	endTime := time.Now()
 
@@ -1149,4 +1310,22 @@ func parsePlaylistStatus(line string) string {
 		return ""
 	}
 	return fmt.Sprintf("%s %s of %s", matches[1], matches[2], matches[3])
+}
+
+func collectRecentLines(r io.Reader, limit int) ([]string, error) {
+	scanner := bufio.NewScanner(r)
+	scanner.Buffer(make([]byte, 0, 64*1024), 2*1024*1024)
+	lines := make([]string, 0, limit)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if limit <= 0 {
+			continue
+		}
+		if len(lines) >= limit {
+			lines = append(lines[1:], line)
+		} else {
+			lines = append(lines, line)
+		}
+	}
+	return lines, scanner.Err()
 }
