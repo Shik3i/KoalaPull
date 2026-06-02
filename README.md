@@ -23,8 +23,10 @@ A clean, minimalist GUI download manager wrapping **yt-dlp**. Download videos, a
 - **Concurrency limiting** — A Go semaphore caps parallel downloads at 3 to prevent saturating your CPU or network.
 - **Download queue** — Add multiple items, cancel individual downloads, and clear completed items.
 - **Real-time progress** — Stream progress, speed, ETA, and per-video playlist status live from the Go backend via Wails Events.
-- **Dark mode UI** — High-contrast dark theme with cyan/turquoise accent, minimalist flat vector design.
-- **Persistent settings** — Default output directory is stored and remembered across sessions.
+- **Sidebar navigation** — Switch between Downloads, History, and Settings tabs.
+- **Download history** — Auto-saved history with timestamps, URLs, and file sizes.
+- **Light & dark themes** — Toggle between themes with persistent preference stored in app config.
+- **Persistent settings** — Default output directory and theme preference are stored and remembered across sessions.
 
 ## Installation
 
@@ -68,15 +70,17 @@ cd frontend && npm install && cd ..
 wails dev
 ```
 
+The first launch loads the app with a minimal UI; go to **Settings** → **Download & Install** to fetch yt-dlp and ffmpeg automatically.
+
 This opens the app in a native window with hot-reload enabled for both Go and React code.
 
 ### Production Build
 
 ```bash
-wails build -clean
+wails build -clean -ldflags "-X main.AppVersion=$(git describe --tags --always --dirty)"
 ```
 
-The compiled binary is written to `build/bin/`.
+The compiled binary is written to `build/bin/`. Release builds inject the git tag as the app version via `-ldflags`.
 
 ## Tech Stack
 
@@ -91,11 +95,11 @@ The compiled binary is written to `build/bin/`.
 
 ```
 KoalaPull/
-├── app.go                 # Go backend (deps, metadata, download, settings)
+├── app.go                 # Go backend (deps, metadata, download, settings, history)
 ├── main.go                # Wails app entry point
 ├── frontend/
-│   ├── src/App.tsx        # Main React component
-│   ├── src/style.css      # Tailwind directives + custom classes
+│   ├── src/App.tsx        # Main React component (sidebar + tabs)
+│   ├── src/style.css      # Tailwind directives + light/dark theme vars
 │   └── wailsjs/           # Wails Go bindings (TypeScript + JS)
 ├── build/                 # Build assets (icons, plists, manifests)
 ├── wails.json             # Wails project config

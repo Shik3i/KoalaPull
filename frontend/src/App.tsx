@@ -1,12 +1,13 @@
-import { useState, useEffect } from 'react'
+import { useRef, useState, useEffect, useCallback, Component } from 'react'
 import {
   CheckDependencies, DownloadDependencies,
   FetchMetadata, StartDownload, CancelDownload,
   GetSettings, UpdateSettings, SelectDirectory,
   GetYtdlpVersion, GetVersionInfo, GetHistory,
   ClearHistory, DeleteHistoryEntry,
+  UpdateDependencies, OpenOutputDir,
 } from "../wailsjs/go/main/App"
-import { EventsOn, EventsOff } from "../wailsjs/runtime/runtime"
+import { EventsOn, EventsOff, ClipboardGetText } from "../wailsjs/runtime/runtime"
 import type { main } from "../wailsjs/go/models"
 import './style.css'
 
@@ -22,7 +23,7 @@ interface VideoMetadata {
 
 interface QueueItem {
   id: string; title: string; thumbnail: string; status: string
-  progress: number; speed: string; eta: string; errorMsg: string; playlistStatus: string
+  progress: number; speed: string; eta: string; fileSize: string; errorMsg: string; playlistStatus: string
 }
 
 interface DepProgress {
@@ -30,12 +31,12 @@ interface DepProgress {
 }
 
 interface DownloadProgress {
-  downloadId: string; percent: number; speed: string; eta: string
+  downloadId: string; percent: number; speed: string; eta: string; fileSize: string
   status: string; error?: string; playlistStatus?: string
 }
 
 interface FormatOption { label: string; formatId: string }
-interface AppSettings { defaultOutputDir: string; theme: string }
+interface AppSettings { defaultOutputDir: string; theme: string; maxConcurrency: number; autoPasteURL: boolean }
 interface VersionInfo { ytdlp: string; ffmpeg: string; app: string }
 
 type Tab = 'downloads' | 'history' | 'settings'
@@ -59,7 +60,80 @@ function buildFormatOptions(formats: FormatInfo[]): FormatOption[] {
   return options
 }
 
+function HistoryEntries({ entries, search, onDelete, fmtTime }: { entries: main.HistoryEntry[]; search: string; onDelete: (id: string) => void; fmtTime: (t: string) => string }) {
+  const filtered = search
+    ? entries.filter((e) => {
+        const q = search.toLowerCase()
+        return (e.title || '').toLowerCase().includes(q) || e.url.toLowerCase().includes(q)
+      })
+    : entries
+  if (filtered.length === 0 && search) {
+    return (
+      <div className="flex flex-col items-center justify-center py-12" style={{ color: 'var(--text-muted)' }}>
+        <p className="text-sm">No results for &quot;{search}&quot;</p>
+      </div>
+    )
+  }
+  return (
+    <div className="space-y-2">
+      {filtered.map((entry) => (
+        <HistoryRow key={entry.downloadId} entry={entry} onDelete={onDelete} fmtTime={fmtTime} />
+      ))}
+    </div>
+  )
+}
+
+function HistoryRow({ entry, onDelete, fmtTime }: { entry: main.HistoryEntry; onDelete: (id: string) => void; fmtTime: (t: string) => string }) {
+  return (
+    <div className="rounded-lg p-3.5 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">{entry.title || 'Untitled'}</p>
+        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
+          <span>Started: {fmtTime(entry.startTime)}</span>
+          <span>Ended: {fmtTime(entry.endTime)}</span>
+          {entry.fileSize && <span>Size: {entry.fileSize}</span>}
+          {entry.avgSpeed && <span>Speed: {entry.avgSpeed}</span>}
+          <span className={`font-medium ${entry.status === 'completed' ? 'text-green-400' : entry.status === 'cancelled' ? 'text-yellow-400' : 'text-red-400'}`}>
+            {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
+          </span>
+        </div>
+        {entry.errorMsg && (
+          <p className="mt-1 text-xs truncate" style={{ color: '#f87171' }}>{entry.errorMsg}</p>
+        )}
+      </div>
+      <button
+        onClick={() => onDelete(entry.downloadId)}
+        className="shrink-0 transition-colors p-1 rounded"
+        style={{ color: 'var(--text-muted)' }}
+        title="Delete entry"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+        </svg>
+      </button>
+    </div>
+  )
+}
+
+export class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
+  state = { hasError: false }
+  static getDerivedStateFromError() { return { hasError: true } }
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="h-screen flex flex-col items-center justify-center px-6" style={{ background: 'var(--color-surface)', color: 'var(--text-primary)' }}>
+          <h2 className="text-lg font-semibold mb-2">Something went wrong</h2>
+          <p className="text-sm mb-4" style={{ color: 'var(--text-muted)' }}>Please restart the application.</p>
+          <button onClick={() => { this.setState({ hasError: false }); window.location.reload() }} className="btn-primary text-sm px-4 py-2">Retry</button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
 function App() {
+  const urlInputRef = useRef<HTMLInputElement>(null)
   const [activeTab, setActiveTab] = useState<Tab>('downloads')
   const [url, setUrl] = useState('')
   const [fetched, setFetched] = useState(false)
@@ -80,12 +154,30 @@ function App() {
 
   const [queue, setQueue] = useState<QueueItem[]>([])
 
-  const [showSettings, setShowSettings] = useState(false)
   const [defaultOutputDir, setDefaultOutputDir] = useState('')
   const [theme, setTheme] = useState('dark')
+  const [maxConcurrency, setMaxConcurrency] = useState(3)
+  const [autoPasteEnabled, setAutoPasteEnabled] = useState(false)
 
   const [history, setHistory] = useState<main.HistoryEntry[]>([])
+  const [historySearch, setHistorySearch] = useState('')
+  const [historyLoading, setHistoryLoading] = useState(false)
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
+  const [updatingDeps, setUpdatingDeps] = useState(false)
+  const [updatesError, setUpdatesError] = useState('')
+
+  const activeCount = queue.filter((i) => ['queued', 'starting', 'downloading'].includes(i.status)).length
+
+  const totalEta = (() => {
+    let rem = 0, spd = 0
+    for (const item of queue) {
+      if (item.status !== 'downloading') continue
+      const sz = parseBytes(item.fileSize)
+      const s = parseSpeed(item.speed)
+      if (sz > 0 && s > 0) { rem += sz * (1 - item.progress / 100); spd += s }
+    }
+    return spd > 0 ? formatTotalEta(rem / spd) : ''
+  })()
 
   const tabs: { id: Tab; label: string; icon: string }[] = [
     { id: 'downloads', label: 'Downloads', icon: '⬇' },
@@ -102,6 +194,8 @@ function App() {
       .then((s: AppSettings) => {
         setDefaultOutputDir(s.defaultOutputDir)
         setTheme(s.theme || 'dark')
+        setMaxConcurrency(s.maxConcurrency || 3)
+        setAutoPasteEnabled(!!s.autoPasteURL)
       })
       .catch(() => {})
   }, [])
@@ -147,6 +241,33 @@ function App() {
   }, [depsReady])
 
   useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'l')) {
+        e.preventDefault()
+        urlInputRef.current?.focus()
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  useEffect(() => {
+    if (!depsReady || !autoPasteEnabled || activeTab !== 'downloads') return
+    const checkClipboard = async () => {
+      try {
+        const text = await ClipboardGetText()
+        if (!text) return
+        const trimmed = text.trim()
+        const ytRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/
+        if (ytRegex.test(trimmed)) {
+          setUrl(trimmed)
+        }
+      } catch { /* ignore clipboard errors */ }
+    }
+    checkClipboard()
+  }, [depsReady, autoPasteEnabled, activeTab])
+
+  useEffect(() => {
     const handleDlProgress = (data: DownloadProgress) => {
       setQueue((prev) =>
         prev.map((item) => {
@@ -154,13 +275,13 @@ function App() {
           if (data.status === 'completed') return { ...item, status: 'completed', progress: 100, playlistStatus: '' }
           if (data.status === 'error') {
             const msg = data.error || 'Download failed'
-            return { ...item, status: 'error', progress: 0, speed: '', eta: '', errorMsg: msg, playlistStatus: '' }
+            return { ...item, status: 'error', progress: 0, speed: '', eta: '', fileSize: '', errorMsg: msg, playlistStatus: '' }
           }
-          if (data.status === 'cancelled') return { ...item, status: 'cancelled', progress: 0, speed: '', eta: '', playlistStatus: '' }
+          if (data.status === 'cancelled') return { ...item, status: 'cancelled', progress: 0, speed: '', eta: '', fileSize: '', playlistStatus: '' }
           if (data.status === 'starting') return { ...item, status: 'starting', progress: 0, playlistStatus: data.playlistStatus || '' }
           return {
             ...item, status: data.status,
-            progress: Math.round(data.percent), speed: data.speed, eta: data.eta,
+            progress: Math.round(data.percent), speed: data.speed, eta: data.eta, fileSize: data.fileSize || item.fileSize,
             playlistStatus: data.playlistStatus || '',
           }
         }),
@@ -195,7 +316,7 @@ function App() {
       const downloadId = await StartDownload(url, selectedFormat, defaultOutputDir, selectedContainer, selectedSubs, metadata.title)
       setQueue((prev) => [
         ...prev,
-        { id: downloadId, title: metadata.title, thumbnail: metadata.thumbnail, status: 'queued', progress: 0, speed: '', eta: '', errorMsg: '', playlistStatus: '' },
+        { id: downloadId, title: metadata.title, thumbnail: metadata.thumbnail, status: 'queued', progress: 0, speed: '', eta: '', fileSize: '', errorMsg: '', playlistStatus: '' },
       ])
     } catch (err: any) {
       console.error('Failed to start download:', err)
@@ -213,15 +334,17 @@ function App() {
       const dir = await SelectDirectory()
       if (!dir) return
       setDefaultOutputDir(dir)
-      await UpdateSettings({ defaultOutputDir: dir, theme })
+      await UpdateSettings({ defaultOutputDir: dir, theme, maxConcurrency, autoPasteURL: autoPasteEnabled })
     } catch { /* user cancelled */ }
   }
 
   const loadHistory = async () => {
+    setHistoryLoading(true)
     try {
       const h = await GetHistory()
       setHistory(h)
     } catch { /* ignore */ }
+    setHistoryLoading(false)
   }
 
   const handleClearHistory = async () => {
@@ -234,7 +357,9 @@ function App() {
 
   const handleThemeChange = async (newTheme: string) => {
     setTheme(newTheme)
-    await UpdateSettings({ defaultOutputDir, theme: newTheme })
+    try {
+      await UpdateSettings({ defaultOutputDir, theme: newTheme, maxConcurrency, autoPasteURL: autoPasteEnabled })
+    } catch { /* ignore */ }
   }
 
   const handleTabSwitch = (tab: Tab) => {
@@ -251,10 +376,39 @@ function App() {
     error: 'text-red-400', cancelled: 'text-yellow-400',
   }
 
-  function fmtTime(t: string): string {
-    const d = new Date(t)
-    return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+function fmtTime(t: string): string {
+  const d = new Date(t)
+  return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+}
+
+function parseBytes(s: string): number {
+  if (!s) return 0
+  const m = s.match(/^([\d.]+)\s*([KMG]i?B?b?)?/)
+  if (!m) return 0
+  const num = parseFloat(m[1])
+  const unit = (m[2] || '').toLowerCase()
+  if (unit.startsWith('ki') || unit === 'kb') return num * 1024
+  if (unit.startsWith('mi') || unit === 'mb') return num * 1024 * 1024
+  if (unit.startsWith('gi') || unit === 'gb') return num * 1024 * 1024 * 1024
+  return num
+}
+
+function parseSpeed(s: string): number {
+  return parseBytes(s.replace('/s', ''))
+}
+
+function formatTotalEta(seconds: number): string {
+  if (!seconds || seconds < 1) return ''
+  if (seconds < 60) return `<${Math.round(seconds)}s`
+  if (seconds < 3600) {
+    const m = Math.floor(seconds / 60)
+    const s = Math.round(seconds % 60)
+    return `~${m}:${String(s).padStart(2, '0')}`
   }
+  const h = Math.floor(seconds / 3600)
+  const m = Math.floor((seconds % 3600) / 60)
+  return `~${h}:${String(m).padStart(2, '0')}:${String(Math.round(seconds % 60)).padStart(2, '0')}`
+}
 
   // --- Loading Screen ---
   if (checkingDeps) {
@@ -331,7 +485,12 @@ function App() {
           {tabs.map((t) => (
             <div key={t.id} onClick={() => handleTabSwitch(t.id)} className={`sidebar-tab ${activeTab === t.id ? 'active' : ''}`}>
               <span className="text-base">{t.icon}</span>
-              <span>{t.label}</span>
+              <span className="flex-1">{t.label}</span>
+              {t.id === 'downloads' && activeCount > 0 && (
+                <span className="text-xs font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--color-accent)', color: '#000' }}>
+                  {activeCount}
+                </span>
+              )}
             </div>
           ))}
         </nav>
@@ -436,6 +595,11 @@ function App() {
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="text-sm font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }}>
                     Downloads ({queue.length})
+                    {activeCount > 0 && (
+                      <span className="ml-2 font-normal normal-case" style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                        {activeCount} active{totalEta ? ` · ${totalEta}` : ''}
+                      </span>
+                    )}
                   </h3>
                   {queue.some((i) => ['completed', 'error', 'cancelled'].includes(i.status)) && (
                     <button onClick={handleClearCompleted} className="text-xs transition-colors" style={{ color: 'var(--text-muted)' }}>Clear Completed</button>
@@ -503,9 +667,16 @@ function App() {
                           )}
                         </div>
                         {item.status === 'completed' && (
-                          <svg className="w-5 h-5 shrink-0" style={{ color: '#22c55e' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                          </svg>
+                          <div className="flex items-center gap-1.5">
+                            <button onClick={() => OpenOutputDir().catch(() => {})} className="transition-colors p-1 rounded" style={{ color: 'var(--text-muted)' }} title="Open output folder">
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+                              </svg>
+                            </button>
+                            <svg className="w-5 h-5 shrink-0" style={{ color: '#22c55e' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </div>
                         )}
                         {(item.status === 'downloading' || item.status === 'starting') && (
                           <div className="flex items-center gap-1">
@@ -550,12 +721,30 @@ function App() {
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--color-surface-border)' }}>
               <h2 className="text-base font-semibold">Download History</h2>
-              {history.length > 0 && (
-                <button onClick={handleClearHistory} className="btn-primary text-xs px-3 py-1.5">Clear All</button>
-              )}
+              <div className="flex items-center gap-3">
+                {history.length > 0 && (
+                  <>
+                    <input
+                      type="text" value={historySearch}
+                      onChange={(e) => setHistorySearch(e.target.value)}
+                      placeholder="Search history..."
+                      className="input-dark text-xs w-44"
+                    />
+                    <button
+                      onClick={() => { if (window.confirm('Clear all download history?')) handleClearHistory() }}
+                      className="btn-primary text-xs px-3 py-1.5"
+                    >Clear All</button>
+                  </>
+                )}
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto px-6 py-4">
-              {history.length === 0 ? (
+              {historyLoading ? (
+                <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--text-muted)' }}>
+                  <div className="w-6 h-6 border-2 rounded-full animate-spin mb-3" style={{ borderColor: 'var(--color-accent)', borderTopColor: 'transparent' }} />
+                  <p className="text-sm">Loading history...</p>
+                </div>
+              ) : history.length === 0 ? (
                 <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--text-muted)' }}>
                   <svg className="w-12 h-12 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -563,37 +752,7 @@ function App() {
                   <p className="text-sm">No download history yet</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {history.map((entry) => (
-                    <div key={entry.downloadId} className="rounded-lg p-3.5 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium truncate">{entry.title || 'Untitled'}</p>
-                        <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
-                          <span>Started: {fmtTime(entry.startTime)}</span>
-                          <span>Ended: {fmtTime(entry.endTime)}</span>
-                          {entry.fileSize && <span>Size: {entry.fileSize}</span>}
-                          {entry.avgSpeed && <span>Speed: {entry.avgSpeed}</span>}
-                          <span className={`font-medium ${entry.status === 'completed' ? 'text-green-400' : entry.status === 'cancelled' ? 'text-yellow-400' : 'text-red-400'}`}>
-                            {entry.status.charAt(0).toUpperCase() + entry.status.slice(1)}
-                          </span>
-                        </div>
-                        {entry.errorMsg && (
-                          <p className="mt-1 text-xs truncate" style={{ color: '#f87171' }}>{entry.errorMsg}</p>
-                        )}
-                      </div>
-                      <button
-                        onClick={() => handleDeleteHistoryEntry(entry.downloadId)}
-                        className="shrink-0 transition-colors p-1 rounded"
-                        style={{ color: 'var(--text-muted)' }}
-                        title="Delete entry"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  ))}
-                </div>
+                <HistoryEntries entries={history} search={historySearch} onDelete={handleDeleteHistoryEntry} fmtTime={fmtTime} />
               )}
             </div>
           </div>
@@ -638,6 +797,50 @@ function App() {
                 </div>
               </section>
 
+              {/* Max Concurrency */}
+              <section>
+                <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>Downloads</h3>
+                <div className="flex items-center gap-3">
+                  <label className="text-xs" style={{ color: 'var(--text-muted)', minWidth: '7rem' }}>Max parallel downloads</label>
+                  <input
+                    type="number" min={1} max={10}
+                    value={maxConcurrency}
+                    onChange={async (e) => {
+                      const v = Math.max(1, Math.min(10, parseInt(e.target.value) || 1))
+                      setMaxConcurrency(v)
+                      try { await UpdateSettings({ defaultOutputDir, theme, maxConcurrency: v, autoPasteURL: autoPasteEnabled }) } catch { /* ignore */ }
+                    }}
+                    className="input-dark text-xs w-16 text-center"
+                  />
+                </div>
+              </section>
+
+              {/* Auto-Paste URL */}
+              <section>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }}>Auto-paste URL</h3>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>Automatically paste YouTube URLs from clipboard when opening the Downloads tab</p>
+                  </div>
+                  <button
+                    onClick={async () => {
+                      const next = !autoPasteEnabled
+                      setAutoPasteEnabled(next)
+                      try { await UpdateSettings({ defaultOutputDir, theme, maxConcurrency, autoPasteURL: next }) } catch { /* ignore */ }
+                    }}
+                    className="relative w-10 h-5 rounded-full transition-colors shrink-0"
+                    style={{
+                      background: autoPasteEnabled ? 'var(--color-accent)' : 'var(--color-surface-border)',
+                    }}
+                  >
+                    <span
+                      className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform"
+                      style={{ transform: autoPasteEnabled ? 'translateX(20px)' : 'translateX(2px)' }}
+                    />
+                  </button>
+                </div>
+              </section>
+
               {/* Version Info */}
               <section>
                 <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>Versions</h3>
@@ -661,8 +864,29 @@ function App() {
               <section>
                 <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>Updates</h3>
                 <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  <p>Check for new versions of yt-dlp and ffmpeg. App self-update coming soon.</p>
-                  <button className="btn-primary text-xs px-4 py-1.5 mt-3">Check for Updates</button>
+                  <p>Re-download yt-dlp and ffmpeg to get the latest versions.</p>
+                  <button
+                    onClick={async () => {
+                      setUpdatingDeps(true)
+                      setUpdatesError('')
+                      try {
+                        await UpdateDependencies()
+                        const v = await GetVersionInfo()
+                        setVersionInfo(v)
+                        if (v.ytdlp) setYtdlpVersion(v.ytdlp)
+                      } catch (err: any) {
+                        setUpdatesError(err?.message || 'Update failed')
+                      }
+                      setUpdatingDeps(false)
+                    }}
+                    disabled={updatingDeps}
+                    className="btn-primary text-xs px-4 py-1.5 mt-3"
+                  >
+                    {updatingDeps ? 'Updating...' : 'Check for Updates'}
+                  </button>
+                  {updatesError && (
+                    <p className="mt-2" style={{ color: '#f87171' }}>{updatesError}</p>
+                  )}
                 </div>
               </section>
             </div>

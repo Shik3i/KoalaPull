@@ -21,7 +21,7 @@ import (
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
-const AppVersion = "0.1.0"
+var AppVersion = "dev"
 
 type App struct {
 	ctx              context.Context
@@ -33,6 +33,7 @@ type App struct {
 	adMu             sync.Mutex
 	lastFileSize     map[string]string
 	lastSpeed        map[string]string
+	downloadSemaphore chan struct{}
 }
 
 type DependencyStatus struct {
@@ -74,6 +75,7 @@ type DownloadProgress struct {
 	Percent        float64 `json:"percent"`
 	Speed          string  `json:"speed"`
 	ETA            string  `json:"eta"`
+	FileSize       string  `json:"fileSize"`
 	Status         string  `json:"status"`
 	Error          string  `json:"error,omitempty"`
 	PlaylistStatus string  `json:"playlistStatus,omitempty"`
@@ -82,6 +84,8 @@ type DownloadProgress struct {
 type Settings struct {
 	DefaultOutputDir string `json:"defaultOutputDir"`
 	Theme            string `json:"theme"`
+	MaxConcurrency   int    `json:"maxConcurrency"`
+	AutoPasteURL     bool   `json:"autoPasteURL"`
 }
 
 type HistoryEntry struct {
@@ -103,19 +107,26 @@ type VersionInfo struct {
 	App    string `json:"app"`
 }
 
-var downloadSemaphore = make(chan struct{}, 3)
-
 var progressRegex = regexp.MustCompile(`\[download\]\s+([\d.]+)%\s+of\s+~?([\d.]+\S+)\s+at\s+([\d.]+\S+)\s+ETA\s+(\S+)`)
 
-var sizeLineRegex = regexp.MustCompile(`\[download\]\s+100%\s+of\s+([\d.]+\S+)`)
+var sizeLineRegex = regexp.MustCompile(`\[download\]\s+100%\s+of\s+~?([\d.]+\S+)`)
 
 var playlistItemRegex = regexp.MustCompile(`\[download\]\s+Downloading\s+(video|item)\s+(\d+)\s+of\s+(\d+)`)
 
 func NewApp() *App {
-	return &App{
+	a := &App{
 		lastFileSize: make(map[string]string),
 		lastSpeed:    make(map[string]string),
 	}
+	return a
+}
+
+func (a *App) initSemaphore() {
+	max := a.GetSettings().MaxConcurrency
+	if max < 1 {
+		max = 3
+	}
+	a.downloadSemaphore = make(chan struct{}, max)
 }
 
 func (a *App) startup(ctx context.Context) {
@@ -130,6 +141,7 @@ func (a *App) startup(ctx context.Context) {
 		println("Failed to create bin directory:", err.Error())
 	}
 	a.activeDownloads = make(map[string]context.CancelFunc)
+	a.initSemaphore()
 }
 
 func (a *App) ytdlpPath() string {
@@ -183,14 +195,17 @@ func (a *App) GetSettings() Settings {
 	data, err := os.ReadFile(path)
 	if err == nil {
 		var s Settings
-		if json.Unmarshal(data, &s) == nil && s.DefaultOutputDir != "" {
+		if json.Unmarshal(data, &s) == nil {
 			if s.Theme == "" {
 				s.Theme = "dark"
+			}
+			if s.MaxConcurrency < 1 {
+				s.MaxConcurrency = 3
 			}
 			return s
 		}
 	}
-	s := Settings{DefaultOutputDir: defaultOutputDir(), Theme: "dark"}
+	s := Settings{DefaultOutputDir: defaultOutputDir(), Theme: "dark", MaxConcurrency: 3, AutoPasteURL: false}
 	a.writeSettings(s)
 	return s
 }
@@ -285,6 +300,33 @@ func (a *App) GetFfmpegVersion() string {
 	return ""
 }
 
+func (a *App) UpdateDependencies() error {
+	os.Remove(a.ytdlpPath())
+	os.Remove(a.ffmpegPath())
+	if err := a.downloadYtdlp(); err != nil {
+		return err
+	}
+	return a.downloadFfmpeg()
+}
+
+func (a *App) OpenOutputDir() error {
+	settings := a.GetSettings()
+	dir := settings.DefaultOutputDir
+	if dir == "" {
+		dir = defaultOutputDir()
+	}
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = exec.Command("open", dir)
+	case "windows":
+		cmd = exec.Command("explorer", dir)
+	default:
+		cmd = exec.Command("xdg-open", dir)
+	}
+	return cmd.Start()
+}
+
 func (a *App) GetVersionInfo() VersionInfo {
 	return VersionInfo{
 		Ytdlp:  a.GetYtdlpVersion(),
@@ -305,12 +347,13 @@ func (a *App) emitProgress(dep string, pct int, status, errMsg string) {
 	wailsRuntime.EventsEmit(a.ctx, "dependency-progress", ev)
 }
 
-func (a *App) emitDownloadProgress(downloadID string, percent float64, speed, eta, status, errMsg, playlistStatus string) {
+func (a *App) emitDownloadProgress(downloadID string, percent float64, speed, eta, fileSize, status, errMsg, playlistStatus string) {
 	ev := DownloadProgress{
 		DownloadID:     downloadID,
 		Percent:        percent,
 		Speed:          speed,
 		ETA:            eta,
+		FileSize:       fileSize,
 		Status:         status,
 		PlaylistStatus: playlistStatus,
 	}
@@ -677,67 +720,71 @@ func (a *App) runDownload(ctx context.Context, downloadID string, args []string,
 	}()
 
 	select {
-	case downloadSemaphore <- struct{}{}:
+	case a.downloadSemaphore <- struct{}{}:
 	case <-ctx.Done():
-		a.emitDownloadProgress(downloadID, 0, "", "", "cancelled", "", "")
+		a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
 		return
 	}
-	defer func() { <-downloadSemaphore }()
+	defer func() { <-a.downloadSemaphore }()
 
 	startTime := time.Now()
-	a.emitDownloadProgress(downloadID, 0, "", "", "starting", "", "")
+	a.emitDownloadProgress(downloadID, 0, "", "", "", "starting", "", "")
 
 	cmd := exec.CommandContext(ctx, a.ytdlpPath(), args...)
 
 	stderr, err := cmd.StderrPipe()
 	if err != nil {
 		a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: fmt.Sprintf("pipe failed: %v", err), StartTime: startTime, EndTime: time.Now()})
-		a.emitDownloadProgress(downloadID, 0, "", "", "error", fmt.Sprintf("pipe failed: %v", err), "")
+		a.emitDownloadProgress(downloadID, 0, "", "", "", "error", fmt.Sprintf("pipe failed: %v", err), "")
 		return
 	}
 
 	stdout, err := cmd.StdoutPipe()
 	if err != nil {
 		a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: fmt.Sprintf("stdout pipe failed: %v", err), StartTime: startTime, EndTime: time.Now()})
-		a.emitDownloadProgress(downloadID, 0, "", "", "error", fmt.Sprintf("stdout pipe failed: %v", err), "")
+		a.emitDownloadProgress(downloadID, 0, "", "", "", "error", fmt.Sprintf("stdout pipe failed: %v", err), "")
 		return
 	}
 
 	if err := cmd.Start(); err != nil {
 		if ctx.Err() == context.Canceled {
 			a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "cancelled", StartTime: startTime, EndTime: time.Now()})
-			a.emitDownloadProgress(downloadID, 0, "", "", "cancelled", "", "")
+			a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
 			return
 		}
 		a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: fmt.Sprintf("start failed: %v", err), StartTime: startTime, EndTime: time.Now()})
-		a.emitDownloadProgress(downloadID, 0, "", "", "error", fmt.Sprintf("start failed: %v", err), "")
+		a.emitDownloadProgress(downloadID, 0, "", "", "", "error", fmt.Sprintf("start failed: %v", err), "")
 		return
 	}
 
 	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		currentPS := ""
 		lastPct := 0.0
 		lastSpeed := ""
 		lastETA := ""
+		lastFileSz := ""
 		scanner := bufio.NewScanner(stdout)
 		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 		for scanner.Scan() {
 			line := scanner.Text()
 			if matches := sizeLineRegex.FindStringSubmatch(line); matches != nil {
+				lastFileSz = matches[1]
 				a.adMu.Lock()
 				a.lastFileSize[downloadID] = matches[1]
 				a.adMu.Unlock()
 			}
-			if pct, speed, eta, ok := parseProgressLine(line); ok {
-				lastPct, lastSpeed, lastETA = pct, speed, eta
+			if pct, fileSz, speed, eta, ok := parseProgressLine(line); ok {
+				lastPct, lastSpeed, lastETA, lastFileSz = pct, speed, eta, fileSz
 				a.adMu.Lock()
 				a.lastSpeed[downloadID] = speed
+				a.lastFileSize[downloadID] = fileSz
 				a.adMu.Unlock()
-				a.emitDownloadProgress(downloadID, pct, speed, eta, "downloading", "", currentPS)
+				a.emitDownloadProgress(downloadID, pct, speed, eta, fileSz, "downloading", "", currentPS)
 			} else if ps := parsePlaylistStatus(line); ps != "" {
 				currentPS = ps
-				a.emitDownloadProgress(downloadID, lastPct, lastSpeed, lastETA, "downloading", "", currentPS)
+				a.emitDownloadProgress(downloadID, lastPct, lastSpeed, lastETA, lastFileSz, "downloading", "", currentPS)
 			}
 		}
 		close(done)
@@ -746,6 +793,7 @@ func (a *App) runDownload(ctx context.Context, downloadID string, args []string,
 	errLines := make([]string, 0, maxErrLines)
 	errCh := make(chan struct{})
 	go func() {
+		defer close(errCh)
 		scanner := bufio.NewScanner(stderr)
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -774,7 +822,7 @@ func (a *App) runDownload(ctx context.Context, downloadID string, args []string,
 	if err != nil {
 		if ctx.Err() == context.Canceled {
 			a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "cancelled", StartTime: startTime, EndTime: endTime})
-			a.emitDownloadProgress(downloadID, 0, "", "", "cancelled", "", "")
+			a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
 			return
 		}
 		errMsg := strings.Join(errLines, "\n")
@@ -782,24 +830,24 @@ func (a *App) runDownload(ctx context.Context, downloadID string, args []string,
 			errMsg = err.Error()
 		}
 		a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: errMsg, StartTime: startTime, EndTime: endTime})
-		a.emitDownloadProgress(downloadID, 0, "", "", "error", errMsg, "")
+		a.emitDownloadProgress(downloadID, 0, "", "", "", "error", errMsg, "")
 		return
 	}
 
 	a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, FileSize: fileSize, AvgSpeed: avgSpeed, Status: "completed", StartTime: startTime, EndTime: endTime})
-	a.emitDownloadProgress(downloadID, 100, "", "", "completed", "", "")
+	a.emitDownloadProgress(downloadID, 100, "", "", fileSize, "completed", "", "")
 }
 
-func parseProgressLine(line string) (percent float64, speed string, eta string, ok bool) {
+func parseProgressLine(line string) (percent float64, fileSize, speed, eta string, ok bool) {
 	matches := progressRegex.FindStringSubmatch(line)
 	if matches == nil {
-		return 0, "", "", false
+		return 0, "", "", "", false
 	}
 	pct, err := strconv.ParseFloat(matches[1], 64)
 	if err != nil {
-		return 0, "", "", false
+		return 0, "", "", "", false
 	}
-	return pct, strings.TrimSpace(matches[3]), strings.TrimSpace(matches[4]), true
+	return pct, strings.TrimSpace(matches[2]), strings.TrimSpace(matches[3]), strings.TrimSpace(matches[4]), true
 }
 
 func parsePlaylistStatus(line string) string {

@@ -46,12 +46,20 @@ export function GetYtdlpVersion() {
   return window['go']['main']['App']['GetYtdlpVersion']();
 }
 
+export function OpenOutputDir() {
+  return window['go']['main']['App']['OpenOutputDir']();
+}
+
 export function SelectDirectory() {
   return window['go']['main']['App']['SelectDirectory']();
 }
 
 export function StartDownload(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['StartDownload'](arg1, arg2, arg3, arg4, arg5, arg6);
+}
+
+export function UpdateDependencies() {
+  return window['go']['main']['App']['UpdateDependencies']();
 }
 
 export function UpdateSettings(arg1) {

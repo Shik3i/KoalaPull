@@ -9,5 +9,11 @@
   "author": {
     "name": "Timo",
     "email": "6156589+Shik3i@users.noreply.github.com"
+  },
+  "info": {
+    "productVersion": "dev",
+    "productName": "KoalaPull",
+    "companyName": "KoalaPull",
+    "comments": "A clean, minimalist GUI download manager wrapping yt-dlp."
   }
 }

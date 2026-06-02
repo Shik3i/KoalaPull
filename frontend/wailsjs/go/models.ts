@@ -93,6 +93,8 @@ export namespace main {
 	export class Settings {
 	    defaultOutputDir: string;
 	    theme: string;
+	    maxConcurrency: number;
+	    autoPasteURL: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -102,6 +104,8 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.defaultOutputDir = source["defaultOutputDir"];
 	        this.theme = source["theme"];
+	        this.maxConcurrency = source["maxConcurrency"];
+	        this.autoPasteURL = source["autoPasteURL"];
 	    }
 	}
 	export class VersionInfo {
