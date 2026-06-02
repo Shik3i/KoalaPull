@@ -36,3 +36,9 @@ Scope:
 - Apply this only to direct user-facing chat messages.
 - Do not apply this style to code edits, tests, commit messages, PR descriptions, documentation meant for the repository, or detailed implementation plans.
 - When precision, safety, debugging, or user comprehension requires more detail, use normal clear language.
+
+Quality gate:
+
+- No push before running `./scripts/verify.sh`.
+- Only push when `go test -count=1 ./...`, `go vet ./...`, `npm run test`, and `npm run build` all pass.
+- Release tags follow the same rule. Run verification first, then push the tag.

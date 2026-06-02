@@ -9,6 +9,7 @@ import {
 } from "../wailsjs/go/main/App"
 import { EventsOn, ClipboardGetText } from "../wailsjs/runtime/runtime"
 import type { main } from "../wailsjs/go/models"
+import { formatTotalEta, parseBytes, parseSpeed } from "./lib/downloadMetrics"
 import './style.css'
 
 interface FormatInfo {
@@ -40,8 +41,6 @@ interface AppSettings { defaultOutputDir: string; theme: string; maxConcurrency:
 interface VersionInfo { ytdlp: string; ffmpeg: string; app: string }
 
 type Tab = 'downloads' | 'history' | 'settings'
-
-const parseBytesRe = /^([\d.]+)\s*([KMG]i?B?b?)?/
 
 let historyRequestId = 0
 
@@ -402,35 +401,6 @@ function fmtTime(t: string): string {
   const d = new Date(t)
   if (Number.isNaN(d.getTime())) return '-'
   return d.toLocaleDateString() + ' ' + d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
-}
-
-function parseBytes(s: string): number {
-  if (!s) return 0
-  const m = s.match(parseBytesRe)
-  if (!m) return 0
-  const num = parseFloat(m[1])
-  const unit = (m[2] || '').toLowerCase()
-  if (unit.startsWith('ki') || unit === 'kb') return num * 1024
-  if (unit.startsWith('mi') || unit === 'mb') return num * 1024 * 1024
-  if (unit.startsWith('gi') || unit === 'gb') return num * 1024 * 1024 * 1024
-  return num
-}
-
-function parseSpeed(s: string): number {
-  return parseBytes(s.replace('/s', ''))
-}
-
-function formatTotalEta(seconds: number): string {
-  if (!seconds || seconds < 1) return ''
-  if (seconds < 60) return `<${Math.round(seconds)}s`
-  if (seconds < 3600) {
-    const m = Math.floor(seconds / 60)
-    const s = Math.round(seconds % 60)
-    return `~${m}:${String(s).padStart(2, '0')}`
-  }
-  const h = Math.floor(seconds / 3600)
-  const m = Math.floor((seconds % 3600) / 60)
-  return `~${h}:${String(m).padStart(2, '0')}:${String(Math.round(seconds % 60)).padStart(2, '0')}`
 }
 
   // --- Loading Screen ---

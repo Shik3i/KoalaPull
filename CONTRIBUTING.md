@@ -88,11 +88,15 @@ KoalaPull/
 
 2. Make your changes and test them with `wails dev`.
 
-3. Ensure everything builds cleanly:
+3. Run the full verification gate before every push:
    ```bash
-   go vet ./...
-   cd frontend && npx tsc --noEmit && cd ..
+   ./scripts/verify.sh
    ```
+   This is mandatory for normal pushes and release tags. The script runs:
+   - `go test -count=1 ./...`
+   - `go vet ./...`
+   - `npm run test`
+   - `npm run build`
 
 4. Commit with a conventional commit message:
    ```
