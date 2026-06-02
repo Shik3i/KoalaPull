@@ -108,6 +108,20 @@ export namespace main {
 	        this.autoPasteURL = source["autoPasteURL"];
 	    }
 	}
+	export class UpdateInfo {
+	    ytdlpUpdateAvailable: boolean;
+	    latestYtdlpVersion: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new UpdateInfo(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.ytdlpUpdateAvailable = source["ytdlpUpdateAvailable"];
+	        this.latestYtdlpVersion = source["latestYtdlpVersion"];
+	    }
+	}
 	export class VersionInfo {
 	    ytdlp: string;
 	    ffmpeg: string;

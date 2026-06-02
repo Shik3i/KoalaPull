@@ -5,7 +5,7 @@ import {
   GetSettings, UpdateSettings, SelectDirectory,
   GetYtdlpVersion, GetVersionInfo, GetHistory,
   ClearHistory, DeleteHistoryEntry,
-  UpdateDependencies, OpenOutputDir,
+  UpdateDependencies, OpenOutputDir, CheckForUpdates,
 } from "../wailsjs/go/main/App"
 import { EventsOn, EventsOff, ClipboardGetText } from "../wailsjs/runtime/runtime"
 import type { main } from "../wailsjs/go/models"
@@ -167,6 +167,7 @@ function App() {
   const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null)
   const [updatingDeps, setUpdatingDeps] = useState(false)
   const [updatesError, setUpdatesError] = useState('')
+  const [updateInfo, setUpdateInfo] = useState<main.UpdateInfo | null>(null)
 
   const activeCount = queue.filter((i) => ['queued', 'starting', 'downloading'].includes(i.status)).length
 
@@ -373,6 +374,7 @@ function App() {
     if (tab === 'history') loadHistory()
     if (tab === 'settings') {
       GetVersionInfo().then((v: VersionInfo) => setVersionInfo(v)).catch((err) => { console.warn('GetVersionInfo failed:', err) })
+      CheckForUpdates().then((u) => setUpdateInfo(u)).catch((err) => { console.warn('CheckForUpdates failed:', err) })
     }
   }
 
@@ -495,6 +497,11 @@ function formatTotalEta(seconds: number): string {
               {t.id === 'downloads' && activeCount > 0 && (
                 <span className="text-xs font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--color-accent)', color: '#000' }}>
                   {activeCount}
+                </span>
+              )}
+              {t.id === 'settings' && updateInfo?.ytdlpUpdateAvailable && (
+                <span className="text-xs font-medium px-1.5 py-0.5 rounded-full" style={{ background: '#fbbf24', color: '#000' }}>
+                  1
                 </span>
               )}
             </div>
@@ -903,26 +910,41 @@ function formatTotalEta(seconds: number): string {
               <section>
                 <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }}>Updates</h3>
                 <div className="text-xs" style={{ color: 'var(--text-muted)' }}>
-                  <p>Re-download yt-dlp and ffmpeg to get the latest versions.</p>
-                  <button
-                    onClick={async () => {
-                      setUpdatingDeps(true)
-                      setUpdatesError('')
-                      try {
-                        await UpdateDependencies()
-                        const v = await GetVersionInfo()
-                        setVersionInfo(v)
-                        if (v.ytdlp) setYtdlpVersion(v.ytdlp)
-                      } catch (err: any) {
-                        setUpdatesError(err?.message || 'Update failed')
-                      }
-                      setUpdatingDeps(false)
-                    }}
-                    disabled={updatingDeps}
-                    className="btn-primary text-xs px-4 py-1.5 mt-3"
-                  >
-                    {updatingDeps ? 'Updating...' : 'Check for Updates'}
-                  </button>
+                  {updateInfo ? (
+                    <div className="space-y-2">
+                      {updateInfo.ytdlpUpdateAvailable ? (
+                        <div className="flex items-center gap-2" style={{ color: '#fbbf24' }}>
+                          <span>yt-dlp {updateInfo.latestYtdlpVersion} available</span>
+                          <span className="text-xs" style={{ color: 'var(--text-muted)' }}>(current: v{versionInfo?.ytdlp || '?'})</span>
+                        </div>
+                      ) : (
+                        <p>yt-dlp is up to date (v{versionInfo?.ytdlp || '?'})</p>
+                      )}
+                      <button
+                        onClick={async () => {
+                          setUpdatingDeps(true)
+                          setUpdatesError('')
+                          try {
+                            await UpdateDependencies()
+                            const v = await GetVersionInfo()
+                            setVersionInfo(v)
+                            if (v.ytdlp) setYtdlpVersion(v.ytdlp)
+                            const u = await CheckForUpdates()
+                            setUpdateInfo(u)
+                          } catch (err: any) {
+                            setUpdatesError(err?.message || 'Update failed')
+                          }
+                          setUpdatingDeps(false)
+                        }}
+                        disabled={updatingDeps}
+                        className="btn-primary text-xs px-4 py-1.5 mt-2"
+                      >
+                        {updatingDeps ? 'Updating...' : updateInfo.ytdlpUpdateAvailable ? 'Download Update' : 'Re-download'}
+                      </button>
+                    </div>
+                  ) : (
+                    <p>Loading...</p>
+                  )}
                   {updatesError && (
                     <p className="mt-2" style={{ color: '#f87171' }}>{updatesError}</p>
                   )}

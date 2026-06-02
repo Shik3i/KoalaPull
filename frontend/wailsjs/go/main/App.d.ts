@@ -6,6 +6,8 @@ export function CancelDownload(arg1:string):Promise<void>;
 
 export function CheckDependencies():Promise<main.DependencyStatus>;
 
+export function CheckForUpdates():Promise<main.UpdateInfo>;
+
 export function ClearHistory():Promise<void>;
 
 export function DeleteHistoryEntry(arg1:string):Promise<void>;

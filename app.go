@@ -108,6 +108,11 @@ type VersionInfo struct {
 	App    string `json:"app"`
 }
 
+type UpdateInfo struct {
+	YtdlpUpdateAvailable  bool   `json:"ytdlpUpdateAvailable"`
+	LatestYtdlpVersion    string `json:"latestYtdlpVersion"`
+}
+
 var progressRegex = regexp.MustCompile(`\[download\]\s+([\d.]+)%\s+of\s+~?([\d.]+\S+)\s+at\s+([\d.]+\S+)\s+ETA\s+(\S+)`)
 
 var sizeLineRegex = regexp.MustCompile(`\[download\]\s+100%\s+of\s+~?([\d.]+\S+)`)
@@ -144,6 +149,21 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.activeDownloads = make(map[string]context.CancelFunc)
 	a.initSemaphore()
+	a.cleanupStaleTempFiles()
+}
+
+func (a *App) cleanupStaleTempFiles() {
+	entries, err := os.ReadDir(a.binDir)
+	if err != nil {
+		return
+	}
+	for _, e := range entries {
+		if strings.HasSuffix(e.Name(), ".tmp") {
+			if err := os.Remove(filepath.Join(a.binDir, e.Name())); err != nil {
+				println("cleanup stale tmp:", err.Error())
+			}
+		}
+	}
 }
 
 func (a *App) ytdlpPath() string {
@@ -364,6 +384,41 @@ func (a *App) GetVersionInfo() VersionInfo {
 		Ffmpeg: a.GetFfmpegVersion(),
 		App:    AppVersion,
 	}
+}
+
+func (a *App) CheckForUpdates() UpdateInfo {
+	info := UpdateInfo{}
+	if latest, err := fetchLatestYtdlpVersion(a.ctx); err == nil && latest != "" {
+		info.LatestYtdlpVersion = latest
+		current := strings.TrimPrefix(a.GetYtdlpVersion(), "v")
+		latestStr := strings.TrimPrefix(latest, "v")
+		if current != "" && latestStr != current {
+			info.YtdlpUpdateAvailable = true
+		}
+	}
+	return info
+}
+
+func fetchLatestYtdlpVersion(ctx context.Context) (string, error) {
+	dlCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(dlCtx, http.MethodGet, "https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest", nil)
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Accept", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	var result struct {
+		TagName string `json:"tag_name"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return "", err
+	}
+	return result.TagName, nil
 }
 
 func (a *App) emitProgress(dep string, pct int, status, errMsg string) {
