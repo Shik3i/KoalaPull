@@ -479,7 +479,7 @@ function formatTotalEta(seconds: number): string {
             {depProgress['yt-dlp'] === 100 && depProgress['ffmpeg'] === 100 ? 'Finalizing...' : 'Downloading...'}
           </p>
         ) : !depError ? (
-            <button onClick={() => { setDepError(''); setDepProgress({}); setInstallingDeps(true) }} className="btn-primary text-sm px-5 py-2 mt-2">
+          <button onClick={() => { setDepError(''); setDepProgress({}); setInstallingDeps(true) }} className="btn-primary text-sm px-5 py-2 mt-2">
             Download &amp; Install
           </button>
         ) : null}

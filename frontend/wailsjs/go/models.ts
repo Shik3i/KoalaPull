@@ -111,6 +111,8 @@ export namespace main {
 	export class UpdateInfo {
 	    ytdlpUpdateAvailable: boolean;
 	    latestYtdlpVersion: string;
+	    koalaPullUpdateAvailable: boolean;
+	    latestKoalaPullVersion: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new UpdateInfo(source);
@@ -120,6 +122,8 @@ export namespace main {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ytdlpUpdateAvailable = source["ytdlpUpdateAvailable"];
 	        this.latestYtdlpVersion = source["latestYtdlpVersion"];
+	        this.koalaPullUpdateAvailable = source["koalaPullUpdateAvailable"];
+	        this.latestKoalaPullVersion = source["latestKoalaPullVersion"];
 	    }
 	}
 	export class VersionInfo {

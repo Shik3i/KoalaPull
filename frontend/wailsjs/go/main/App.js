@@ -50,6 +50,10 @@ export function GetYtdlpVersion() {
   return window['go']['main']['App']['GetYtdlpVersion']();
 }
 
+export function OpenExternalLink(arg1) {
+  return window['go']['main']['App']['OpenExternalLink'](arg1);
+}
+
 export function OpenOutputDir() {
   return window['go']['main']['App']['OpenOutputDir']();
 }

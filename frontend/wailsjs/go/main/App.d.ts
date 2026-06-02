@@ -26,6 +26,8 @@ export function GetVersionInfo():Promise<main.VersionInfo>;
 
 export function GetYtdlpVersion():Promise<string>;
 
+export function OpenExternalLink(arg1:string):Promise<void>;
+
 export function OpenOutputDir():Promise<void>;
 
 export function SelectDirectory():Promise<string>;

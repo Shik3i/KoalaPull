@@ -3,36 +3,40 @@
 <div align="center">
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![Go Report Card](https://goreportcard.com/badge/github.com/Shik3i/KoalaPull)](https://goreportcard.com/report/github.com/Shik3i/KoalaPull)
 ![Go Version](https://img.shields.io/badge/Go-1.23+-blue)
 ![Wails](https://img.shields.io/badge/Wails-v2.12.0-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 
+A clean, native desktop download manager wrapping **yt-dlp** — download videos, audio, and playlists from hundreds of sites with a simple GUI.
+
 </div>
 
-A clean, minimalist GUI download manager wrapping **yt-dlp**. Download videos, audio, and playlists from hundreds of sites with a native desktop interface.
-
-![Screenshot placeholder](docs/screenshot.png)
+---
 
 ## Features
 
-- **On-demand dependency setup** — yt-dlp and ffmpeg are downloaded and isolated to your app data directory on first launch after clicking "Download &amp; Install".
-- **Cross-platform** — macOS, Windows, and Linux builds with a consistent native look using Wails (WebView2 / WKWebView / WebKitGTK).
-- **Rich metadata preview** — Fetch video title, uploader, thumbnail, and available formats before downloading.
-- **Format selection** — Choose resolution, container (MP4/MKV/MP3), and subtitle options.
-- **Playlist support** — Fetch playlist metadata with `--flat-playlist` speed; apply format settings to all videos.
-- **Concurrency limiting** — A Go semaphore caps parallel downloads at 3 to prevent saturating your CPU or network.
-- **Download queue** — Add multiple items, cancel individual downloads, and clear completed items.
-- **Real-time progress** — Stream progress, speed, ETA, and per-video playlist status live from the Go backend via Wails Events.
-- **Sidebar navigation** — Switch between Downloads, History, and Settings tabs.
-- **Download history** — Auto-saved history with timestamps, URLs, and file sizes.
-- **Light & dark themes** — Toggle between themes with persistent preference stored in app config.
-- **Persistent settings** — Default output directory and theme preference are stored and remembered across sessions.
+- **Dependency auto-setup** — yt-dlp and ffmpeg are downloaded and isolated to your app data directory on first launch (no system-wide install required). macOS binaries automatically have their quarantine attribute removed.
+- **Cross-platform native UI** — macOS, Windows, and Linux via Wails (WKWebView / WebView2 / WebKitGTK). Consistent look and feel on every OS.
+- **Metadata preview** — Paste a URL, fetch video title, uploader, thumbnail, duration, and available formats before downloading.
+- **Format selection** — Choose resolution (sorted by quality), container (MP4 / MKV / MP3), and subtitle options (none, auto-generated, or all languages).
+- **Playlist support** — Fast metadata via `--flat-playlist`; download all videos with your chosen format settings. Per-video progress displayed live.
+- **Concurrent downloads** — Queue multiple downloads and run up to 10 in parallel (configurable per your system).
+- **Download queue** — Add, cancel, and clear items. Real-time progress, speed, ETA, and playlist status streamed live from the Go backend.
+- **Download history** — Auto-saved with timestamps, file sizes, average speed, and status. Filter by URL or title, delete individual entries, or clear all.
+- **Theme support** — Toggle between dark and light themes. Preference is persisted across sessions.
+- **Auto-paste URLs** — Optional setting that automatically detects YouTube URLs from your clipboard.
+- **Update notifications** — Settings tab checks for new yt-dlp releases via the GitHub API (on-demand, no background polling). A badge appears on the Settings tab when an update is available.
+- **Privacy-first** — All fonts are bundled locally. A restrictive Content Security Policy blocks unwanted network requests from the webview. No telemetry, no analytics, no external CDNs.
+- **Keyboard shortcuts** — `Cmd/Ctrl+K` or `Cmd/Ctrl+L` focuses the URL input.
 
-## Installation
+---
 
-### Pre-built Binaries
+## Quick Start
 
-Download the latest release for your platform from the [Releases](https://github.com/Shik3i/KoalaPull/releases) tab.
+### Download
+
+Grab the latest release for your platform:
 
 | Platform | File |
 |----------|------|
@@ -41,74 +45,143 @@ Download the latest release for your platform from the [Releases](https://github
 | **Windows** | `koalapull-windows-amd64.exe` |
 | **Linux** | `koalapull-linux-amd64.AppImage` |
 
+> On first launch you'll see a **Setup** screen. Click **Download & Install** to fetch yt-dlp and ffmpeg — they're stored in your app config directory, not system-wide. After that, the main UI loads and you're ready to go.
+
 ### Build from Source
 
-See [Development Setup](#development-setup) below.
-
-## Development Setup
-
-### Prerequisites
-
-- [Go](https://go.dev/dl/) 1.23+
-- [Node.js](https://nodejs.org/) 18+
-- [Wails CLI](https://wails.io/docs/gettingstarted/installation) v2.12+
-  ```bash
-  go install github.com/wailsapp/wails/v2/cmd/wails@latest
-  ```
-
-- **Linux only**:
-  ```bash
-  sudo apt install libgtk-3-dev libwebkit2gtk-4.1-dev pkg-config
-  ```
-
-### Quick Start
-
 ```bash
+# Prerequisites: Go 1.23+, Node.js 18+, Wails CLI v2.12+
+go install github.com/wailsapp/wails/v2/cmd/wails@latest
+
 git clone https://github.com/Shik3i/KoalaPull.git
 cd KoalaPull
 cd frontend && npm install && cd ..
 wails dev
 ```
 
-The first launch loads the app with a minimal UI; go to **Settings** → **Download & Install** to fetch yt-dlp and ffmpeg automatically.
+---
 
-This opens the app in a native window with hot-reload enabled for both Go and React code.
+## Usage
 
-### Production Build
+### Your first download
 
-```bash
-wails build -clean -ldflags "-X main.AppVersion=$(git describe --tags --always --dirty)"
-```
+1. **Paste a URL** — from YouTube, Vimeo, Twitch, or any site yt-dlp supports.
+2. **Fetch metadata** — click "Fetch Metadata" or hit `Enter`. The app loads the video title, thumbnail, duration, and available formats.
+3. **Select options** — choose resolution, container (MP4/MKV/MP3), and subtitles.
+4. **Add to queue** — click "Add to Queue". The download starts immediately if fewer than your configured concurrency limit are running.
+5. **Monitor progress** — each item shows real-time progress, speed, and ETA. Cancel or clear items as needed.
 
-The compiled binary is written to `build/bin/`. Release builds inject the git tag as the app version via `-ldflags`.
+### Settings
+
+| Setting | Range | Default | Description |
+|---------|-------|---------|-------------|
+| Output directory | any folder | `~/Downloads/KoalaPull` | Where completed files are saved |
+| Theme | dark / light | dark | App colour scheme |
+| Max parallel downloads | 1 – 10 | 3 | How many downloads run simultaneously |
+| Auto-paste URL | on / off | off | Automatically detect YouTube URLs in your clipboard |
+
+All settings are persisted to `settings.json` in your app config directory.
+
+---
+
+## Dependencies
+
+### Runtime
+
+| Dependency | Purpose | Source |
+|---|---|---|
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Download engine (handles all sites) | Downloaded on first launch |
+| [ffmpeg](https://ffmpeg.org) | Video/audio processing and merging | Downloaded on first launch |
+
+> Both binaries are downloaded to your app data directory (`~/.config/KoalaPull/bin/` on Linux, `~/Library/Application Support/KoalaPull/bin/` on macOS, `%APPDATA%/KoalaPull/bin/` on Windows). No system-wide installation needed. Updates can be triggered from the Settings tab.
+
+### Go (backend)
+
+| Module | Version | Purpose |
+|---|---|---|
+| `github.com/wailsapp/wails/v2` | `v2.12.0` | Desktop app framework (native webview + Go IPC bridge) |
+
+Wails v2 is the **only direct Go dependency** — all other entries in `go.mod` are transitive dependencies of Wails itself.
+
+### Frontend
+
+| Package | Version | Type |
+|---|---|---|
+| `react` | `^18.2.0` | Runtime dependency |
+| `react-dom` | `^18.2.0` | Runtime dependency |
+| `vite` | `^3.0.7` | Build tool |
+| `tailwindcss` | `^3.4.19` | Utility-first CSS framework |
+| `typescript` | `^4.6.4` | Type safety |
+
+### Fonts
+
+Inter (300–700) and JetBrains Mono (400, 500) are bundled as TTF files in `frontend/public/fonts/`. **No external font CDN** — zero network requests for typography.
+
+---
 
 ## Tech Stack
 
 | Layer | Technology |
 |-------|-----------|
-| Backend | Go 1.23 + Wails v2.12 |
-| Frontend | React 18 + TypeScript + Vite 3 |
-| Styling | Tailwind CSS 3 (custom dark theme) |
-| Download Engine | yt-dlp + ffmpeg |
+| Backend | Go 1.23, Wails v2.12 |
+| Frontend | React 18, TypeScript, Vite 3 |
+| Styling | Tailwind CSS 3, CSS custom properties (dark/light themes) |
+| Download engine | yt-dlp + ffmpeg |
+
+---
 
 ## Project Structure
 
 ```
 KoalaPull/
-├── app.go                 # Go backend (deps, metadata, download, settings, history)
+├── app.go                 # Go backend — dependencies, metadata, downloads, settings, history
 ├── main.go                # Wails app entry point
 ├── frontend/
-│   ├── src/App.tsx        # Main React component (sidebar + tabs)
-│   ├── src/style.css      # Tailwind directives + light/dark theme vars
-│   └── wailsjs/           # Wails Go bindings (TypeScript + JS)
+│   ├── src/
+│   │   ├── App.tsx        # Main React component (sidebar + tabs)
+│   │   ├── style.css      # Tailwind directives + theme variables + local font faces
+│   │   └── main.tsx       # React mount point
+│   ├── public/fonts/      # Bundled local fonts (Inter, JetBrains Mono)
+│   └── index.html         # Entry point with Content Security Policy
 ├── build/                 # Build assets (icons, plists, manifests)
-├── wails.json             # Wails project config
-└── .github/workflows/     # CI/CD workflows
+├── wails.json             # Wails project configuration
+├── .github/workflows/     # CI/CD (GoReleaser for cross-platform builds)
+├── go.mod                 # Go module definition
+└── frontend/package.json  # Frontend dependencies
 ```
+
+---
+
+## Development
+
+### Prerequisites
+
+- [Go](https://go.dev/dl/) 1.23+
+- [Node.js](https://nodejs.org/) 18+
+- [Wails CLI](https://wails.io/docs/gettingstarted/installation) v2.12+
+- **Linux only:** `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `pkg-config`
+
+### Commands
+
+```bash
+# Development (hot-reload for Go + React)
+wails dev
+
+# Production build
+wails build -clean -ldflags "-X main.AppVersion=$(git describe --tags --always --dirty)"
+```
+
+The compiled binary is written to `build/bin/`. Release builds inject the git tag as the app version via `-ldflags`.
+
+---
 
 ## Contributing
 
 Contributions are welcome! See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and coding guidelines.
+
+**Code of Conduct:** Please note that this project adheres to a [Code of Conduct](CODE_OF_CONDUCT.md). By participating, you agree to uphold its terms.
+
+---
 
 ## License
 
