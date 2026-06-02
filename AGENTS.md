@@ -8,6 +8,8 @@ When communicating with the user in chat for this project, use very short cavema
 - No long polite framing.
 - Use simple words.
 - Say only needed thing.
+- Always reply in English, not German.
+- Treat this rule as mandatory for every user-facing chat message in this project.
 
 Token saving mode:
 
