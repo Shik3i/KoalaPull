@@ -1,0 +1,49 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@layer base {
+  body {
+    @apply bg-surface text-gray-200 font-sans antialiased;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-surface;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-surface-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-gray-600;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-accent text-black font-semibold px-5 py-2 rounded-md
+           hover:bg-accent-bright active:bg-accent-dim
+           transition-colors duration-150 ease-in-out
+           disabled:opacity-40 disabled:cursor-not-allowed;
+  }
+
+  .select-dark {
+    @apply bg-surface-lighter text-gray-300 border border-surface-border
+           rounded-md px-3 py-2 text-sm
+           focus:outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent/50
+           appearance-none cursor-pointer;
+  }
+
+  .input-dark {
+    @apply bg-surface-lighter text-gray-200 border border-surface-border
+           rounded-md px-4 py-2.5 text-sm
+           placeholder-gray-500
+           focus:outline-none focus:ring-1 focus:ring-accent/50 focus:border-accent/50;
+  }
+}
