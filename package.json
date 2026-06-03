@@ -1,0 +1,12 @@
+{
+  "name": "koalapull",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "build:website": "node website/build.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.0",
+    "sharp": "^0.34.5"
+  }
+}

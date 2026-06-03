@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://pull.koalastuff.net/sitemap.xml
