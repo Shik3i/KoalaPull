@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useMemo, Component } from 'react'
 import {
   CheckDependencies, DownloadDependencies,
-  FetchMetadata, StartDownload, CancelDownload,
+  FetchMetadata, StartDownloadWithPreset, CancelDownload,
   GetSettings, UpdateSettings, SelectDirectory,
   GetAppVersion, GetVersionInfo, GetHistory,
   ClearHistory, DeleteHistoryEntry,
@@ -11,6 +11,7 @@ import { EventsOn, ClipboardGetText } from "../wailsjs/runtime/runtime"
 import type { main } from "../wailsjs/go/models"
 import { formatTotalEta, parseBytes, parseSpeed } from "./lib/downloadMetrics"
 import { createTranslator, getLanguageLocale, isSupportedLanguage, type LanguageCode } from "./lib/i18n"
+import appIcon from './assets/images/app-icon.png'
 import './style.css'
 
 interface FormatInfo {
@@ -38,7 +39,18 @@ interface DownloadProgress {
 }
 
 interface FormatOption { label: string; formatId: string }
-interface AppSettings { defaultOutputDir: string; theme: string; maxConcurrency: number; autoPasteURL: boolean; language: LanguageCode }
+type DownloadPreset = 'best' | 'compatible' | 'audio' | 'custom'
+interface AppSettings {
+  defaultOutputDir: string
+  theme: string
+  maxConcurrency: number
+  autoPasteURL: boolean
+  language: LanguageCode
+  downloadPreset: DownloadPreset
+  customFormatId: string
+  customContainer: string
+  customSubtitle: string
+}
 interface VersionInfo { ytdlp: string; ffmpeg: string; app: string }
 interface SupportedSite {
   name: string
@@ -77,6 +89,49 @@ const supportedSites: SupportedSite[] = [
   { name: 'Bandcamp', blurbKey: 'supportedSites.bandcamp', href: 'https://bandcamp.com' },
 ]
 
+const defaultCustomFormatId = 'bestvideo+bestaudio/best'
+const defaultCustomContainer = 'mp4'
+const defaultCustomSubtitle = 'none'
+const defaultDownloadPreset: DownloadPreset = 'compatible'
+
+const downloadPresetOptions: Array<{ value: DownloadPreset; label: string; description: string }> = [
+  { value: 'best', label: 'Best quality', description: 'Highest quality. Good for power users.' },
+  { value: 'compatible', label: 'Compatible for most players', description: 'Safer files. Good for Windows Media Player and phones.' },
+  { value: 'audio', label: 'Audio only', description: 'Only sound. Saves as MP3.' },
+  { value: 'custom', label: 'Custom', description: 'Show the advanced fields.' },
+]
+
+function isDownloadPreset(value: string): value is DownloadPreset {
+  return value === 'best' || value === 'compatible' || value === 'audio' || value === 'custom'
+}
+
+function resolveDownloadChoice(
+  preset: DownloadPreset,
+  customFormatId: string,
+  customContainer: string,
+  customSubtitle: string,
+): { formatId: string; container: string; subtitle: string } {
+  switch (preset) {
+    case 'best':
+      return { formatId: defaultCustomFormatId, container: 'mkv', subtitle: 'none' }
+    case 'audio':
+      return { formatId: 'bestaudio/best', container: 'mp3', subtitle: 'none' }
+    case 'custom':
+      return {
+        formatId: customFormatId || defaultCustomFormatId,
+        container: customContainer || defaultCustomContainer,
+        subtitle: customSubtitle || defaultCustomSubtitle,
+      }
+    case 'compatible':
+    default:
+      return { formatId: defaultCustomFormatId, container: 'mp4', subtitle: 'none' }
+  }
+}
+
+function getPresetDescription(preset: DownloadPreset): string {
+  return downloadPresetOptions.find((item) => item.value === preset)?.description || ''
+}
+
 function formatAppVersionLabel(version: string): string {
   if (!version) return '...'
   if (version === 'dev' || version.startsWith('v')) return version
@@ -113,6 +168,17 @@ function SiteBadge({ site, blurb }: { site: SupportedSite; blurb: string }) {
           <p className="text-xs mt-1 leading-5" style={{ color: 'var(--text-muted)' }}>{blurb}</p>
         </div>
       </div>
+    </div>
+  )
+}
+
+function AppLogo({ sizeClass }: { sizeClass: string }) {
+  return (
+    <div
+      className={`${sizeClass} shrink-0 rounded-xl flex items-center justify-center overflow-hidden`}
+      style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}
+    >
+      <img src={appIcon} alt="" className="w-full h-full object-contain" draggable={false} />
     </div>
   )
 }
@@ -220,10 +286,11 @@ function App() {
   const [fetching, setFetching] = useState(false)
   const [fetchError, setFetchError] = useState('')
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null)
-  const [selectedFormat, setSelectedFormat] = useState('bestvideo+bestaudio/best')
+  const [selectedPreset, setSelectedPreset] = useState<DownloadPreset>(defaultDownloadPreset)
+  const [selectedFormat, setSelectedFormat] = useState(defaultCustomFormatId)
   const [formatOptions, setFormatOptions] = useState<FormatOption[]>([])
-  const [selectedContainer, setSelectedContainer] = useState('mp4')
-  const [selectedSubs, setSelectedSubs] = useState('none')
+  const [selectedContainer, setSelectedContainer] = useState(defaultCustomContainer)
+  const [selectedSubs, setSelectedSubs] = useState(defaultCustomSubtitle)
 
   const [depsReady, setDepsReady] = useState(false)
   const [checkingDeps, setCheckingDeps] = useState(true)
@@ -290,6 +357,10 @@ function App() {
         setMaxConcurrency(s.maxConcurrency || 3)
         setAutoPasteEnabled(!!s.autoPasteURL)
         setLanguage(isSupportedLanguage(s.language) ? s.language : 'en')
+        setSelectedPreset(isDownloadPreset(s.downloadPreset) ? s.downloadPreset : defaultDownloadPreset)
+        setSelectedFormat(s.customFormatId || defaultCustomFormatId)
+        setSelectedContainer(s.customContainer || defaultCustomContainer)
+        setSelectedSubs(s.customSubtitle || defaultCustomSubtitle)
       })
       .catch((err) => { console.warn('GetSettings failed:', err) })
   }, [])
@@ -301,6 +372,10 @@ function App() {
       maxConcurrency,
       autoPasteURL: autoPasteEnabled,
       language,
+      downloadPreset: selectedPreset,
+      customFormatId: selectedFormat,
+      customContainer: selectedContainer,
+      customSubtitle: selectedSubs,
       ...next,
     }
     await UpdateSettings(settings)
@@ -417,6 +492,14 @@ function App() {
   }, [metadata, t])
 
   useEffect(() => {
+    if (selectedPreset !== 'custom') return
+    if (formatOptions.length === 0) return
+    if (!formatOptions.some((opt) => opt.formatId === selectedFormat)) {
+      setSelectedFormat(formatOptions[0]?.formatId || defaultCustomFormatId)
+    }
+  }, [formatOptions, selectedPreset, selectedFormat])
+
+  useEffect(() => {
     const handleDlProgress = (data: DownloadProgress) => {
       setQueue((prev) => {
         const idx = prev.findIndex((item) => item.id === data.downloadId)
@@ -455,7 +538,6 @@ function App() {
     setFetchError('')
     setFetched(false)
     setMetadata(null)
-    setSelectedFormat('bestvideo+bestaudio/best')
     try {
       const meta = await FetchMetadata(url)
       if (requestId !== fetchRequestIdRef.current) return
@@ -473,7 +555,8 @@ function App() {
   const handleAddToQueue = async () => {
     if (!metadata) return
     try {
-      const downloadId = await StartDownload(url, selectedFormat, defaultOutputDir, selectedContainer, selectedSubs, metadata.title)
+      const choice = resolveDownloadChoice(selectedPreset, selectedFormat, selectedContainer, selectedSubs)
+      const downloadId = await StartDownloadWithPreset(url, choice.formatId, defaultOutputDir, choice.container, choice.subtitle, metadata.title, selectedPreset)
       setQueue((prev) => [
         ...prev,
         { id: downloadId, title: metadata.title, thumbnail: metadata.thumbnail, status: 'queued', progress: 0, speed: '', eta: '', fileSize: '', errorMsg: '', playlistStatus: '' },
@@ -553,9 +636,7 @@ function fmtTime(t: string): string {
   if (checkingDeps) {
     return (
       <div className="h-screen flex flex-col items-center justify-center" style={{ background: 'var(--color-surface)', color: 'var(--text-primary)' }}>
-        <div className="w-8 h-8 rounded-md flex items-center justify-center mb-4" style={{ background: 'var(--color-accent)' }}>
-          <span className="text-black font-bold text-sm">KP</span>
-        </div>
+        <AppLogo sizeClass="w-8 h-8 mb-4" />
         <h1 className="text-lg font-semibold tracking-tight mb-1">{t('app.name')}</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>{t('setup.checkingDependencies')}</p>
         <div className="mt-4 w-6 h-6 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--color-accent)', borderTopColor: 'transparent' }} />
@@ -567,9 +648,7 @@ function fmtTime(t: string): string {
   if (!depsReady) {
     return (
       <div className="h-screen flex flex-col items-center justify-center px-6" style={{ background: 'var(--color-surface)', color: 'var(--text-primary)' }}>
-        <div className="w-12 h-12 rounded-xl flex items-center justify-center mb-5" style={{ background: 'var(--color-accent)' }}>
-          <span className="text-black font-bold text-lg">KP</span>
-        </div>
+        <AppLogo sizeClass="w-12 h-12 mb-5" />
         <h1 className="text-xl font-semibold tracking-tight mb-1">{t('setup.title')}</h1>
         <p className="text-sm mb-6 text-center max-w-sm" style={{ color: 'var(--text-secondary)' }}>
           {t('setup.description')}
@@ -615,9 +694,7 @@ function fmtTime(t: string): string {
       {/* Sidebar */}
       <aside className="w-52 shrink-0 flex flex-col border-r" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
         <div className="flex items-center gap-2.5 px-5 py-4 border-b" style={{ borderColor: 'var(--color-surface-border)' }}>
-          <div className="w-7 h-7 rounded-md flex items-center justify-center" style={{ background: 'var(--color-accent)' }}>
-            <span className="text-black font-bold text-xs">KP</span>
-          </div>
+          <AppLogo sizeClass="w-7 h-7" />
           <span className="font-semibold text-sm">{t('app.name')}</span>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1" style={{ color: 'var(--text-secondary)' }}>
@@ -719,22 +796,84 @@ function fmtTime(t: string): string {
                           {t('downloads.playlistBadge', { count: metadata.entryCount })}
                         </span>
                       )}
-                      <div className="flex flex-wrap gap-2 mt-3">
-                        <select value={selectedFormat} onChange={(e) => setSelectedFormat(e.target.value)} className="select-dark text-xs flex-1 min-w-[140px]" title={tt('formatSelect')} aria-label={tt('formatSelect')}>
-                          {formatOptions.map((opt) => (
-                            <option key={opt.formatId} value={opt.formatId}>{opt.label}</option>
-                          ))}
-                        </select>
-                        <select value={selectedSubs} onChange={(e) => setSelectedSubs(e.target.value)} className="select-dark text-xs flex-1 min-w-[100px]" title={tt('subtitleSelect')} aria-label={tt('subtitleSelect')}>
-                          <option value="none">{t('downloads.subtitlesNone')}</option>
-                          <option value="auto">{t('downloads.subtitlesAuto')}</option>
-                          <option value="embed">{t('downloads.subtitlesEmbed')}</option>
-                        </select>
-                        <select value={selectedContainer} onChange={(e) => setSelectedContainer(e.target.value)} className="select-dark text-xs flex-1 min-w-[80px]" title={tt('containerSelect')} aria-label={tt('containerSelect')}>
-                          <option value="mp4">MP4</option>
-                          <option value="mkv">MKV</option>
-                          <option value="mp3">MP3</option>
-                        </select>
+                      <div className="mt-3 space-y-3">
+                        <div className="flex flex-wrap gap-2 items-start">
+                          <div className="flex-1 min-w-[220px]">
+                            <label className="block text-xs mb-1" style={{ color: 'var(--text-muted)' }}>Preset</label>
+                            <select
+                              value={selectedPreset}
+                              onChange={async (e) => {
+                                const next = e.target.value as DownloadPreset
+                                setSelectedPreset(next)
+                                try {
+                                  await saveSettings({ downloadPreset: next })
+                                } catch (err) {
+                                  console.warn('UpdateSettings failed:', err)
+                                }
+                              }}
+                              className="select-dark text-xs w-full"
+                              title="Download preset"
+                              aria-label="Download preset"
+                            >
+                              {downloadPresetOptions.map((opt) => (
+                                <option key={opt.value} value={opt.value}>{opt.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div className="flex-1 min-w-[220px] rounded-md px-3 py-2 text-xs leading-5" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)', color: 'var(--text-secondary)' }}>
+                            {getPresetDescription(selectedPreset)}
+                          </div>
+                        </div>
+
+                        {selectedPreset === 'custom' && (
+                          <div className="flex flex-wrap gap-2">
+                            <select
+                              value={selectedFormat}
+                              onChange={async (e) => {
+                                const next = e.target.value
+                                setSelectedFormat(next)
+                                try { await saveSettings({ customFormatId: next }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                              }}
+                              className="select-dark text-xs flex-1 min-w-[140px]"
+                              title={tt('formatSelect')}
+                              aria-label={tt('formatSelect')}
+                            >
+                              {formatOptions.map((opt) => (
+                                <option key={opt.formatId} value={opt.formatId}>{opt.label}</option>
+                              ))}
+                            </select>
+                            <select
+                              value={selectedSubs}
+                              onChange={async (e) => {
+                                const next = e.target.value
+                                setSelectedSubs(next)
+                                try { await saveSettings({ customSubtitle: next }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                              }}
+                              className="select-dark text-xs flex-1 min-w-[100px]"
+                              title={tt('subtitleSelect')}
+                              aria-label={tt('subtitleSelect')}
+                            >
+                              <option value="none">{t('downloads.subtitlesNone')}</option>
+                              <option value="auto">{t('downloads.subtitlesAuto')}</option>
+                              <option value="embed">{t('downloads.subtitlesEmbed')}</option>
+                            </select>
+                            <select
+                              value={selectedContainer}
+                              onChange={async (e) => {
+                                const next = e.target.value
+                                setSelectedContainer(next)
+                                try { await saveSettings({ customContainer: next }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                              }}
+                              className="select-dark text-xs flex-1 min-w-[80px]"
+                              title={tt('containerSelect')}
+                              aria-label={tt('containerSelect')}
+                            >
+                              <option value="mp4">MP4</option>
+                              <option value="mkv">MKV</option>
+                              <option value="mp3">MP3</option>
+                            </select>
+                          </div>
+                        )}
                       </div>
                       <button onClick={handleAddToQueue} className="btn-primary mt-3 text-sm flex items-center gap-1.5" title={tt('addToQueue')} aria-label={tt('addToQueue')}>
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

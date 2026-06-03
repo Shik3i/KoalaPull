@@ -30,25 +30,26 @@ import (
 var AppVersion = "dev"
 
 type App struct {
-	ctx             context.Context
-	configDir       string
-	binDir          string
-	startupErr      error
-	settingsMu      sync.Mutex
-	dependencyMu    sync.Mutex
-	dlMu            sync.Mutex
-	dlCounter       int
-	activeDownloads map[string]context.CancelFunc
-	adMu            sync.Mutex
-	lastFileSize    map[string]string
-	lastSpeed       map[string]string
-	semCount        atomic.Int32
-	semLimit        atomic.Int32
-	semWake         chan struct{}
-	historyMu       sync.Mutex
-	metadataMu      sync.Mutex
-	metadataCancel  context.CancelFunc
-	metadataSeq     uint64
+	ctx              context.Context
+	configDir        string
+	binDir           string
+	settingsFilePath string
+	startupErr       error
+	settingsMu       sync.Mutex
+	dependencyMu     sync.Mutex
+	dlMu             sync.Mutex
+	dlCounter        int
+	activeDownloads  map[string]context.CancelFunc
+	adMu             sync.Mutex
+	lastFileSize     map[string]string
+	lastSpeed        map[string]string
+	semCount         atomic.Int32
+	semLimit         atomic.Int32
+	semWake          chan struct{}
+	historyMu        sync.Mutex
+	metadataMu       sync.Mutex
+	metadataCancel   context.CancelFunc
+	metadataSeq      uint64
 }
 
 type DependencyStatus struct {
@@ -102,6 +103,10 @@ type Settings struct {
 	MaxConcurrency   int    `json:"maxConcurrency"`
 	AutoPasteURL     bool   `json:"autoPasteURL"`
 	Language         string `json:"language"`
+	DownloadPreset   string `json:"downloadPreset"`
+	CustomFormatID   string `json:"customFormatId"`
+	CustomContainer  string `json:"customContainer"`
+	CustomSubtitle   string `json:"customSubtitle"`
 }
 
 type HistoryEntry struct {
@@ -137,10 +142,14 @@ var sizeLineRegex = regexp.MustCompile(`\[download\]\s+100%\s+of\s+~?([\d.]+\S+)
 var playlistItemRegex = regexp.MustCompile(`\[download\]\s+Downloading\s+(video|item)\s+(\d+)\s+of\s+(\d+)`)
 
 const (
-	defaultMaxConcurrency = 3
-	maxMaxConcurrency     = 10
-	maxInputLength        = 2048
-	maxPathLength         = 4096
+	defaultMaxConcurrency  = 3
+	maxMaxConcurrency      = 10
+	maxInputLength         = 2048
+	maxPathLength          = 4096
+	defaultDownloadPreset  = "compatible"
+	defaultCustomFormatID  = "bestvideo+bestaudio/best"
+	defaultCustomContainer = "mp4"
+	defaultCustomSubtitle  = "none"
 )
 
 func NewApp() *App {
@@ -207,6 +216,7 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.configDir = filepath.Join(configDir, "KoalaPull")
 	a.binDir = filepath.Join(a.configDir, "bin")
+	a.settingsFilePath = a.resolveSettingsPath()
 	if err := os.MkdirAll(a.binDir, 0755); err != nil {
 		a.startupErr = fmt.Errorf("create bin directory: %w", err)
 		println("Failed to create bin directory:", err.Error())
@@ -265,7 +275,50 @@ func (a *App) nextDownloadID() string {
 // ---------- Settings ----------
 
 func (a *App) settingsPath() string {
-	return filepath.Join(a.configDir, "settings.json")
+	if a.settingsFilePath != "" {
+		return a.settingsFilePath
+	}
+	return a.resolveSettingsPath()
+}
+
+func (a *App) portableSettingsPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(exe), "settings.json")
+}
+
+func isWritableDir(dir string) bool {
+	f, err := os.CreateTemp(dir, ".koalapull-write-test-*")
+	if err != nil {
+		return false
+	}
+	name := f.Name()
+	_ = f.Close()
+	_ = os.Remove(name)
+	return true
+}
+
+func (a *App) resolveSettingsPath() string {
+	portable := a.portableSettingsPath()
+	return resolveSettingsPathFor(a.configDir, portable)
+}
+
+func resolveSettingsPathFor(configDir, portablePath string) string {
+	fallback := filepath.Join(configDir, "settings.json")
+	if portablePath == "" {
+		return fallback
+	}
+	if fileExists(portablePath) || isWritableDir(filepath.Dir(portablePath)) {
+		if !fileExists(portablePath) && fileExists(fallback) {
+			if data, err := os.ReadFile(fallback); err == nil {
+				_ = os.WriteFile(portablePath, data, 0644)
+			}
+		}
+		return portablePath
+	}
+	return fallback
 }
 
 func defaultOutputDir() string {
@@ -291,7 +344,17 @@ func (a *App) getSettingsLocked() Settings {
 			return validateSettings(s)
 		}
 	}
-	s := validateSettings(Settings{DefaultOutputDir: defaultOutputDir(), Theme: "dark", MaxConcurrency: defaultMaxConcurrency, AutoPasteURL: false, Language: "en"})
+	s := validateSettings(Settings{
+		DefaultOutputDir: defaultOutputDir(),
+		Theme:            "dark",
+		MaxConcurrency:   defaultMaxConcurrency,
+		AutoPasteURL:     false,
+		Language:         "en",
+		DownloadPreset:   defaultDownloadPreset,
+		CustomFormatID:   defaultCustomFormatID,
+		CustomContainer:  defaultCustomContainer,
+		CustomSubtitle:   defaultCustomSubtitle,
+	})
 	if err := a.writeSettingsLocked(s); err != nil {
 		println("writeSettings error:", err.Error())
 	}
@@ -356,6 +419,20 @@ func validateSettings(s Settings) Settings {
 	}
 	if s.Language != "en" && s.Language != "de" && s.Language != "fr" {
 		s.Language = "en"
+	}
+	switch s.DownloadPreset {
+	case "best", "compatible", "audio", "custom":
+	default:
+		s.DownloadPreset = defaultDownloadPreset
+	}
+	if s.CustomFormatID == "" {
+		s.CustomFormatID = defaultCustomFormatID
+	}
+	if s.CustomContainer != "mp4" && s.CustomContainer != "mkv" && s.CustomContainer != "mp3" {
+		s.CustomContainer = defaultCustomContainer
+	}
+	if s.CustomSubtitle != "none" && s.CustomSubtitle != "auto" && s.CustomSubtitle != "embed" {
+		s.CustomSubtitle = defaultCustomSubtitle
 	}
 	return s
 }
@@ -1132,6 +1209,10 @@ func (a *App) clearMetadataContext(cancel context.CancelFunc, seq uint64) {
 const maxErrLines = 20
 
 func (a *App) StartDownload(url, formatID, outputDir, container, subtitle, title string) (string, error) {
+	return a.StartDownloadWithPreset(url, formatID, outputDir, container, subtitle, title, defaultDownloadPreset)
+}
+
+func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subtitle, title, preset string) (string, error) {
 	if url == "" || formatID == "" {
 		return "", fmt.Errorf("url and formatID are required")
 	}
@@ -1159,17 +1240,7 @@ func (a *App) StartDownload(url, formatID, outputDir, container, subtitle, title
 		"--newline",
 		"-o", template,
 	}
-	if container == "mp3" {
-		args = append(args, "-x", "--audio-format", "mp3")
-	} else if container != "" && container != "none" {
-		args = append(args, "--merge-output-format", container)
-	}
-	switch subtitle {
-	case "auto":
-		args = append(args, "--write-auto-subs", "--sub-langs", "en", "--embed-subs")
-	case "embed":
-		args = append(args, "--sub-langs", "all", "--embed-subs")
-	}
+	args = append(args, downloadPostProcessingArgs(preset, container, subtitle)...)
 	args = append(args, "--", url)
 
 	ctx, cancel := context.WithTimeout(a.appContext(), 1*time.Hour)
@@ -1179,6 +1250,29 @@ func (a *App) StartDownload(url, formatID, outputDir, container, subtitle, title
 
 	go a.runDownload(ctx, cancel, downloadID, args, title, url, formatID)
 	return downloadID, nil
+}
+
+func downloadPostProcessingArgs(preset, container, subtitle string) []string {
+	switch preset {
+	case "audio":
+		return []string{"-x", "--audio-format", "mp3"}
+	case "compatible":
+		return []string{"--recode-video", "mp4"}
+	default:
+		args := make([]string, 0, 4)
+		if container == "mp3" {
+			args = append(args, "-x", "--audio-format", "mp3")
+		} else if container != "" && container != "none" {
+			args = append(args, "--merge-output-format", container)
+		}
+		switch subtitle {
+		case "auto":
+			args = append(args, "--write-auto-subs", "--sub-langs", "en", "--embed-subs")
+		case "embed":
+			args = append(args, "--sub-langs", "all", "--embed-subs")
+		}
+		return args
+	}
 }
 
 func isAllowedDownloadURL(raw string) bool {

@@ -96,6 +96,10 @@ export namespace main {
 	    maxConcurrency: number;
 	    autoPasteURL: boolean;
 	    language: string;
+	    downloadPreset: string;
+	    customFormatId: string;
+	    customContainer: string;
+	    customSubtitle: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -108,6 +112,10 @@ export namespace main {
 	        this.maxConcurrency = source["maxConcurrency"];
 	        this.autoPasteURL = source["autoPasteURL"];
 	        this.language = source["language"];
+	        this.downloadPreset = source["downloadPreset"];
+	        this.customFormatId = source["customFormatId"];
+	        this.customContainer = source["customContainer"];
+	        this.customSubtitle = source["customSubtitle"];
 	    }
 	}
 	export class UpdateInfo {
@@ -190,3 +198,4 @@ export namespace main {
 	}
 
 }
+

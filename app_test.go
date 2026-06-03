@@ -196,6 +196,58 @@ func TestValidateSettingsDefaultsLanguageToEnglish(t *testing.T) {
 	}
 }
 
+func TestValidateSettingsDefaultsDownloadPresetFields(t *testing.T) {
+	settings := validateSettings(Settings{})
+	if settings.DownloadPreset != defaultDownloadPreset {
+		t.Fatalf("DownloadPreset = %q, want %q", settings.DownloadPreset, defaultDownloadPreset)
+	}
+	if settings.CustomFormatID != defaultCustomFormatID {
+		t.Fatalf("CustomFormatID = %q, want %q", settings.CustomFormatID, defaultCustomFormatID)
+	}
+	if settings.CustomContainer != defaultCustomContainer {
+		t.Fatalf("CustomContainer = %q, want %q", settings.CustomContainer, defaultCustomContainer)
+	}
+	if settings.CustomSubtitle != defaultCustomSubtitle {
+		t.Fatalf("CustomSubtitle = %q, want %q", settings.CustomSubtitle, defaultCustomSubtitle)
+	}
+}
+
+func TestResolveSettingsPathUsesPortableWhenWritable(t *testing.T) {
+	root := t.TempDir()
+	appDir := filepath.Join(root, "app")
+	if err := os.MkdirAll(appDir, 0755); err != nil {
+		t.Fatalf("mkdir app dir: %v", err)
+	}
+	want := filepath.Join(appDir, "settings.json")
+	if got := resolveSettingsPathFor(filepath.Join(root, "config"), want); got != want {
+		t.Fatalf("resolveSettingsPathFor() = %q, want %q", got, want)
+	}
+}
+
+func TestResolveSettingsPathFallsBackWhenPortableUnavailable(t *testing.T) {
+	root := t.TempDir()
+	configDir := filepath.Join(root, "config")
+	if err := os.MkdirAll(configDir, 0755); err != nil {
+		t.Fatalf("mkdir config dir: %v", err)
+	}
+	want := filepath.Join(configDir, "settings.json")
+	if got := resolveSettingsPathFor(configDir, ""); got != want {
+		t.Fatalf("resolveSettingsPathFor() = %q, want %q", got, want)
+	}
+}
+
+func TestDownloadPostProcessingArgsByPreset(t *testing.T) {
+	if got := downloadPostProcessingArgs("compatible", "mkv", "embed"); len(got) != 2 || got[0] != "--recode-video" || got[1] != "mp4" {
+		t.Fatalf("compatible preset args = %#v, want recode-video mp4", got)
+	}
+	if got := downloadPostProcessingArgs("audio", "mkv", "embed"); len(got) != 3 || got[0] != "-x" || got[1] != "--audio-format" || got[2] != "mp3" {
+		t.Fatalf("audio preset args = %#v, want extract-audio mp3", got)
+	}
+	if got := downloadPostProcessingArgs("custom", "mkv", "embed"); len(got) < 2 || got[0] != "--merge-output-format" || got[1] != "mkv" {
+		t.Fatalf("custom preset args = %#v, want merge-output-format mkv", got)
+	}
+}
+
 func TestCollectRecentLinesReportsLongLineScannerError(t *testing.T) {
 	line := strings.Repeat("x", 70*1024)
 	lines, err := collectRecentLines(strings.NewReader(line), 20)

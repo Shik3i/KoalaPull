@@ -70,6 +70,10 @@ export function StartDownload(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['StartDownload'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
+export function StartDownloadWithPreset(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
+  return window['go']['main']['App']['StartDownloadWithPreset'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+}
+
 export function UpdateDependencies() {
   return window['go']['main']['App']['UpdateDependencies']();
 }
