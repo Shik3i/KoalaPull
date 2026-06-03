@@ -14,6 +14,8 @@ const placeholderDomain = 'https://pull.koalastuff.net';
 const repoUrl = 'https://github.com/Shik3i/KoalaPull';
 const languages = ['en', 'de', 'fr'];
 
+const log = (msg) => console.log(`[build] ${msg}`);
+
 function ensureDir(dir) {
   fs.mkdirSync(dir, { recursive: true });
 }
@@ -138,8 +140,10 @@ async function writeImageSet(baseName, width, options = {}) {
   const pipeline = sharp(sourceIcon).resize({ width, ...resizeOptions });
   const webpPath = path.join(assetsOutDir, `${baseName}.webp`);
   const avifPath = path.join(assetsOutDir, `${baseName}.avif`);
-  await pipeline.clone().webp({ quality: 90 }).toFile(webpPath);
-  await pipeline.clone().avif({ quality: 80, speed: 4 }).toFile(avifPath);
+  await Promise.all([
+    pipeline.clone().webp({ quality: 90 }).toFile(webpPath),
+    pipeline.clone().avif({ quality: 80, speed: 4 }).toFile(avifPath)
+  ]);
 }
 
 async function buildImages() {
@@ -149,36 +153,39 @@ async function buildImages() {
 
   ensureDir(assetsOutDir);
 
-  const iconSizes = [
+  log('Generating icon images...');
+  const imageJobs = [];
+
+  for (const spec of [
     { name: 'NewLogoIcon', width: 200 },
     { name: 'NewLogoIcon_128', width: 128 },
-    { name: 'NewLogoIcon_64', width: 64 }
-  ];
-
-  for (const spec of iconSizes) {
-    await writeImageSet(spec.name, spec.width);
-  }
-
-  const heroSizes = [
+    { name: 'NewLogoIcon_64', width: 64 },
     { name: 'IconHero-1x', width: 180 },
     { name: 'IconHero', width: 360 }
-  ];
-
-  for (const spec of heroSizes) {
-    await writeImageSet(spec.name, spec.width);
+  ]) {
+    imageJobs.push(writeImageSet(spec.name, spec.width));
   }
 
-  await sharp(sourceIcon).resize({ width: 16, height: 16, fit: 'cover' }).png().toFile(path.join(assetsOutDir, 'favicon-16x16.png'));
-  await sharp(sourceIcon).resize({ width: 32, height: 32, fit: 'cover' }).png().toFile(path.join(assetsOutDir, 'favicon-32x32.png'));
-  await sharp(sourceIcon).resize({ width: 192, height: 192, fit: 'cover' }).png().toFile(path.join(assetsOutDir, 'icon-192x192.png'));
-  await sharp(sourceIcon).resize({ width: 180, height: 180, fit: 'cover' }).png().toFile(path.join(assetsOutDir, 'apple-touch-icon.png'));
-  copyDirContents(sourceFontsDir, path.join(wwwDir, 'fonts'));
+  imageJobs.push(
+    sharp(sourceIcon).resize({ width: 16, height: 16, fit: 'cover' }).png().toFile(path.join(assetsOutDir, 'favicon-16x16.png')),
+    sharp(sourceIcon).resize({ width: 32, height: 32, fit: 'cover' }).png().toFile(path.join(assetsOutDir, 'favicon-32x32.png')),
+    sharp(sourceIcon).resize({ width: 192, height: 192, fit: 'cover' }).png().toFile(path.join(assetsOutDir, 'icon-192x192.png')),
+    sharp(sourceIcon).resize({ width: 180, height: 180, fit: 'cover' }).png().toFile(path.join(assetsOutDir, 'apple-touch-icon.png'))
+  );
+
+  await Promise.all(imageJobs);
+
+  if (fs.existsSync(sourceFontsDir)) {
+    log('Copying fonts...');
+    copyDirContents(sourceFontsDir, path.join(wwwDir, 'fonts'));
+  }
 }
 
 async function build() {
   ensureDir(wwwDir);
   ensureDir(assetsOutDir);
 
+  log('Checking source files...');
   const requiredSources = ['template.html', 'style.css', 'app.js', 'lang-init.js'];
   for (const file of requiredSources) {
     const filePath = path.join(websiteDir, file);
@@ -187,23 +194,33 @@ async function build() {
     }
   }
 
+  log('Reading template and source assets...');
   const template = readText(path.join(websiteDir, 'template.html'));
   const styleRaw = readText(path.join(websiteDir, 'style.css'));
   const appRaw = readText(path.join(websiteDir, 'app.js'));
   const langRaw = readText(path.join(websiteDir, 'lang-init.js'));
+
+  log('Minifying CSS...');
   const styleMin = minifyCss(styleRaw);
-  const appMin = await minifyJs(appRaw);
-  const langMin = await minifyJs(langRaw);
+  log('Minifying JS...');
+  const [appMin, langMin] = await Promise.all([
+    minifyJs(appRaw),
+    minifyJs(langRaw)
+  ]);
+
   const styleName = `style.${hash8(styleMin)}.min.css`;
   const appName = `app.${hash8(appMin)}.min.js`;
   const langName = `lang-init.${hash8(langMin)}.min.js`;
 
+  log('Cleaning previous build artifacts...');
+  const hashCleanup = /^(style|app|lang-init)\.[a-f0-9]+\.min\.(css|js)$/;
   for (const file of fs.readdirSync(wwwDir)) {
-    if (/^(style|app|lang-init)\.[a-f0-9]{8}\.min\.(css|js)$/.test(file)) {
+    if (hashCleanup.test(file)) {
       fs.rmSync(path.join(wwwDir, file), { force: true });
     }
   }
 
+  log(`Writing ${styleName}, ${appName}, ${langName}`);
   fs.writeFileSync(path.join(wwwDir, styleName), styleMin);
   fs.writeFileSync(path.join(wwwDir, appName), appMin);
   fs.writeFileSync(path.join(wwwDir, langName), langMin);
@@ -221,6 +238,7 @@ async function build() {
     flatLocales[lang] = flattenObject(JSON.parse(readText(path.join(localeDir, `${lang}.json`))));
   }
 
+  log('Generating locale pages...');
   for (const lang of localeFiles) {
     const locale = flatLocales[lang];
     const assetPrefix = lang === 'en' ? '' : '../';
@@ -238,16 +256,23 @@ async function build() {
     html = injectAvifPictures(html);
 
     fs.writeFileSync(path.join(outputDir, 'index.html'), html);
+    log(`  ${lang}/index.html`);
   }
 
   const staticFiles = ['robots.txt', 'site.webmanifest', 'sitemap.xml', 'version.json'];
   for (const file of staticFiles) {
-    copyFileIfExists(path.join(websiteDir, file), path.join(wwwDir, file));
+    const ok = copyFileIfExists(path.join(websiteDir, file), path.join(wwwDir, file));
+    if (ok) log(`  copied ${file}`);
   }
 
+  log('Building images...');
   await buildImages();
+  log('Images done');
 
-  copyFileIfExists(path.join(websiteDir, 'README.md'), path.join(wwwDir, 'README.md'));
+  const readmeOk = copyFileIfExists(path.join(websiteDir, 'README.md'), path.join(wwwDir, 'README.md'));
+  if (readmeOk) log('  copied README.md');
+
+  log('Build complete.');
 }
 
 build().catch((error) => {
