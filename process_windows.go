@@ -57,7 +57,7 @@ func (a *App) IsBrowserRunning(browser string) (bool, error) {
 		return false, nil
 	}
 	for _, proc := range processes.windows {
-		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		ctx, cancel := context.WithTimeout(a.appContext(), 3*time.Second)
 		out, err := commandOutput(ctx, "tasklist", "/FI", fmt.Sprintf("IMAGENAME eq %s", proc), "/FO", "CSV", "/NH")
 		cancel()
 		if err == nil && strings.Contains(strings.ToLower(string(out)), strings.ToLower(proc)) {
@@ -74,7 +74,7 @@ func (a *App) KillBrowser(browser string) error {
 	}
 	var lastErr error
 	for _, proc := range processes.windows {
-		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		ctx, cancel := context.WithTimeout(a.appContext(), 5*time.Second)
 		_, err := commandOutput(ctx, "taskkill", "/F", "/IM", proc)
 		cancel()
 		if err != nil {

@@ -38,16 +38,16 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        uses: actions/checkout@v4
 
       - name: Setup Go
-        uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        uses: actions/setup-go@v5
         with:
           go-version: "1.23"
           cache: true
 
       - name: Setup Node.js
-        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        uses: actions/setup-node@v4
         with:
           node-version: "20"
           cache: "npm"
@@ -120,7 +120,7 @@ jobs:
           echo "artifact_path=$artifact_path" >> "$GITHUB_OUTPUT"
 
       - name: Upload action artifact
-        uses: actions/upload-artifact@5d5d22a31266fc26b2d1190deae512368b2299ff # v4
+        uses: actions/upload-artifact@v4
         with:
           name: koalapull-${{ matrix.goos }}-${{ matrix.goarch }}
           path: ${{ steps.package.outputs.artifact_path }}
@@ -131,13 +131,13 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Download all artifacts
-        uses: actions/download-artifact@65a9edc5881444af0b9093a5e628f2fc476b8a49 # v4
+        uses: actions/download-artifact@v4
         with:
           path: release-assets
           pattern: koalapull-*
           merge-multiple: true
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        uses: softprops/action-gh-release@v2
         with:
           files: release-assets/*

@@ -206,3 +206,38 @@ func mustReadRepoFile(t *testing.T, parts ...string) string {
 	}
 	return string(data)
 }
+
+func TestWorkflowActionsUseVersionTagsNotRawSHAs(t *testing.T) {
+	for _, wf := range []string{"release.yml", "ci.yml"} {
+		data := mustReadRepoFile(t, ".github", "workflows", wf)
+		for i, line := range strings.Split(data, "\n") {
+			trimmed := strings.TrimSpace(line)
+			if !strings.HasPrefix(trimmed, "uses:") {
+				continue
+			}
+			// Extract the ref after the @ sign
+			atIdx := strings.LastIndex(trimmed, "@")
+			if atIdx == -1 {
+				continue
+			}
+			ref := strings.TrimSpace(trimmed[atIdx+1:])
+			// Strip inline comments like "# v4"
+			if commentIdx := strings.Index(ref, "#"); commentIdx != -1 {
+				ref = strings.TrimSpace(ref[:commentIdx])
+			}
+			// Reject 40-char hex strings — these are almost always hallucinated by AI
+			if len(ref) == 40 && isAllHex(ref) {
+				t.Fatalf("%s line %d: action pinned to raw 40-char SHA %q — use a version tag (@v4) instead. Raw SHAs are frequently hallucinated by AI and unverifiable without network access.", wf, i+1, ref)
+			}
+		}
+	}
+}
+
+func isAllHex(s string) bool {
+	for _, c := range s {
+		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
+			return false
+		}
+	}
+	return true
+}

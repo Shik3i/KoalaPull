@@ -398,6 +398,12 @@ export class ErrorBoundary extends Component<{ children: React.ReactNode }, { ha
   }
 }
 
+const statusColors: Record<string, string> = {
+  downloading: 'text-accent', starting: 'text-accent',
+  queued: 'text-gray-400', completed: 'text-green-400',
+  error: 'text-red-400', cancelled: 'text-yellow-400',
+}
+
 function App() {
   const urlInputRef = useRef<HTMLInputElement>(null)
   const fetchRequestIdRef = useRef(0)
@@ -448,7 +454,7 @@ function App() {
   const t = useMemo(() => createTranslator(language), [language])
   const tRef = useRef(t)
   tRef.current = t
-  const tt = (key: string, params?: Record<string, string | number>) => t(`tooltips.${key}`, params)
+  const tt = useCallback((key: string, params?: Record<string, string | number>) => t(`tooltips.${key}`, params), [t])
 
   const settingsRef = useRef<AppSettings>({
     defaultOutputDir: '', theme: 'dark', maxConcurrency: 3, autoPasteURL: false,
@@ -503,7 +509,7 @@ function App() {
         setSelectedFormat(s.customFormatId || defaultCustomFormatId)
         setSelectedContainer(s.customContainer || defaultCustomContainer)
         setSelectedSubs(s.customSubtitle || defaultCustomSubtitle)
-        setCookieSource(s.cookieSource as 'none' | 'browser' | 'file' || 'none')
+        setCookieSource((s.cookieSource as 'none' | 'browser' | 'file') || 'none')
         setCookieBrowser(s.cookieBrowser || 'chrome')
         setCookieFilePath(s.cookieFilePath || '')
       })
@@ -805,7 +811,13 @@ function App() {
     }
   }
 
-  const handleCancel = (id: string) => { CancelDownload(id).catch((err) => { console.warn('CancelDownload failed:', err) }) }
+  const handleCancel = useCallback((id: string) => {
+    CancelDownload(id).catch((err) => { console.warn('CancelDownload failed:', err) })
+  }, [])
+
+  const handleOpenFolder = useCallback(() => {
+    OpenOutputDir().catch((err) => { console.warn('OpenOutputDir failed:', err) })
+  }, [])
 
   const handleClearCompleted = () => {
     setQueue((prev) => prev.filter((item) => !['completed', 'error', 'cancelled'].includes(item.status)))
@@ -858,11 +870,7 @@ function App() {
     if (tab === 'history') loadHistory()
   }
 
-  const statusColors: Record<string, string> = {
-    downloading: 'text-accent', starting: 'text-accent',
-    queued: 'text-gray-400', completed: 'text-green-400',
-    error: 'text-red-400', cancelled: 'text-yellow-400',
-  }
+
 
 const fmtTimeRef = useRef<Map<string, string>>(new Map())
 const fmtTime = useCallback((t: string): string => {
@@ -1193,7 +1201,7 @@ const fmtTime = useCallback((t: string): string => {
                         key={item.id}
                         item={item}
                         onCancel={handleCancel}
-                        onOpenFolder={() => OpenOutputDir().catch((err) => { console.warn('OpenOutputDir failed:', err) })}
+                        onOpenFolder={handleOpenFolder}
                         statusColors={statusColors}
                         tt={tt}
                         t={t}

@@ -658,16 +658,9 @@ func writeHistoryEntriesToFile(path string, entries []HistoryEntry) error {
 func (a *App) loadHistoryCache() {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
-	a.loadHistoryCacheLocked()
+	a.ensureHistoryLoadedLocked()
 }
 
-func (a *App) loadHistoryCacheLocked() {
-	if a.historyLoaded {
-		return
-	}
-	a.historyCache = readHistoryEntriesFromFile(a.historyPath())
-	a.historyLoaded = true
-}
 
 func (a *App) ensureHistoryLoadedLocked() {
 	if a.historyLoaded {
@@ -1596,11 +1589,15 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 
 			stderr, err := cmd.StderrPipe()
 			if err != nil {
+				a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: fmt.Sprintf("stderr pipe: %v", err), StartTime: startTime, EndTime: time.Now()})
+				a.emitDownloadProgress(downloadID, 0, "", "", "", "error", fmt.Sprintf("stderr pipe: %v", err), "")
 				return
 			}
 
 			stdout, err := cmd.StdoutPipe()
 			if err != nil {
+				a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: fmt.Sprintf("stdout pipe: %v", err), StartTime: startTime, EndTime: time.Now()})
+				a.emitDownloadProgress(downloadID, 0, "", "", "", "error", fmt.Sprintf("stdout pipe: %v", err), "")
 				return
 			}
 
@@ -1611,6 +1608,8 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 					a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
 					return
 				}
+				a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: fmt.Sprintf("start command: %v", err), StartTime: startTime, EndTime: time.Now()})
+				a.emitDownloadProgress(downloadID, 0, "", "", "", "error", fmt.Sprintf("start command: %v", err), "")
 				return
 			}
 			defer cleanup()
