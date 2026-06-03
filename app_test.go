@@ -251,6 +251,25 @@ func TestResolveSettingsPathFallsBackWhenPortableUnavailable(t *testing.T) {
 	}
 }
 
+func TestStartupResolvesPortableBinDir(t *testing.T) {
+	app := NewApp()
+	app.ctx = context.Background()
+	app.startup(context.Background())
+	if app.binDir == "" {
+		t.Fatal("binDir not initialized")
+	}
+	exe, err := os.Executable()
+	if err == nil {
+		exeDir := filepath.Dir(exe)
+		if isWritableDir(exeDir) {
+			want := filepath.Join(exeDir, "bin")
+			if app.binDir != want {
+				t.Fatalf("binDir = %q, want %q (portable path)", app.binDir, want)
+			}
+		}
+	}
+}
+
 func TestDownloadPostProcessingArgsByPreset(t *testing.T) {
 	if got := downloadPostProcessingArgs("compatible", "mkv", "embed"); len(got) != 2 || got[0] != "--recode-video" || got[1] != "mp4" {
 		t.Fatalf("compatible preset args = %#v, want recode-video mp4", got)
@@ -263,16 +282,6 @@ func TestDownloadPostProcessingArgsByPreset(t *testing.T) {
 	}
 }
 
-func TestCollectRecentLinesReportsLongLineScannerError(t *testing.T) {
-	line := strings.Repeat("x", 70*1024)
-	lines, err := collectRecentLines(strings.NewReader(line), 20)
-	if err != nil {
-		t.Fatalf("collectRecentLines returned error for long line: %v", err)
-	}
-	if len(lines) != 1 || lines[0] != line {
-		t.Fatalf("collectRecentLines did not preserve long line; len=%d", len(lines))
-	}
-}
 
 func TestHistoryHelpersPreserveFileOrder(t *testing.T) {
 	entries := []HistoryEntry{
@@ -305,21 +314,69 @@ func TestHistoryHelpersPreserveFileOrder(t *testing.T) {
 }
 
 func TestParseProgressLine(t *testing.T) {
-	pct, size, speed, eta, ok := parseProgressLine("[download]  42.5% of ~12.34MiB at 1.23MiB/s ETA 00:10")
-	if !ok {
-		t.Fatal("parseProgressLine rejected a valid yt-dlp line")
+	tests := []struct {
+		line  string
+		ok    bool
+		pct   float64
+		size  string
+		speed string
+		eta   string
+	}{
+		{
+			line:  "[download]  42.5% of ~12.34MiB at 1.23MiB/s ETA 00:10",
+			ok:    true,
+			pct:   42.5,
+			size:  "12.34MiB",
+			speed: "1.23MiB/s",
+			eta:   "00:10",
+		},
+		{
+			line:  "[download]   0.2% of  614.43KiB at  987.13KiB/s ETA 00:00",
+			ok:    true,
+			pct:   0.2,
+			size:  "614.43KiB",
+			speed: "987.13KiB/s",
+			eta:   "00:00",
+		},
+		{
+			line:  "[download]   0.5% of  614.43KiB at    1.63MiB/s ETA 00:00",
+			ok:    true,
+			pct:   0.5,
+			size:  "614.43KiB",
+			speed: "1.63MiB/s",
+			eta:   "00:00",
+		},
+		{
+			line:  "[download] 100.0% of  614.43KiB at    8.50MiB/s ETA 00:00",
+			ok:    true,
+			pct:   100.0,
+			size:  "614.43KiB",
+			speed: "8.50MiB/s",
+			eta:   "00:00",
+		},
 	}
-	if pct != 42.5 {
-		t.Fatalf("percent = %v, want 42.5", pct)
-	}
-	if size != "12.34MiB" {
-		t.Fatalf("file size = %q, want 12.34MiB", size)
-	}
-	if speed != "1.23MiB/s" {
-		t.Fatalf("speed = %q, want 1.23MiB/s", speed)
-	}
-	if eta != "00:10" {
-		t.Fatalf("eta = %q, want 00:10", eta)
+
+	for _, tt := range tests {
+		pct, size, speed, eta, ok := parseProgressLine(tt.line)
+		if ok != tt.ok {
+			t.Errorf("parseProgressLine(%q) ok = %v, want %v", tt.line, ok, tt.ok)
+			continue
+		}
+		if !ok {
+			continue
+		}
+		if pct != tt.pct {
+			t.Errorf("parseProgressLine(%q) pct = %v, want %v", tt.line, pct, tt.pct)
+		}
+		if size != tt.size {
+			t.Errorf("parseProgressLine(%q) size = %q, want %q", tt.line, size, tt.size)
+		}
+		if speed != tt.speed {
+			t.Errorf("parseProgressLine(%q) speed = %q, want %q", tt.line, speed, tt.speed)
+		}
+		if eta != tt.eta {
+			t.Errorf("parseProgressLine(%q) eta = %q, want %q", tt.line, eta, tt.eta)
+		}
 	}
 }
 

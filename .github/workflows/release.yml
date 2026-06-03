@@ -99,15 +99,21 @@ jobs:
           mkdir -p release-assets
           asset_name="koalapull-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.${{ matrix.asset_ext }}"
 
+          mkdir -p build/bin/KoalaPull
+          cp README_PORTABLE.txt build/bin/KoalaPull/README.txt
+
           if [ "${{ matrix.goos }}" = "darwin" ]; then
             artifact_path="release-assets/${asset_name}"
-            ditto -c -k --sequesterRsrc --keepParent build/bin/koalapull.app "$artifact_path"
+            cp -r build/bin/koalapull.app build/bin/KoalaPull/
+            ditto -c -k --sequesterRsrc --keepParent build/bin/KoalaPull "$artifact_path"
           elif [ "${{ matrix.goos }}" = "windows" ]; then
             artifact_path="release-assets/${asset_name}"
-            powershell -Command "Compress-Archive -Path 'build/bin/koalapull.exe' -DestinationPath '$artifact_path'"
+            cp build/bin/koalapull.exe build/bin/KoalaPull/
+            powershell -Command "Compress-Archive -Path 'build/bin/KoalaPull' -DestinationPath '$artifact_path'"
           else
             artifact_path="release-assets/${asset_name}"
-            tar -czf "$artifact_path" -C build/bin koalapull
+            cp build/bin/koalapull build/bin/KoalaPull/
+            tar -czf "$artifact_path" -C build/bin KoalaPull
           fi
 
           echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"

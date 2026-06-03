@@ -222,14 +222,20 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.configDir = filepath.Join(configDir, "KoalaPull")
 	a.binDir = filepath.Join(a.configDir, "bin")
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		if isWritableDir(exeDir) {
+			a.binDir = filepath.Join(exeDir, "bin")
+		}
+	}
 	a.settingsFilePath = a.resolveSettingsPath()
 	if err := os.MkdirAll(a.binDir, 0755); err != nil {
 		a.startupErr = fmt.Errorf("create bin directory: %w", err)
 		log.Printf("create bin directory: %v", err)
 	}
 	a.activeDownloads = make(map[string]context.CancelFunc)
-	a.initSemaphore()
 	a.loadSettings()
+	a.initSemaphore()
 	if err := a.migrateHistoryIfNeeded(); err != nil {
 		a.startupErr = errors.Join(a.startupErr, fmt.Errorf("migrate history: %w", err))
 	}
@@ -756,17 +762,16 @@ func (a *App) OpenOutputDir() error {
 
 func (a *App) GetVersionInfo() VersionInfo {
 	vi := VersionInfo{App: AppVersion}
-	done := make(chan struct{}, 2)
+	ytdlpCh := make(chan string, 1)
+	ffmpegCh := make(chan string, 1)
 	go func() {
-		vi.Ytdlp = a.GetYtdlpVersion()
-		done <- struct{}{}
+		ytdlpCh <- a.GetYtdlpVersion()
 	}()
 	go func() {
-		vi.Ffmpeg = a.GetFfmpegVersion()
-		done <- struct{}{}
+		ffmpegCh <- a.GetFfmpegVersion()
 	}()
-	<-done
-	<-done
+	vi.Ytdlp = <-ytdlpCh
+	vi.Ffmpeg = <-ffmpegCh
 	return vi
 }
 
@@ -1496,10 +1501,13 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 			for {
 				select {
 				case <-ticker.C:
-					if time.Since(lastProgress.Load().(time.Time)) > 5*time.Minute {
-						idleTimedOut.Store(true)
-						attemptCancel()
-						return
+					val := lastProgress.Load()
+					if lastTime, ok := val.(time.Time); ok {
+						if time.Since(lastTime) > 5*time.Minute {
+							idleTimedOut.Store(true)
+							attemptCancel()
+							return
+						}
 					}
 				case <-attemptCtx.Done():
 					return
@@ -1520,7 +1528,8 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 				return
 			}
 
-			if err := startCommand(attemptCtx, cmd); err != nil {
+			cleanup, err := startCommand(attemptCtx, cmd)
+			if err != nil {
 				if ctx.Err() == context.Canceled {
 					a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "cancelled", StartTime: startTime, EndTime: time.Now()})
 					a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
@@ -1528,6 +1537,7 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 				}
 				return
 			}
+			defer cleanup()
 
 			type downloadLine struct {
 				source string
@@ -1660,20 +1670,4 @@ func parsePlaylistStatus(line string) string {
 	return fmt.Sprintf("%s %s of %s", matches[1], matches[2], matches[3])
 }
 
-func collectRecentLines(r io.Reader, limit int) ([]string, error) {
-	scanner := bufio.NewScanner(r)
-	scanner.Buffer(make([]byte, 0, 64*1024), 2*1024*1024)
-	lines := make([]string, 0, limit)
-	for scanner.Scan() {
-		line := scanner.Text()
-		if limit <= 0 {
-			continue
-		}
-		if len(lines) >= limit {
-			lines = append(lines[1:], line)
-		} else {
-			lines = append(lines, line)
-		}
-	}
-	return lines, scanner.Err()
-}
+

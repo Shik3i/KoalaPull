@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useMemo, Component } from 'react'
+import { useRef, useState, useEffect, useMemo, useCallback, Component } from 'react'
 import {
   CheckDependencies, DownloadDependencies,
   FetchMetadata, StartDownloadWithPreset, CancelDownload,
@@ -254,6 +254,7 @@ function HistoryRow({ entry, onDelete, fmtTime, t }: { entry: main.HistoryEntry;
         className="shrink-0 transition-colors p-1 rounded"
         style={{ color: 'var(--text-muted)' }}
         title={t('actions.deleteEntry')}
+        aria-label={t('actions.deleteEntry')}
       >
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -304,6 +305,7 @@ function App() {
   const [depError, setDepError] = useState('')
 
   const [queue, setQueue] = useState<QueueItem[]>([])
+  const pendingProgressRef = useRef<Record<string, DownloadProgress>>({})
 
   const [defaultOutputDir, setDefaultOutputDir] = useState('')
   const [theme, setTheme] = useState('dark')
@@ -512,7 +514,10 @@ function App() {
     const handleDlProgress = (data: DownloadProgress) => {
       setQueue((prev) => {
         const idx = prev.findIndex((item) => item.id === data.downloadId)
-        if (idx === -1) return prev
+        if (idx === -1) {
+          pendingProgressRef.current[data.downloadId] = data
+          return prev
+        }
         const item = prev[idx]
         let nextItem: QueueItem
         if (data.status === 'completed') {
@@ -568,10 +573,26 @@ function App() {
     try {
       const choice = resolveDownloadChoice(selectedPreset, selectedFormat, selectedContainer, selectedSubs)
       const downloadId = await StartDownloadWithPreset(url, choice.formatId, defaultOutputDir, choice.container, choice.subtitle, metadata.title, selectedPreset)
-      setQueue((prev) => [
-        ...prev,
-        { id: downloadId, title: metadata.title, thumbnail: metadata.thumbnail, status: 'queued', progress: 0, speed: '', eta: '', fileSize: '', errorMsg: '', playlistStatus: '' },
-      ])
+      setQueue((prev) => {
+        const pending = pendingProgressRef.current[downloadId]
+        const newItem: QueueItem = {
+          id: downloadId,
+          title: metadata.title,
+          thumbnail: metadata.thumbnail,
+          status: pending ? pending.status : 'queued',
+          progress: pending ? Math.round(pending.percent) : 0,
+          speed: pending ? pending.speed : '',
+          eta: pending ? pending.eta : '',
+          fileSize: pending ? pending.fileSize : '',
+          errorMsg: pending ? (pending.error || '') : '',
+          playlistStatus: pending ? (pending.playlistStatus || '') : '',
+        }
+        delete pendingProgressRef.current[downloadId]
+        return [
+          ...prev,
+          newItem,
+        ]
+      })
     } catch (err: any) {
       console.error('Failed to start download:', err)
       setAddQueueError(err?.message || t('errors.startDownloadFailed'))
@@ -640,7 +661,7 @@ function App() {
   }
 
 const fmtTimeRef = useRef<Map<string, string>>(new Map())
-function fmtTime(t: string): string {
+const fmtTime = useCallback((t: string): string => {
   const cached = fmtTimeRef.current.get(t)
   if (cached) return cached
   const d = new Date(t)
@@ -650,7 +671,7 @@ function fmtTime(t: string): string {
   if (fmtTimeRef.current.size > 500) fmtTimeRef.current.clear()
   fmtTimeRef.current.set(t, formatted)
   return formatted
-}
+}, [language])
 
   // --- Loading Screen ---
   if (checkingDeps) {
@@ -749,6 +770,7 @@ function fmtTime(t: string): string {
             className="w-full flex items-center gap-2 rounded-lg px-2 py-1.5 transition-colors text-left"
             style={{ color: 'var(--text-muted)' }}
             title={t('app.githubTitle')}
+            aria-label={`Visit KoalaPull Github repository. Current version: ${appVersion}`}
           >
             <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.38.6.11.79-.26.79-.58v-2.23c-3.34.73-4.03-1.41-4.03-1.41-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49 1 .11-.78.42-1.31.76-1.61-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.53-1.53.12-3.18 0 0 1-.32 3.3 1.23.96-.27 1.98-.4 3-.4s2.05.13 3.01.4c2.29-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.48 5.92.43.37.82 1.1.82 2.22v3.29c0 .32.19.69.8.57C20.56 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z" />
@@ -825,8 +847,9 @@ function fmtTime(t: string): string {
                       <div className="mt-3 space-y-3">
                         <div className="flex flex-wrap gap-2 items-start">
                           <div className="flex-1 min-w-[220px]">
-                            <label className="block text-xs mb-1" style={{ color: 'var(--text-muted)' }}>Preset</label>
+                            <label htmlFor="selectedPreset" className="block text-xs mb-1" style={{ color: 'var(--text-muted)' }}>Preset</label>
                             <select
+                              id="selectedPreset"
                               value={selectedPreset}
                               onChange={async (e) => {
                                 const next = e.target.value as DownloadPreset
@@ -1152,8 +1175,9 @@ function fmtTime(t: string): string {
               <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('maxConcurrency')}>{t('settings.downloads')}</h3>
                 <div className="flex items-center gap-3">
-                  <label className="text-xs" style={{ color: 'var(--text-muted)', minWidth: '7rem' }} title={tt('maxConcurrency')}>{t('settings.maxParallelDownloads')}</label>
+                  <label htmlFor="maxConcurrency" className="text-xs" style={{ color: 'var(--text-muted)', minWidth: '7rem' }} title={tt('maxConcurrency')}>{t('settings.maxParallelDownloads')}</label>
                   <input
+                    id="maxConcurrency"
                     type="number" min={1} max={10}
                     value={maxConcurrency}
                     onChange={async (e) => {

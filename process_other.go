@@ -14,17 +14,21 @@ func commandContext(ctx context.Context, name string, arg ...string) *exec.Cmd {
 	return cmd
 }
 
-func startCommand(ctx context.Context, cmd *exec.Cmd) error {
+func startCommand(ctx context.Context, cmd *exec.Cmd) (func(), error) {
 	if err := cmd.Start(); err != nil {
-		return err
+		return nil, err
 	}
+	done := make(chan struct{})
 	go func() {
-		<-ctx.Done()
-		if cmd.Process != nil {
-			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+		select {
+		case <-ctx.Done():
+			if cmd.Process != nil {
+				syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+			}
+		case <-done:
 		}
 	}()
-	return nil
+	return func() { close(done) }, nil
 }
 
 func commandOutput(ctx context.Context, name string, arg ...string) ([]byte, error) {
