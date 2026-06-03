@@ -1,5 +1,9 @@
 # KoalaPull
 
+<p align="center">
+  <img src="assets/Icon.png" alt="KoalaPull" width="128">
+</p>
+
 <div align="center">
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
@@ -23,17 +27,23 @@ It is made for people who want the power of `yt-dlp` without living in the termi
 ## Features
 
 - **Dependency auto-setup** - `yt-dlp` and `ffmpeg` are downloaded into your app data directory on first launch.
+- **Dependency updates** - re-download or update `yt-dlp` / `ffmpeg` from the Settings tab anytime.
 - **Cross-platform native UI** - runs on macOS, Windows, and Linux.
 - **Metadata preview** - fetch title, uploader, thumbnail, duration, and formats before downloading.
-- **Format selection** - pick resolution, container, and subtitle behavior.
+- **Download presets** - Best Quality, Compatible, Audio Only, or Custom with full control.
+- **Format selection** - pick resolution, container (MP4/MKV/MP3), and subtitle mode.
 - **Playlist support** - download full playlists with one flow.
 - **Concurrent downloads** - queue multiple jobs and run up to 10 in parallel.
-- **Download queue** - add, cancel, and clear items with live progress updates.
-- **Download history** - keep track of past downloads with timestamps and stats.
+- **Download queue** - add, cancel, clear completed, and clear all with live progress, speed, ETA, and total ETA.
+- **Download history** - keep track of past downloads with search/filter by title or URL.
+- **Open output folder** - jump to the file location straight from a completed download.
 - **Theme support** - dark and light themes with saved preference.
 - **Auto-paste URLs** - optional clipboard detection for supported video links.
+- **Internationalization** - English, German, and French UI with automatic language detection.
+- **Error boundary** - graceful crash recovery with a Retry button.
 - **Update notifications** - check for new `yt-dlp` releases from the Settings tab.
-- **Help tab** - quick app guide, common supported sites, and a link to the full `yt-dlp` list.
+- **Version info** - view installed KoalaPull, yt-dlp, and ffmpeg versions in Settings.
+- **Help tab** - quick app guide, 24 curated supported sites, and a link to the full `yt-dlp` list.
 - **Privacy-first** - bundled fonts, strict CSP, no telemetry, no analytics, no external CDNs.
 - **Keyboard shortcuts** - quick focus on the URL input with `Cmd/Ctrl+K` or `Cmd/Ctrl+L`.
 
@@ -100,6 +110,7 @@ wails dev
 |---------|-------|---------|-------------|
 | Output directory | any folder | `~/Downloads/KoalaPull` | Where completed files are saved |
 | Theme | dark / light | dark | App color scheme |
+| Language | auto / en / de / fr | auto | UI language |
 | Max parallel downloads | 1 - 10 | 3 | How many downloads run at once |
 | Auto-paste URL | on / off | off | Detect supported URLs from your clipboard |
 
@@ -143,6 +154,7 @@ Both binaries are stored in the app data directory:
 | Backend | Go 1.23, Wails v2.12 |
 | Frontend | React 18, TypeScript, Vite 3 |
 | Styling | Tailwind CSS 3, CSS custom properties |
+| i18n | Custom locale system (en, de, fr) |
 | Download engine | `yt-dlp` + `ffmpeg` |
 
 ## Project Structure
@@ -150,17 +162,45 @@ Both binaries are stored in the app data directory:
 ```text
 KoalaPull/
 ├── app.go                 # Go backend: metadata, downloads, settings, history
+├── app_test.go            # Backend tests
 ├── main.go                # Wails app entry point
+├── process_other.go       # Platform-specific helpers (Linux/macOS)
+├── process_windows.go     # Platform-specific helpers (Windows)
 ├── frontend/
 │   ├── src/
 │   │   ├── App.tsx        # Main React component
+│   │   ├── main.tsx       # React mount point
 │   │   ├── style.css      # Tailwind directives + theme variables
-│   │   └── main.tsx       # React mount point
+│   │   ├── vite-env.d.ts  # Vite type declarations
+│   │   ├── assets/        # Local images and fonts
+│   │   │   ├── images/
+│   │   │   └── fonts/
+│   │   ├── lib/           # Utility modules
+│   │   │   ├── downloadMetrics.ts
+│   │   │   └── i18n.ts
+│   │   └── locales/       # Translation files (en, de, fr)
 │   ├── public/fonts/      # Bundled local fonts
-│   └── index.html         # Entry point with Content Security Policy
-├── build/                 # Build assets
+│   ├── index.html         # Entry point with Content Security Policy
+│   └── package.json       # Frontend dependencies
+├── assets/                # App icon sources
+│   ├── Icon.png
+│   └── Icon.af
+├── build/                 # Build assets and platform packages
+│   ├── appicon.png
+│   ├── darwin/
+│   ├── windows/
+│   └── bin/
+├── scripts/
+│   └── verify.sh          # Pre-push quality gate
+├── test/
+│   └── quality_gates_test.go
+├── docs/
+│   └── superpowers/       # Design docs and plans
+├── trayicons/             # System tray icon
+├── website/               # Project website
 ├── wails.json             # Wails project configuration
-├── .github/workflows/     # CI/CD
+├── .github/workflows/     # CI/CD pipelines
+├── Makefile               # Dev convenience targets
 ├── go.mod                 # Go module definition
 └── frontend/package.json  # Frontend dependencies
 ```
