@@ -1,8 +1,8 @@
-# KoalaPull
-
 <p align="center">
   <img src="assets/Icon.png" alt="KoalaPull" width="128">
 </p>
+
+<h1 align="center">KoalaPull</h1>
 
 <div align="center">
 
