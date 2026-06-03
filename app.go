@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -27,6 +28,10 @@ import (
 
 	wailsRuntime "github.com/wailsapp/wails/v2/pkg/runtime"
 )
+
+func init() {
+	log.SetFlags(log.Ltime | log.Lshortfile)
+}
 
 var AppVersion = "dev"
 
@@ -217,7 +222,7 @@ func (a *App) startup(ctx context.Context) {
 	a.settingsFilePath = a.resolveSettingsPath()
 	if err := os.MkdirAll(a.binDir, 0755); err != nil {
 		a.startupErr = fmt.Errorf("create bin directory: %w", err)
-		println("Failed to create bin directory:", err.Error())
+		log.Printf("create bin directory: %v", err)
 	}
 	a.activeDownloads = make(map[string]context.CancelFunc)
 	a.initSemaphore()
@@ -236,7 +241,7 @@ func (a *App) cleanupStaleTempFiles() {
 	for _, e := range entries {
 		if strings.HasSuffix(e.Name(), ".tmp") {
 			if err := os.Remove(filepath.Join(a.binDir, e.Name())); err != nil {
-				println("cleanup stale tmp:", err.Error())
+				log.Printf("cleanup stale tmp: %v", err)
 			}
 		}
 	}
@@ -356,7 +361,7 @@ func (a *App) loadSettings() {
 	})
 	a.cachedSettings = s
 	if err := a.writeSettingsLocked(s); err != nil {
-		println("writeSettings error:", err.Error())
+		log.Printf("writeSettings: %v", err)
 	}
 }
 
@@ -559,13 +564,13 @@ func (a *App) saveHistoryEntry(entry HistoryEntry) {
 	defer a.historyMu.Unlock()
 	f, err := os.OpenFile(a.historyPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		println("saveHistoryEntry open error:", err.Error())
+		log.Printf("saveHistoryEntry open: %v", err)
 		return
 	}
 	defer f.Close()
 	enc := json.NewEncoder(f)
 	if err := enc.Encode(entry); err != nil {
-		println("saveHistoryEntry encode error:", err.Error())
+		log.Printf("saveHistoryEntry encode: %v", err)
 	}
 }
 
@@ -573,7 +578,7 @@ func (a *App) ClearHistory() {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
 	if err := os.WriteFile(a.historyPath(), nil, 0644); err != nil {
-		println("ClearHistory write error:", err.Error())
+		log.Printf("ClearHistory write: %v", err)
 	}
 }
 
@@ -590,7 +595,7 @@ func (a *App) DeleteHistoryEntry(downloadID string) {
 	}
 	f, err := os.Create(path)
 	if err != nil {
-		println("DeleteHistoryEntry create error:", err.Error())
+		log.Printf("DeleteHistoryEntry create: %v", err)
 		return
 	}
 	defer f.Close()
@@ -682,7 +687,7 @@ func (a *App) OpenOutputDir() error {
 	}
 	go func() {
 		if err := cmd.Wait(); err != nil {
-			println("OpenOutputDir wait error:", err.Error())
+			log.Printf("OpenOutputDir wait: %v", err)
 		}
 	}()
 	return nil
@@ -858,7 +863,7 @@ func (a *App) downloadYtdlp(force bool) error {
 	}
 	if runtime.GOOS == "darwin" {
 		if err := command("xattr", "-d", "com.apple.quarantine", destPath).Run(); err != nil {
-			println("xattr warning:", err.Error())
+			log.Printf("xattr warning: %v", err)
 		}
 	}
 	a.emitProgress("yt-dlp", 100, "completed", "")
@@ -1391,7 +1396,7 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 	defer func() {
 		cancel()
 		if r := recover(); r != nil {
-			println("runDownload panic:", fmt.Sprint(r))
+			log.Printf("runDownload panic: %v", r)
 			debug.PrintStack()
 		}
 		a.adMu.Lock()
@@ -1473,7 +1478,7 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 				defer readWG.Done()
 				defer func() {
 					if r := recover(); r != nil {
-						println("scanPipe panic:", fmt.Sprint(r))
+						log.Printf("scanPipe panic: %v", r)
 					}
 				}()
 				scanner := bufio.NewScanner(r)
