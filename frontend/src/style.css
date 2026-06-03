@@ -139,6 +139,10 @@
 
   .sidebar-tab {
     @apply flex items-center gap-3 px-4 py-2.5 text-sm rounded-lg transition-colors duration-150 cursor-pointer;
+    border: none;
+    background: transparent;
+    width: 100%;
+    text-align: left;
     color: var(--text-secondary);
   }
   .sidebar-tab:hover {

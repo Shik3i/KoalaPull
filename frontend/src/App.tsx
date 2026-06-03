@@ -709,23 +709,29 @@ function fmtTime(t: string): string {
           <span className="font-bold text-2xl tracking-tight">{t('app.name')}</span>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1" style={{ color: 'var(--text-secondary)' }}>
-          {tabs.map((t) => (
-            <div key={t.id} onClick={() => handleTabSwitch(t.id)} className={`sidebar-tab ${activeTab === t.id ? 'active' : ''}`}>
-              <div className="contents" title={tt(`tabs.${t.id}`)} aria-label={tt(`tabs.${t.id}`)}>
-              <span className="text-base">{t.icon}</span>
-              <span className="flex-1">{t.label}</span>
-              {t.id === 'downloads' && activeCount > 0 && (
+          {tabs.map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => handleTabSwitch(tab.id)}
+              className={`sidebar-tab w-full text-left ${activeTab === tab.id ? 'active' : ''}`}
+              title={tt(`tabs.${tab.id}`)}
+              aria-label={tt(`tabs.${tab.id}`)}
+              aria-current={activeTab === tab.id ? 'page' : undefined}
+            >
+              <span className="text-base">{tab.icon}</span>
+              <span className="flex-1">{tab.label}</span>
+              {tab.id === 'downloads' && activeCount > 0 && (
                 <span className="text-xs font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--color-accent)', color: '#000' }}>
                   {activeCount}
                 </span>
               )}
-              {t.id === 'settings' && (updateInfo?.ytdlpUpdateAvailable || updateInfo?.koalaPullUpdateAvailable) && (
+              {tab.id === 'settings' && (updateInfo?.ytdlpUpdateAvailable || updateInfo?.koalaPullUpdateAvailable) && (
                 <span className="text-xs font-medium px-1.5 py-0.5 rounded-full" style={{ background: '#fbbf24', color: '#000' }}>
                   {(updateInfo?.ytdlpUpdateAvailable ? 1 : 0) + (updateInfo?.koalaPullUpdateAvailable ? 1 : 0)}
                 </span>
               )}
-              </div>
-            </div>
+            </button>
           ))}
         </nav>
         <div className="px-4 py-3 border-t" style={{ borderColor: 'var(--color-surface-border)' }}>

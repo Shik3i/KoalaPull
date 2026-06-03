@@ -26,14 +26,14 @@ func startCommand(ctx context.Context, cmd *exec.Cmd) error {
 	go func() {
 		<-ctx.Done()
 		if cmd.Process != nil {
-			_ = syscall.TerminateProcess(syscall.Handle(cmd.Process.Pid), 1)
+			_ = cmd.Process.Kill()
 		}
 	}()
 	return nil
 }
 
 func commandOutput(ctx context.Context, name string, arg ...string) ([]byte, error) {
-	cmd := exec.Command(name, arg...)
+	cmd := exec.CommandContext(ctx, name, arg...)
 	cmd.SysProcAttr = hiddenProcAttr()
 	return cmd.Output()
 }

@@ -9,7 +9,7 @@ import (
 )
 
 func commandContext(ctx context.Context, name string, arg ...string) *exec.Cmd {
-	cmd := exec.Command(name, arg...)
+	cmd := exec.CommandContext(ctx, name, arg...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	return cmd
 }
@@ -28,14 +28,8 @@ func startCommand(ctx context.Context, cmd *exec.Cmd) error {
 }
 
 func commandOutput(ctx context.Context, name string, arg ...string) ([]byte, error) {
-	cmd := exec.Command(name, arg...)
+	cmd := exec.CommandContext(ctx, name, arg...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
-	go func() {
-		<-ctx.Done()
-		if cmd.Process != nil {
-			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-		}
-	}()
 	return cmd.Output()
 }
 

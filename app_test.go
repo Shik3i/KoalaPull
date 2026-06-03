@@ -259,6 +259,36 @@ func TestCollectRecentLinesReportsLongLineScannerError(t *testing.T) {
 	}
 }
 
+func TestHistoryHelpersPreserveFileOrder(t *testing.T) {
+	entries := []HistoryEntry{
+		{DownloadID: "old", Title: "first"},
+		{DownloadID: "new", Title: "second"},
+	}
+	path := filepath.Join(t.TempDir(), "history.json")
+
+	if err := writeHistoryEntriesToFile(path, entries); err != nil {
+		t.Fatalf("writeHistoryEntriesToFile: %v", err)
+	}
+
+	got := readHistoryEntriesFromFile(path)
+	if len(got) != len(entries) {
+		t.Fatalf("history length = %d, want %d", len(got), len(entries))
+	}
+	for i := range entries {
+		if got[i].DownloadID != entries[i].DownloadID || got[i].Title != entries[i].Title {
+			t.Fatalf("entry %d = %#v, want %#v", i, got[i], entries[i])
+		}
+	}
+
+	reversed := reverseHistoryEntries(got)
+	if len(reversed) != len(entries) {
+		t.Fatalf("reversed length = %d, want %d", len(reversed), len(entries))
+	}
+	if reversed[0].DownloadID != "new" || reversed[1].DownloadID != "old" {
+		t.Fatalf("reverseHistoryEntries returned %#v", reversed)
+	}
+}
+
 func TestParseProgressLine(t *testing.T) {
 	pct, size, speed, eta, ok := parseProgressLine("[download]  42.5% of ~12.34MiB at 1.23MiB/s ETA 00:10")
 	if !ok {

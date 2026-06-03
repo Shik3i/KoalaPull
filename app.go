@@ -3,6 +3,7 @@ package main
 import (
 	"archive/zip"
 	"bufio"
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
@@ -51,6 +52,8 @@ type App struct {
 	semLimit         atomic.Int32
 	semWake          chan struct{}
 	historyMu        sync.Mutex
+	historyCache     []HistoryEntry
+	historyLoaded    bool
 	cachedSettings   Settings
 	metadataMu       sync.Mutex
 	metadataCancel   context.CancelFunc
@@ -230,6 +233,7 @@ func (a *App) startup(ctx context.Context) {
 	if err := a.migrateHistoryIfNeeded(); err != nil {
 		a.startupErr = errors.Join(a.startupErr, fmt.Errorf("migrate history: %w", err))
 	}
+	a.loadHistoryCache()
 	a.cleanupStaleTempFiles()
 }
 
@@ -519,90 +523,147 @@ func (a *App) migrateHistoryIfNeeded() error {
 	if err := json.Unmarshal(data, &entries); err != nil {
 		return nil
 	}
-	f, err := os.Create(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-	enc := json.NewEncoder(f)
-	for _, e := range entries {
-		if err := enc.Encode(e); err != nil {
-			return err
-		}
-	}
-	return nil
+	return writeHistoryEntriesToFile(path, entries)
 }
 
-func readHistoryFromFile(path string) []HistoryEntry {
+func readHistoryEntriesFromFile(path string) []HistoryEntry {
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return nil
 	}
 	entries := make([]HistoryEntry, 0, 64)
-	dec := json.NewDecoder(strings.NewReader(string(data)))
-	for dec.More() {
+	dec := json.NewDecoder(bytes.NewReader(data))
+	for {
 		var e HistoryEntry
 		if err := dec.Decode(&e); err != nil {
+			if errors.Is(err, io.EOF) {
+				break
+			}
 			break
 		}
 		entries = append(entries, e)
 	}
-	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
-		entries[i], entries[j] = entries[j], entries[i]
-	}
 	return entries
+}
+
+func writeHistoryEntriesToFile(path string, entries []HistoryEntry) error {
+	dir := filepath.Dir(path)
+	tmp, err := os.CreateTemp(dir, ".history-*.tmp")
+	if err != nil {
+		return err
+	}
+	tmpPath := tmp.Name()
+	enc := json.NewEncoder(tmp)
+	for _, e := range entries {
+		if err := enc.Encode(e); err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmpPath)
+			return err
+		}
+	}
+	if err := tmp.Close(); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
+			_ = os.Remove(tmpPath)
+			return err
+		}
+		if retryErr := os.Rename(tmpPath, path); retryErr != nil {
+			_ = os.Remove(tmpPath)
+			return errors.Join(err, retryErr)
+		}
+	}
+	return nil
+}
+
+func (a *App) loadHistoryCache() {
+	a.historyMu.Lock()
+	defer a.historyMu.Unlock()
+	a.loadHistoryCacheLocked()
+}
+
+func (a *App) loadHistoryCacheLocked() {
+	if a.historyLoaded {
+		return
+	}
+	a.historyCache = readHistoryEntriesFromFile(a.historyPath())
+	a.historyLoaded = true
+}
+
+func (a *App) ensureHistoryLoadedLocked() {
+	if a.historyLoaded {
+		return
+	}
+	a.historyCache = readHistoryEntriesFromFile(a.historyPath())
+	a.historyLoaded = true
+}
+
+func reverseHistoryEntries(entries []HistoryEntry) []HistoryEntry {
+	out := make([]HistoryEntry, len(entries))
+	for i := range entries {
+		out[len(entries)-1-i] = entries[i]
+	}
+	return out
 }
 
 func (a *App) GetHistory() []HistoryEntry {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
-	return readHistoryFromFile(a.historyPath())
+	a.ensureHistoryLoadedLocked()
+	return reverseHistoryEntries(a.historyCache)
 }
 
 func (a *App) saveHistoryEntry(entry HistoryEntry) {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
+	a.ensureHistoryLoadedLocked()
 	f, err := os.OpenFile(a.historyPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
 		log.Printf("saveHistoryEntry open: %v", err)
 		return
 	}
-	defer f.Close()
 	enc := json.NewEncoder(f)
 	if err := enc.Encode(entry); err != nil {
+		_ = f.Close()
 		log.Printf("saveHistoryEntry encode: %v", err)
+		return
 	}
+	if err := f.Close(); err != nil {
+		log.Printf("saveHistoryEntry close: %v", err)
+		return
+	}
+	a.historyCache = append(a.historyCache, entry)
 }
 
 func (a *App) ClearHistory() {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
-	if err := os.WriteFile(a.historyPath(), nil, 0644); err != nil {
+	if err := writeHistoryEntriesToFile(a.historyPath(), nil); err != nil {
 		log.Printf("ClearHistory write: %v", err)
+		return
 	}
+	a.historyCache = nil
+	a.historyLoaded = true
 }
 
 func (a *App) DeleteHistoryEntry(downloadID string) {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
+	a.ensureHistoryLoadedLocked()
 	path := a.historyPath()
-	entries := readHistoryFromFile(path)
-	filtered := make([]HistoryEntry, 0, len(entries))
-	for _, e := range entries {
+	filtered := make([]HistoryEntry, 0, len(a.historyCache))
+	for _, e := range a.historyCache {
 		if e.DownloadID != downloadID {
 			filtered = append(filtered, e)
 		}
 	}
-	f, err := os.Create(path)
-	if err != nil {
-		log.Printf("DeleteHistoryEntry create: %v", err)
+	if err := writeHistoryEntriesToFile(path, filtered); err != nil {
+		log.Printf("DeleteHistoryEntry write: %v", err)
 		return
 	}
-	defer f.Close()
-	enc := json.NewEncoder(f)
-	for _, e := range filtered {
-		_ = enc.Encode(e)
-	}
+	a.historyCache = filtered
 }
 
 // ---------- Dependency Management ----------
@@ -1523,13 +1584,13 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 						errLines = append(errLines, line)
 					}
 				}
-			if matches := sizeLineRegex.FindStringSubmatch(line); matches != nil {
-				lastFileSz = matches[1]
-				lastProgress.Store(time.Now())
-			}
-			if pct, fileSz, speed, eta, ok := parseProgressLine(line); ok {
-				lastPct, lastSpeed, lastETA, lastFileSz = pct, speed, eta, fileSz
-				lastProgress.Store(time.Now())
+				if matches := sizeLineRegex.FindStringSubmatch(line); matches != nil {
+					lastFileSz = matches[1]
+					lastProgress.Store(time.Now())
+				}
+				if pct, fileSz, speed, eta, ok := parseProgressLine(line); ok {
+					lastPct, lastSpeed, lastETA, lastFileSz = pct, speed, eta, fileSz
+					lastProgress.Store(time.Now())
 					a.emitDownloadProgress(downloadID, pct, speed, eta, fileSz, "downloading", "", currentPS)
 				} else if ps := parsePlaylistStatus(line); ps != "" {
 					currentPS = ps
