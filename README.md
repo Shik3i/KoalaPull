@@ -13,7 +13,7 @@
 ![Wails](https://img.shields.io/badge/Wails-v2.12.0-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 
-A clean, native desktop download manager for **yt-dlp**.
+A clean, native desktop download manager for [**yt-dlp**](https://github.com/yt-dlp/yt-dlp).
 Download videos, audio, playlists, subtitles, and metadata from hundreds of supported sites with a simple GUI.
 
 </div>
@@ -22,12 +22,12 @@ Download videos, audio, playlists, subtitles, and metadata from hundreds of supp
 
 ## Overview
 
-KoalaPull wraps `yt-dlp` in a native desktop app built with Go and Wails.
+KoalaPull wraps [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) in a native desktop app built with Go and Wails.
 It is made for people who want the power of `yt-dlp` without living in the terminal.
 
 ## Features
 
-- **Dependency auto-setup** - `yt-dlp` and `ffmpeg` are downloaded into your app data directory on first launch.
+- **Dependency auto-setup** - `yt-dlp` and [`ffmpeg`](https://ffmpeg.org) are downloaded into your app data directory on first launch.
 - **Dependency updates** - re-download or update `yt-dlp` / `ffmpeg` from the Settings tab anytime.
 - **Cross-platform native UI** - runs on macOS, Windows, and Linux.
 - **Metadata preview** - fetch title, uploader, thumbnail, duration, and formats before downloading.
