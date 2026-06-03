@@ -330,7 +330,9 @@ func resolveSettingsPathFor(configDir, portablePath, fallbackName string) string
 	if fileExists(portablePath) || isWritableDir(filepath.Dir(portablePath)) {
 		if !fileExists(portablePath) && fileExists(fallback) {
 			if data, err := os.ReadFile(fallback); err == nil {
-				_ = os.WriteFile(portablePath, data, 0644)
+				if writeErr := os.WriteFile(portablePath, data, 0644); writeErr != nil {
+					log.Printf("failed to copy settings to portable path: %v", writeErr)
+				}
 			}
 		}
 		return portablePath
@@ -1579,6 +1581,7 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 			errLines := make([]string, 0, maxErrLines)
 			var stdoutScanErr error
 			var stderrScanErr error
+			var lastEmitTime time.Time
 			for item := range lineCh {
 				if item.err != nil {
 					if item.source == "stderr" {
@@ -1596,17 +1599,24 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 						errLines = append(errLines, line)
 					}
 				}
+				now := time.Now()
 				if matches := sizeLineRegex.FindStringSubmatch(line); matches != nil {
 					lastFileSz = matches[1]
-					lastProgress.Store(time.Now())
+					lastProgress.Store(now)
 				}
 				if pct, fileSz, speed, eta, ok := parseProgressLine(line); ok {
 					lastPct, lastSpeed, lastETA, lastFileSz = pct, speed, eta, fileSz
-					lastProgress.Store(time.Now())
-					a.emitDownloadProgress(downloadID, pct, speed, eta, fileSz, "downloading", "", currentPS)
+					lastProgress.Store(now)
+					if now.Sub(lastEmitTime) > 150*time.Millisecond || pct == 100 {
+						lastEmitTime = now
+						a.emitDownloadProgress(downloadID, pct, speed, eta, fileSz, "downloading", "", currentPS)
+					}
 				} else if ps := parsePlaylistStatus(line); ps != "" {
 					currentPS = ps
-					a.emitDownloadProgress(downloadID, lastPct, lastSpeed, lastETA, lastFileSz, "downloading", "", currentPS)
+					if now.Sub(lastEmitTime) > 150*time.Millisecond {
+						lastEmitTime = now
+						a.emitDownloadProgress(downloadID, lastPct, lastSpeed, lastETA, lastFileSz, "downloading", "", currentPS)
+					}
 				}
 			}
 

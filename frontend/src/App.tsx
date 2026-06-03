@@ -1,4 +1,4 @@
-import { useRef, useState, useEffect, useMemo, useCallback, Component } from 'react'
+import { useRef, useState, useEffect, useMemo, useCallback, Component, memo } from 'react'
 import {
   CheckDependencies, DownloadDependencies,
   FetchMetadata, StartDownloadWithPreset, CancelDownload,
@@ -230,7 +230,7 @@ function HistoryEntries({ entries, search, onDelete, fmtTime, t }: { entries: ma
   )
 }
 
-function HistoryRow({ entry, onDelete, fmtTime, t }: { entry: main.HistoryEntry; onDelete: (id: string) => void; fmtTime: (t: string) => string; t: (key: string, params?: Record<string, string | number>) => string }) {
+const HistoryRow = memo(({ entry, onDelete, fmtTime, t }: { entry: main.HistoryEntry; onDelete: (id: string) => void; fmtTime: (t: string) => string; t: (key: string, params?: Record<string, string | number>) => string }) => {
   const statusKey = `downloads.status.${entry.status}`
   return (
     <div className="rounded-lg p-3.5 lg:p-4 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
@@ -262,7 +262,118 @@ function HistoryRow({ entry, onDelete, fmtTime, t }: { entry: main.HistoryEntry;
       </button>
     </div>
   )
-}
+})
+
+const QueueRow = memo(({
+  item,
+  onCancel,
+  onOpenFolder,
+  statusColors,
+  tt,
+  t
+}: {
+  item: QueueItem
+  onCancel: (id: string) => void
+  onOpenFolder: () => void
+  statusColors: Record<string, string>
+  tt: (key: string) => string
+  t: any
+}) => {
+  return (
+    <div className="rounded-lg p-3 lg:p-4 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
+      <div className="w-16 h-10 rounded shrink-0 flex items-center justify-center overflow-hidden" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}>
+        {item.thumbnail ? (
+          <img src={item.thumbnail} alt="" loading="lazy" className="w-full h-full object-cover" />
+        ) : (
+          <svg className="w-5 h-5" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        )}
+      </div>
+      <div className="flex-1 min-w-0">
+        <p className="text-sm font-medium truncate">{item.title}</p>
+        <div className="flex items-center gap-3 mt-1 text-xs">
+          <span className={statusColors[item.status]}>
+            {item.status === 'downloading' && t('downloads.status.downloading', { percent: item.progress })}
+            {item.status === 'starting' && t('downloads.status.starting')}
+            {item.status === 'queued' && t('downloads.status.queued')}
+            {item.status === 'completed' && t('downloads.status.completed')}
+            {item.status === 'error' && t('downloads.status.error')}
+            {item.status === 'cancelled' && t('downloads.status.cancelled')}
+          </span>
+          {item.speed && <span style={{ color: 'var(--text-muted)' }}>{item.speed}</span>}
+          {item.eta && <span style={{ color: 'var(--text-muted)' }}>{t('downloads.eta', { eta: item.eta })}</span>}
+          {item.playlistStatus && <span style={{ color: 'var(--text-muted)' }}>{item.playlistStatus}</span>}
+        </div>
+        {(item.status === 'downloading' || item.status === 'starting') && (
+          <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
+            <div className="h-full rounded-full transition-all duration-300 ease-out" style={{ width: `${Math.max(item.progress, 2)}%`, background: 'var(--color-accent)' }} />
+          </div>
+        )}
+        {item.status === 'completed' && (
+          <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
+            <div className="h-full rounded-full" style={{ width: '100%', background: '#22c55e' }} />
+          </div>
+        )}
+        {item.status === 'error' && (
+          <>
+            <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
+              <div className="h-full rounded-full" style={{ width: '100%', background: '#ef4444' }} />
+            </div>
+            {item.errorMsg && <p className="mt-1 text-xs truncate" style={{ color: '#f87171' }}>{item.errorMsg}</p>}
+          </>
+        )}
+        {item.status === 'cancelled' && (
+          <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
+            <div className="h-full rounded-full" style={{ width: '100%', background: '#eab308' }} />
+          </div>
+        )}
+      </div>
+      {item.status === 'completed' && (
+        <div className="flex items-center gap-1.5">
+          <button onClick={onOpenFolder} className="transition-colors p-1 rounded" style={{ color: 'var(--text-muted)' }} title={tt('openOutputFolder')} aria-label={tt('openOutputFolder')}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
+            </svg>
+          </button>
+          <svg className="w-5 h-5 shrink-0" style={{ color: '#22c55e' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+          </svg>
+        </div>
+      )}
+      {(item.status === 'downloading' || item.status === 'starting') && (
+        <div className="flex items-center gap-1">
+          <svg className="w-5 h-5 animate-pulse shrink-0" style={{ color: 'var(--color-accent)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
+          </svg>
+          <button onClick={() => onCancel(item.id)} className="transition-colors p-0.5" style={{ color: 'var(--text-muted)' }} title={tt('cancelDownload')} aria-label={tt('cancelDownload')}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+      {item.status === 'queued' && (
+        <button onClick={() => onCancel(item.id)} className="transition-colors p-0.5 shrink-0" style={{ color: 'var(--text-muted)' }} title={tt('cancelDownload')} aria-label={tt('cancelDownload')}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      )}
+      {item.status === 'error' && (
+        <svg className="w-5 h-5 shrink-0" style={{ color: '#ef4444' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+        </svg>
+      )}
+      {item.status === 'cancelled' && (
+        <svg className="w-5 h-5 shrink-0" style={{ color: '#eab308' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      )}
+    </div>
+  )
+})
 
 export class ErrorBoundary extends Component<{ children: React.ReactNode }, { hasError: boolean }> {
   state = { hasError: false }
@@ -326,6 +437,8 @@ function App() {
   const [updateInfo, setUpdateInfo] = useState<main.UpdateInfo | null>(null)
   const [updateLoading, setUpdateLoading] = useState(true)
   const t = useMemo(() => createTranslator(language), [language])
+  const tRef = useRef(t)
+  tRef.current = t
   const tt = (key: string, params?: Record<string, string | number>) => t(`tooltips.${key}`, params)
 
   const settingsRef = useRef<AppSettings>({
@@ -435,20 +548,18 @@ function App() {
           setCheckingDeps(false)
         }
       } catch {
-        if (!cancelled) { setCheckingDeps(false); setDepError(t('errors.checkDependenciesFailed')) }
+        if (!cancelled) { setCheckingDeps(false); setDepError(tRef.current('errors.checkDependenciesFailed')) }
       }
     }
     const handleDepProgress = (data: DepProgress) => {
       setDepProgress((prev) => ({ ...prev, [data.dependency]: data.progress }))
-      if (data.status === 'error') { setDepError(data.error || t('errors.downloadFailed')); setInstallingDeps(false) }
+      if (data.status === 'error') { setDepError(data.error || tRef.current('errors.downloadFailed')); setInstallingDeps(false) }
     }
     const offDepProgress = EventsOn('dependency-progress', handleDepProgress)
     run()
     return () => { cancelled = true; offDepProgress() }
   }, [])
 
-  const tRef = useRef(t)
-  tRef.current = t
   useEffect(() => {
     if (!installingDeps || depsReady) return
     let cancelled = false
@@ -493,8 +604,8 @@ function App() {
       } catch { /* clipboard errors are benign */ }
     }
     checkClipboard()
-    const interval = setInterval(checkClipboard, 2000)
-    return () => clearInterval(interval)
+    window.addEventListener('focus', checkClipboard)
+    return () => window.removeEventListener('focus', checkClipboard)
   }, [depsReady, autoPasteEnabled, activeTab])
 
   useEffect(() => {
@@ -788,7 +899,9 @@ const fmtTime = useCallback((t: string): string => {
             <div className="px-4 lg:px-8 py-4 lg:py-5 shrink-0">
               <div className="flex gap-2">
                 <div className="flex-1 relative">
+                  <label htmlFor="urlInput" className="sr-only">Video URL</label>
                   <input
+                    id="urlInput"
                     type="text" value={url}
                     onChange={(e) => setUrl(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleFetch() }}
@@ -799,7 +912,12 @@ const fmtTime = useCallback((t: string): string => {
                   />
                   {url && (
                     <button
-                      onClick={() => setUrl('')}
+                      onClick={() => {
+                        setUrl('')
+                        setFetched(false)
+                        setMetadata(null)
+                        setFetchError('')
+                      }}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-lg leading-none"
                       style={{ color: 'var(--text-muted)' }}
                       title={tt('clearUrl')}
@@ -876,7 +994,9 @@ const fmtTime = useCallback((t: string): string => {
 
                         {selectedPreset === 'custom' && (
                           <div className="flex flex-wrap gap-2">
+                            <label htmlFor="customFormatSelect" className="sr-only">Format</label>
                             <select
+                              id="customFormatSelect"
                               value={selectedFormat}
                               onChange={async (e) => {
                                 const next = e.target.value
@@ -891,7 +1011,9 @@ const fmtTime = useCallback((t: string): string => {
                                 <option key={opt.formatId} value={opt.formatId}>{opt.label}</option>
                               ))}
                             </select>
+                            <label htmlFor="customSubtitleSelect" className="sr-only">Subtitles</label>
                             <select
+                              id="customSubtitleSelect"
                               value={selectedSubs}
                               onChange={async (e) => {
                                 const next = e.target.value
@@ -906,7 +1028,9 @@ const fmtTime = useCallback((t: string): string => {
                               <option value="auto">{t('downloads.subtitlesAuto')}</option>
                               <option value="embed">{t('downloads.subtitlesEmbed')}</option>
                             </select>
+                            <label htmlFor="customContainerSelect" className="sr-only">Container</label>
                             <select
+                              id="customContainerSelect"
                               value={selectedContainer}
                               onChange={async (e) => {
                                 const next = e.target.value
@@ -972,98 +1096,15 @@ const fmtTime = useCallback((t: string): string => {
                 ) : (
                   <div className="space-y-2">
                     {reversedQueue.map((item) => (
-                      <div key={item.id} className="rounded-lg p-3 lg:p-4 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
-                        <div className="w-16 h-10 rounded shrink-0 flex items-center justify-center overflow-hidden" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}>
-                          {item.thumbnail ? (
-                            <img src={item.thumbnail} alt="" loading="lazy" className="w-full h-full object-cover" />
-                          ) : (
-                            <svg className="w-5 h-5" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          )}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium truncate">{item.title}</p>
-                          <div className="flex items-center gap-3 mt-1 text-xs">
-                            <span className={statusColors[item.status]}>
-                              {item.status === 'downloading' && t('downloads.status.downloading', { percent: item.progress })}
-                              {item.status === 'starting' && t('downloads.status.starting')}
-                              {item.status === 'queued' && t('downloads.status.queued')}
-                              {item.status === 'completed' && t('downloads.status.completed')}
-                              {item.status === 'error' && t('downloads.status.error')}
-                              {item.status === 'cancelled' && t('downloads.status.cancelled')}
-                            </span>
-                            {item.speed && <span style={{ color: 'var(--text-muted)' }}>{item.speed}</span>}
-                            {item.eta && <span style={{ color: 'var(--text-muted)' }}>{t('downloads.eta', { eta: item.eta })}</span>}
-                            {item.playlistStatus && <span style={{ color: 'var(--text-muted)' }}>{item.playlistStatus}</span>}
-                          </div>
-                          {(item.status === 'downloading' || item.status === 'starting') && (
-                            <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
-                              <div className="h-full rounded-full transition-all duration-300 ease-out" style={{ width: `${Math.max(item.progress, 2)}%`, background: 'var(--color-accent)' }} />
-                            </div>
-                          )}
-                          {item.status === 'completed' && (
-                            <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
-                              <div className="h-full rounded-full" style={{ width: '100%', background: '#22c55e' }} />
-                            </div>
-                          )}
-                          {item.status === 'error' && (
-                            <>
-                              <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
-                                <div className="h-full rounded-full" style={{ width: '100%', background: '#ef4444' }} />
-                              </div>
-                              {item.errorMsg && <p className="mt-1 text-xs truncate" style={{ color: '#f87171' }}>{item.errorMsg}</p>}
-                            </>
-                          )}
-                          {item.status === 'cancelled' && (
-                            <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
-                              <div className="h-full rounded-full" style={{ width: '100%', background: '#eab308' }} />
-                            </div>
-                          )}
-                        </div>
-                        {item.status === 'completed' && (
-                          <div className="flex items-center gap-1.5">
-                            <button onClick={() => OpenOutputDir().catch((err) => { console.warn('OpenOutputDir failed:', err) })} className="transition-colors p-1 rounded" style={{ color: 'var(--text-muted)' }} title={tt('openOutputFolder')} aria-label={tt('openOutputFolder')}>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
-                              </svg>
-                            </button>
-                            <svg className="w-5 h-5 shrink-0" style={{ color: '#22c55e' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                            </svg>
-                          </div>
-                        )}
-                        {(item.status === 'downloading' || item.status === 'starting') && (
-                          <div className="flex items-center gap-1">
-                            <svg className="w-5 h-5 animate-pulse shrink-0" style={{ color: 'var(--color-accent)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
-                            </svg>
-                            <button onClick={() => handleCancel(item.id)} className="transition-colors p-0.5" style={{ color: 'var(--text-muted)' }} title={tt('cancelDownload')} aria-label={tt('cancelDownload')}>
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </div>
-                        )}
-                        {item.status === 'queued' && (
-                          <button onClick={() => handleCancel(item.id)} className="transition-colors p-0.5 shrink-0" style={{ color: 'var(--text-muted)' }} title={tt('cancelDownload')} aria-label={tt('cancelDownload')}>
-                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                          </button>
-                        )}
-                        {item.status === 'error' && (
-                          <svg className="w-5 h-5 shrink-0" style={{ color: '#ef4444' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                          </svg>
-                        )}
-                        {item.status === 'cancelled' && (
-                          <svg className="w-5 h-5 shrink-0" style={{ color: '#eab308' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        )}
-                      </div>
+                      <QueueRow
+                        key={item.id}
+                        item={item}
+                        onCancel={handleCancel}
+                        onOpenFolder={() => OpenOutputDir().catch((err) => { console.warn('OpenOutputDir failed:', err) })}
+                        statusColors={statusColors}
+                        tt={tt}
+                        t={t}
+                      />
                     ))}
                   </div>
                 )}
@@ -1152,8 +1193,8 @@ const fmtTime = useCallback((t: string): string => {
               </section>
 
               <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
-                <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('languageSelect')}>{t('settings.language')}</h3>
-                <select value={language} onChange={(e) => { void handleLanguageChange(e.target.value as LanguageCode) }} className="select-dark text-sm w-full" title={tt('languageSelect')} aria-label={tt('languageSelect')}>
+                <label htmlFor="languageSelect" className="block text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('languageSelect')}>{t('settings.language')}</label>
+                <select id="languageSelect" value={language} onChange={(e) => { void handleLanguageChange(e.target.value as LanguageCode) }} className="select-dark text-sm w-full" title={tt('languageSelect')} aria-label={tt('languageSelect')}>
                   <option value="en">{t('settings.languageEnglish')}</option>
                   <option value="de">{t('settings.languageGerman')}</option>
                   <option value="fr">{t('settings.languageFrench')}</option>
@@ -1200,6 +1241,8 @@ const fmtTime = useCallback((t: string): string => {
                     <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }} title={tt('autoPaste')}>{t('settings.autoPasteDescription')}</p>
                   </div>
                   <button
+                    role="switch"
+                    aria-checked={autoPasteEnabled}
                     onClick={async () => {
                       const next = !autoPasteEnabled
                       setAutoPasteEnabled(next)
@@ -1241,12 +1284,11 @@ const fmtTime = useCallback((t: string): string => {
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="w-20" style={{ color: 'var(--text-muted)' }}>yt-dlp</span>
-                    <a
-                      href="https://github.com/yt-dlp/yt-dlp"
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => OpenExternalLink('https://github.com/yt-dlp/yt-dlp').catch(() => {})}
                       className="font-mono hover:underline inline-flex items-center gap-1"
-                      style={{ color: 'var(--color-accent)' }}
+                      style={{ color: 'var(--color-accent)', background: 'none', border: 'none', padding: 0 }}
                       title={tt('versionYtdlp')}
                       aria-label={tt('versionYtdlp')}
                     >
@@ -1254,16 +1296,15 @@ const fmtTime = useCallback((t: string): string => {
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ opacity: 0.6 }}>
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
-                    </a>
+                    </button>
                   </div>
                   <div className="flex items-center gap-2">
                     <span className="w-20" style={{ color: 'var(--text-muted)' }}>ffmpeg</span>
-                    <a
-                      href={navigator.platform.includes('Mac') ? 'https://evermeet.cx/ffmpeg/' : 'https://github.com/BtbN/FFmpeg-Builds'}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
+                      type="button"
+                      onClick={() => OpenExternalLink(navigator.platform.includes('Mac') ? 'https://evermeet.cx/ffmpeg/' : 'https://github.com/BtbN/FFmpeg-Builds').catch(() => {})}
                       className="font-mono hover:underline inline-flex items-center gap-1"
-                      style={{ color: 'var(--color-accent)' }}
+                      style={{ color: 'var(--color-accent)', background: 'none', border: 'none', padding: 0 }}
                       title={tt('versionFfmpeg')}
                       aria-label={tt('versionFfmpeg')}
                     >
@@ -1271,7 +1312,7 @@ const fmtTime = useCallback((t: string): string => {
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ opacity: 0.6 }}>
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
-                    </a>
+                    </button>
                   </div>
                 </div>
               </section>

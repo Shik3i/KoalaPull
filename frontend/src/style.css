@@ -54,6 +54,7 @@
   --color-accent: #00d4aa;
   --color-accent-bright: #00e8ba;
   --color-accent-dim: #00bf99;
+  --color-accent-text: #000000;
   --text-primary: #e5e7eb;
   --text-secondary: #9ca3af;
   --text-muted: #6b7280;
@@ -67,6 +68,7 @@
   --color-accent: #059669;
   --color-accent-bright: #10b981;
   --color-accent-dim: #047857;
+  --color-accent-text: #ffffff;
   --text-primary: #1e293b;
   --text-secondary: #475569;
   --text-muted: #94a3b8;
@@ -101,13 +103,17 @@
   .btn-primary {
     @apply font-semibold px-5 py-2 rounded-md transition-colors duration-150 ease-in-out disabled:opacity-40 disabled:cursor-not-allowed;
     background: var(--color-accent);
-    color: #000;
+    color: var(--color-accent-text);
   }
   .btn-primary:hover:not(:disabled) {
     background: var(--color-accent-bright);
   }
   .btn-primary:active:not(:disabled) {
     background: var(--color-accent-dim);
+  }
+  .btn-primary:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 
   .select-dark {
@@ -152,5 +158,9 @@
   .sidebar-tab.active {
     background: color-mix(in srgb, var(--color-accent) 15%, transparent);
     color: var(--color-accent);
+  }
+  .sidebar-tab:focus-visible {
+    outline: 2px solid var(--color-accent);
+    outline-offset: 2px;
   }
 }
