@@ -6,9 +6,9 @@
     <title>KoalaPull | Native yt-dlp download manager</title>
     <meta name="description" content="A clean, native desktop download manager for yt-dlp. Download videos, audio, playlists, subtitles, and metadata with a simple app for macOS, Windows, and Linux.">
 
-    <link rel="preload" href="style.8e7acffb.min.css" as="style">
+    <link rel="preload" href="style.f84b56fe.min.css" as="style">
     <link rel="preload" as="image" href="assets/NewLogoIcon.webp" fetchpriority="high">
-    <link rel="stylesheet" href="style.8e7acffb.min.css">
+    <link rel="stylesheet" href="style.f84b56fe.min.css">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
@@ -220,7 +220,7 @@
                     <a href="https://github.com/Shik3i/KoalaPull" target="_blank" rel="noreferrer" class="btn btn-primary">GitHub</a>
                     <a href="https://github.com/Shik3i/KoalaPull/releases" target="_blank" rel="noreferrer" class="btn btn-secondary">Releases</a>
                 </div>
-                <ul style="display:flex; flex-wrap:wrap; gap:0.75rem 1.25rem; margin-top:1.5rem; list-style:none; color:var(--text-muted); font-size:0.95rem;" data-reveal>
+                <ul style="display:flex; flex-wrap:wrap; gap:0.75rem 1.25rem; margin-top:1.5rem; list-style:none; color:var(--text-soft); font-size:0.95rem;" data-reveal>
                     <li>Open source under MIT</li>
                     <li>macOS, Windows, Linux</li>
                     <li>No telemetry, no account</li>
@@ -228,70 +228,102 @@
             </div>
 
             <div class="hero-mockup-wrapper" data-reveal>
-                <div style="width:min(100%, 460px); border-radius:28px; padding:1.25rem; background:rgba(30, 41, 59, 0.5); border:1px solid rgba(255,255,255,0.08); box-shadow:0 20px 40px rgba(0,0,0,0.35); backdrop-filter:blur(16px);">
-                    <div style="display:flex; align-items:center; gap:0.9rem; margin-bottom:1.25rem;">
-                        <picture><source srcset="assets/IconHero-1x.avif 180w, assets/IconHero.avif 360w" type="image/avif"><img src="assets/IconHero-1x.webp" srcset="assets/IconHero-1x.webp 180w, assets/IconHero.webp 360w" sizes="68px" alt="" width="68" height="68" style="border-radius:18px; object-fit:contain; flex-shrink:0;"></picture>
-                        <div>
-                            <p style="margin:0 0 0.15rem; font-size:0.72rem; letter-spacing:0.08em; text-transform:uppercase; color:var(--text-muted);">Native desktop app</p>
-                            <h2 style="margin:0; font-size:1.4rem; line-height:1.2;">KoalaPull</h2>
+                <div class="app-window">
+                    <div class="app-sidebar">
+                        <div class="app-sidebar-header">
+                            <picture><source srcset="assets/NewLogoIcon.avif" type="image/avif"><img src="assets/NewLogoIcon.webp" alt="" width="64" height="64"></picture>
+                            <span>KoalaPull</span>
+                        </div>
+                        <div class="app-sidebar-nav">
+                            <button class="app-sidebar-tab active">
+                                <svg class="app-sidebar-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+                                Downloads
+                            </button>
+                            <button class="app-sidebar-tab">
+                                <svg class="app-sidebar-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                History
+                            </button>
+                            <button class="app-sidebar-tab">
+                                <svg class="app-sidebar-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                                Settings
+                            </button>
+                            <button class="app-sidebar-tab">
+                                <svg class="app-sidebar-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                                Help
+                            </button>
+                        </div>
+                        <div class="app-sidebar-footer">
+                            <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.38.6.11.79-.26.79-.58v-2.23c-3.34.73-4.03-1.41-4.03-1.41-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49 1 .11-.78.42-1.31.76-1.61-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.53-1.53.12-3.18 0 0 1-.32 3.3 1.23.96-.27 1.98-.4 3-.4s2.05.13 3.01.4c2.29-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.48 5.92.43.37.82 1.1.82 2.22v3.29c0 .32.19.69.8.57C20.56 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z"/></svg>
+                            <span>v0.1.0</span>
                         </div>
                     </div>
-                    <div style="display:grid; gap:0.85rem;">
-                        <div style="padding:0.9rem 1rem; border-radius:18px; background:rgba(15, 23, 42, 0.75); border:1px solid rgba(255,255,255,0.06);">
-                            <div style="display:flex; justify-content:space-between; gap:1rem; align-items:center;">
-                                <div>
-                                    <p style="margin:0; color:var(--text-muted); font-size:0.72rem; text-transform:uppercase; letter-spacing:0.08em;">Paste a URL</p>
-                                    <p style="margin:0.25rem 0 0; font-size:0.9rem; word-break:break-all;">https://www.youtube.com/watch?v=koalapull-demo</p>
+                    <div class="app-content">
+                        <div class="url-row">
+                            <input type="text" value="https://www.youtube.com/watch?v=koalapull-demo" readonly aria-label="Paste a URL">
+                            <button type="button" class="mock-fetch-btn">Fetch</button>
+                        </div>
+                        <div class="mock-card">
+                            <div class="mock-card-header">Metadata preview</div>
+                            <div class="meta-preview">
+                                <div class="meta-thumb">
+                                    <picture><source srcset="assets/IconHero-1x.avif 180w, assets/IconHero.avif 360w" type="image/avif"><img src="assets/IconHero-1x.webp" srcset="assets/IconHero-1x.webp 180w, assets/IconHero.webp 360w" sizes="80px" alt="" width="80" height="60"></picture>
                                 </div>
-                                <span style="padding:0.3rem 0.6rem; border-radius:999px; background:rgba(34, 197, 94, 0.15); color:#4ade80; font-size:0.72rem; font-weight:700;">Ready</span>
+                                <div class="meta-info">
+                                    <p class="meta-title">Open Source Build Tour</p>
+                                    <p class="meta-channel">Koala Dev &bull; 18:42</p>
+                                    <div class="meta-badges">
+                                        <span class="mock-server-badge">Best</span>
+                                        <span class="mock-server-badge outline">Compatible</span>
+                                        <span class="mock-server-badge outline">Audio</span>
+                                    </div>
+                                    <div class="meta-stats">
+                                        <div class="meta-stat">
+                                            <div class="meta-stat-label">Formats</div>
+                                            <div class="meta-stat-value">1080p, 720p, audio</div>
+                                        </div>
+                                        <div class="meta-stat">
+                                            <div class="meta-stat-label">Estimated size</div>
+                                            <div class="meta-stat-value">184 MB</div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         </div>
-                        <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.75rem;">
-                            <div style="padding:0.85rem; border-radius:16px; background:rgba(15, 23, 42, 0.65); border:1px solid rgba(255,255,255,0.06);">
-                                <p style="margin:0; color:var(--text-muted); font-size:0.68rem; text-transform:uppercase; letter-spacing:0.08em;">Duration</p>
-                                <p style="margin:0.35rem 0 0; font-size:1.05rem; font-weight:700;">18:42</p>
-                            </div>
-                            <div style="padding:0.85rem; border-radius:16px; background:rgba(15, 23, 42, 0.65); border:1px solid rgba(255,255,255,0.06);">
-                                <p style="margin:0; color:var(--text-muted); font-size:0.68rem; text-transform:uppercase; letter-spacing:0.08em;">Formats</p>
-                                <p style="margin:0.35rem 0 0; font-size:1.05rem; font-weight:700;">1080p, 720p, audio</p>
-                            </div>
-                            <div style="padding:0.85rem; border-radius:16px; background:rgba(15, 23, 42, 0.65); border:1px solid rgba(255,255,255,0.06);">
-                                <p style="margin:0; color:var(--text-muted); font-size:0.68rem; text-transform:uppercase; letter-spacing:0.08em;">Estimated size</p>
-                                <p style="margin:0.35rem 0 0; font-size:1.05rem; font-weight:700;">184 MB</p>
-                            </div>
-                        </div>
-                        <div style="padding:0.9rem 1rem; border-radius:18px; background:rgba(15, 23, 42, 0.65); border:1px solid rgba(255,255,255,0.06);">
-                            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.65rem; gap:1rem;">
+                        <div class="queue-section">
+                            <div class="queue-header">
                                 <strong>3 downloads queued, 1 active</strong>
-                                <span style="font-size:0.78rem; color:var(--accent);">Best</span>
+                                <span class="queue-preset">Best</span>
                             </div>
-                            <div style="display:grid; gap:0.65rem;">
-                                <div>
-                                    <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:0.25rem;">
-                                        <span>Build Tour - 1080p</span>
-                                        <span>Downloading</span>
+                            <div class="queue-list">
+                                <div class="queue-item">
+                                    <div class="queue-item-header">
+                                        <span class="queue-item-title">Build Tour - 1080p</span>
+                                        <span class="queue-item-status downloading">Downloading</span>
                                     </div>
-                                    <div style="height:8px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden;">
-                                        <div data-progress-fill data-progress-min="68" data-progress-max="92" style="width:74%; height:100%; background:linear-gradient(90deg, #6366f1, #8b5cf6);"></div>
+                                    <div class="progress-bar">
+                                        <div data-progress-fill data-progress-min="68" data-progress-max="92" style="width:74%"></div>
                                     </div>
+                                    <div class="queue-item-progress">74% &middot; 6.2 MB/s &middot; 00:41 left</div>
                                 </div>
-                                <div>
-                                    <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:0.25rem;">
-                                        <span>Podcast clip - audio</span>
-                                        <span>Queued</span>
+                                <div class="queue-item">
+                                    <div class="queue-item-header">
+                                        <span class="queue-item-title">Podcast clip - audio</span>
+                                        <span class="queue-item-status queued">Queued</span>
                                     </div>
-                                    <div style="height:8px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden;">
-                                        <div data-progress-fill data-progress-min="28" data-progress-max="58" style="width:36%; height:100%; background:linear-gradient(90deg, #22c55e, #4ade80);"></div>
+                                    <div class="progress-bar">
+                                        <div data-progress-fill data-progress-min="0" data-progress-max="10" style="width:0%"></div>
                                     </div>
+                                    <div class="queue-item-progress">Waiting for a free slot</div>
                                 </div>
-                                <div>
-                                    <div style="display:flex; justify-content:space-between; font-size:0.8rem; margin-bottom:0.25rem;">
-                                        <span>Playlist batch - 12 videos</span>
-                                        <span>Completed</span>
+                                <div class="queue-item">
+                                    <div class="queue-item-header">
+                                        <span class="queue-item-title">Playlist batch - 12 videos</span>
+                                        <span class="queue-item-status completed">Completed</span>
                                     </div>
-                                    <div style="height:8px; border-radius:999px; background:rgba(255,255,255,0.08); overflow:hidden;">
-                                        <div style="width:100%; height:100%; background:linear-gradient(90deg, #f59e0b, #fbbf24);"></div>
+                                    <div class="progress-bar green">
+                                        <div style="width:100%"></div>
                                     </div>
+                                    <div class="queue-item-progress">Finished in the history list</div>
                                 </div>
                             </div>
                         </div>
@@ -306,7 +338,7 @@
             <div class="container">
                 <div data-reveal>
                     <p class="version-badge" style="margin-bottom:1rem;">Why KoalaPull</p>
-                    <h2 style="font-size:2.4rem; line-height:1.15; margin-bottom:1rem;">Everything you need to download media with less friction and more control.</h2>
+                    <h2 style="font-size:2.2rem; line-height:1.15; margin-bottom:1rem;">Everything you need to download media with less friction and more control.</h2>
                 </div>
                 <div class="features-grid">
                     <article class="feature-card bento-large" data-reveal>
@@ -361,78 +393,88 @@
             <div class="container">
                 <div data-reveal style="max-width:760px; margin-bottom:2rem;">
                     <p class="version-badge" style="margin-bottom:1rem;">App mockup</p>
-                    <h2 style="font-size:2.4rem; line-height:1.15; margin-bottom:1rem;">A static clickdummy of the KoalaPull desktop app.</h2>
+                    <h2 style="font-size:2.2rem; line-height:1.15; margin-bottom:1rem;">A static clickdummy of the KoalaPull desktop app.</h2>
                 </div>
-                <div style="display:grid; grid-template-columns:minmax(0, 260px) minmax(0, 1fr); gap:1rem; align-items:stretch;" data-reveal>
-                    <div style="display:flex; flex-direction:column; gap:0.6rem;">
-                        <button type="button" class="mock-tab active" data-mock-tab="downloads">Downloads</button>
-                        <button type="button" class="mock-tab" data-mock-tab="history">History</button>
-                        <button type="button" class="mock-tab" data-mock-tab="settings">Settings</button>
-                        <button type="button" class="mock-tab" data-mock-tab="help">Help</button>
+                <div class="mockup-layout" data-reveal>
+                    <div class="mockup-tabs">
+                        <button type="button" class="mock-tab active" data-mock-tab="downloads">
+                            <svg class="mock-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+                            Downloads
+                        </button>
+                        <button type="button" class="mock-tab" data-mock-tab="history">
+                            <svg class="mock-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            History
+                        </button>
+                        <button type="button" class="mock-tab" data-mock-tab="settings">
+                            <svg class="mock-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                            Settings
+                        </button>
+                        <button type="button" class="mock-tab" data-mock-tab="help">
+                            <svg class="mock-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                            Help
+                        </button>
                     </div>
-                    <div style="min-height:640px; border-radius:28px; padding:1.25rem; background:rgba(30, 41, 59, 0.55); border:1px solid rgba(255,255,255,0.08); box-shadow:0 25px 60px rgba(0,0,0,0.35); backdrop-filter:blur(18px);">
-                        <div style="display:flex; align-items:center; justify-content:space-between; gap:1rem; margin-bottom:1rem;">
-                            <div style="display:flex; align-items:center; gap:0.8rem;">
-                                <picture><source srcset="assets/NewLogoIcon.avif" type="image/avif"><img src="assets/NewLogoIcon.webp" alt="" width="40" height="40" style="border-radius:10px; object-fit:contain;"></picture>
+                    <div class="mock-panel-container">
+                        <div class="mock-panel-header">
+                            <div class="mock-panel-title">
+                                <picture><source srcset="assets/NewLogoIcon.avif" type="image/avif"><img src="assets/NewLogoIcon.webp" alt="" width="80" height="80"></picture>
                                 <div>
                                     <h3 style="margin:0; font-size:1.1rem;">KoalaPull</h3>
-                                    <p style="margin:0; color:var(--text-muted); font-size:0.8rem;">A static clickdummy of the KoalaPull desktop app.</p>
+                                    <p style="margin:0; color:var(--text-soft); font-size:0.8rem;">A static clickdummy of the KoalaPull desktop app.</p>
                                 </div>
                             </div>
-                            <div style="display:flex; align-items:center; gap:0.5rem; color:var(--text-muted); font-size:0.8rem;">
-                                <span style="width:10px; height:10px; border-radius:999px; background:#22c55e;"></span>
+                            <div class="status-pill">
+                                <span class="status-pill-dot"></span>
                                 Ready
                             </div>
                         </div>
 
-                        <div class="mock-screen active" data-mock-panel="downloads" style="display:grid; gap:1rem;">
+                        <div class="mock-screen active" data-mock-panel="downloads">
                             <div class="mock-card">
-                                <div class="mock-label">Paste a URL</div>
-                                <div class="mock-invite-box">
-                                    <input class="mock-input" type="text" value="https://www.youtube.com/watch?v=koalapull-demo" readonly aria-label="Paste a URL">
-                                    <button type="button" class="mock-btn" style="width:96px;">Fetch</button>
+                                <div class="mock-card-header">Paste a URL</div>
+                                <div class="url-row">
+                                    <input type="text" value="https://www.youtube.com/watch?v=koalapull-demo" readonly aria-label="Paste a URL">
+                                    <button type="button" class="mock-fetch-btn" style="width:96px;">Fetch</button>
                                 </div>
-                                <p style="margin-top:0.75rem; color:var(--text-muted); font-size:0.82rem;">Grab title, formats, duration, and playlist count before you queue.</p>
+                                <p style="margin-top:0.75rem; color:var(--text-soft); font-size:0.82rem;">Grab title, formats, duration, and playlist count before you queue.</p>
                             </div>
                             <div class="mock-card">
-                                <div class="mock-label">Metadata preview</div>
-                                <div style="display:grid; gap:0.7rem;">
-                                    <div style="display:flex; gap:0.9rem; align-items:flex-start;">
-                                        <div style="width:92px; height:92px; border-radius:18px; background:linear-gradient(135deg, rgba(99,102,241,0.2), rgba(139,92,246,0.1)); border:1px solid rgba(255,255,255,0.06); overflow:hidden; flex-shrink:0;">
-                                            <picture><source srcset="assets/IconHero-1x.avif 180w, assets/IconHero.avif 360w" type="image/avif"><img src="assets/IconHero-1x.webp" srcset="assets/IconHero-1x.webp 180w, assets/IconHero.webp 360w" sizes="92px" alt="" width="92" height="92" style="display:block; width:100%; height:100%; object-fit:contain;"></picture>
+                                <div class="mock-card-header">Metadata preview</div>
+                                <div class="meta-preview">
+                                    <div class="meta-thumb">
+                                        <picture><source srcset="assets/IconHero-1x.avif 180w, assets/IconHero.avif 360w" type="image/avif"><img src="assets/IconHero-1x.webp" srcset="assets/IconHero-1x.webp 180w, assets/IconHero.webp 360w" sizes="80px" alt="" width="80" height="60"></picture>
+                                    </div>
+                                    <div class="meta-info">
+                                        <p class="meta-title">Open Source Build Tour</p>
+                                        <p class="meta-channel">Koala Dev &bull; 18:42</p>
+                                        <div class="meta-badges">
+                                            <span class="mock-server-badge">Best</span>
+                                            <span class="mock-server-badge outline">Compatible</span>
+                                            <span class="mock-server-badge outline">Audio</span>
                                         </div>
-                                        <div style="min-width:0;">
-                                            <p style="margin:0 0 0.25rem; font-weight:700; font-size:1rem;">Open Source Build Tour</p>
-                                            <p style="margin:0 0 0.5rem; color:var(--text-muted); font-size:0.84rem;">Koala Dev &bull; 18:42</p>
-                                            <div style="display:flex; flex-wrap:wrap; gap:0.45rem;">
-                                                <span class="mock-server-badge">Best</span>
-                                                <span class="mock-server-badge">Compatible</span>
-                                                <span class="mock-server-badge">Audio</span>
+                                        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:0.5rem; margin-top:0.65rem;">
+                                            <div class="meta-stat">
+                                                <div class="meta-stat-label">Formats</div>
+                                                <div class="meta-stat-value">1080p, 720p, audio</div>
+                                            </div>
+                                            <div class="meta-stat">
+                                                <div class="meta-stat-label">Estimated size</div>
+                                                <div class="meta-stat-value">184 MB</div>
+                                            </div>
+                                            <div class="meta-stat">
+                                                <div class="meta-stat-label">Status</div>
+                                                <div class="meta-stat-value" style="color:#4ade80;">Ready</div>
+                                            </div>
+                                            <div class="meta-stat">
+                                                <div class="meta-stat-label">Preset</div>
+                                                <div class="meta-stat-value">Custom</div>
                                             </div>
                                         </div>
                                     </div>
-                                    <div style="display:grid; grid-template-columns:repeat(4, minmax(0, 1fr)); gap:0.65rem;">
-                                        <div class="mock-card" style="padding:0.8rem;">
-                                            <div class="mock-label">Formats</div>
-                                            <div style="font-weight:700;">1080p, 720p, audio</div>
-                                        </div>
-                                        <div class="mock-card" style="padding:0.8rem;">
-                                            <div class="mock-label">Estimated size</div>
-                                            <div style="font-weight:700;">184 MB</div>
-                                        </div>
-                                        <div class="mock-card" style="padding:0.8rem;">
-                                            <div class="mock-label">Status</div>
-                                            <div style="font-weight:700; color:#4ade80;">Ready</div>
-                                        </div>
-                                        <div class="mock-card" style="padding:0.8rem;">
-                                            <div class="mock-label">Preset</div>
-                                            <div style="font-weight:700;">Custom</div>
-                                        </div>
-                                    </div>
                                 </div>
                             </div>
                             <div class="mock-card">
-                                <div class="mock-label">Queue</div>
+                                <div class="mock-card-header">Queue</div>
                                 <div class="mock-peer-list">
                                     <div class="mock-peer-item">
                                         <div class="mock-peer-header">
@@ -459,11 +501,11 @@
                             </div>
                         </div>
 
-                        <div class="mock-screen" data-mock-panel="history" hidden style="display:grid; gap:1rem;">
+                        <div class="mock-screen" data-mock-panel="history" hidden>
                             <div class="mock-card">
-                                <div class="mock-label">Download history</div>
-                                <div class="mock-input" style="margin-bottom:0.9rem; display:flex; align-items:center; color:var(--text-muted);">Search history...</div>
-                                <div style="display:grid; gap:0.75rem;">
+                                <div class="mock-card-header">Download history</div>
+                                <div class="mock-input-history">Search history...</div>
+                                <div class="mock-peer-list">
                                     <div class="mock-peer-item">
                                         <div class="mock-peer-header">
                                             <span class="mock-peer-name">Open Source Build Tour</span>
@@ -485,28 +527,28 @@
                                 </div>
                             </div>
                             <div class="mock-card">
-                                <div class="mock-label">History summary</div>
-                                <div style="display:grid; grid-template-columns:repeat(3, minmax(0, 1fr)); gap:0.75rem;">
-                                    <div class="mock-card" style="padding:0.8rem;">
-                                        <div class="mock-label">Saved jobs</div>
-                                        <div style="font-weight:700;">128</div>
+                                <div class="mock-card-header">History summary</div>
+                                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.75rem;">
+                                    <div class="meta-stat">
+                                        <div class="meta-stat-label">Saved jobs</div>
+                                        <div class="meta-stat-value">128</div>
                                     </div>
-                                    <div class="mock-card" style="padding:0.8rem;">
-                                        <div class="mock-label">Top speed</div>
-                                        <div style="font-weight:700;">14.8 MB/s</div>
+                                    <div class="meta-stat">
+                                        <div class="meta-stat-label">Top speed</div>
+                                        <div class="meta-stat-value">14.8 MB/s</div>
                                     </div>
-                                    <div class="mock-card" style="padding:0.8rem;">
-                                        <div class="mock-label">Latest run</div>
-                                        <div style="font-weight:700;">3 min ago</div>
+                                    <div class="meta-stat">
+                                        <div class="meta-stat-label">Latest run</div>
+                                        <div class="meta-stat-value">3 min ago</div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <div class="mock-screen" data-mock-panel="settings" hidden style="display:grid; gap:1rem;">
+                        <div class="mock-screen" data-mock-panel="settings" hidden>
                             <div class="mock-card">
-                                <div class="mock-label">Settings</div>
-                                <div style="display:grid; gap:0.85rem;">
+                                <div class="mock-card-header">Settings</div>
+                                <div>
                                     <div class="mock-settings-row">
                                         <div>
                                             <strong>Theme</strong>
@@ -546,10 +588,10 @@
                             </div>
                         </div>
 
-                        <div class="mock-screen" data-mock-panel="help" hidden style="display:grid; gap:1rem;">
+                        <div class="mock-screen" data-mock-panel="help" hidden>
                             <div class="mock-card">
-                                <div class="mock-label">Help</div>
-                                <div style="display:grid; gap:0.8rem;">
+                                <div class="mock-card-header">Help</div>
+                                <div style="display:grid; gap:0.7rem;">
                                     <div class="mock-diag-box">
                                         <span class="diag-val">1</span>
                                         <span>Paste a video or playlist URL into Downloads.</span>
@@ -569,8 +611,8 @@
                                 </div>
                             </div>
                             <div class="mock-card">
-                                <div class="mock-label">Supported sites</div>
-                                <p style="margin:0; color:var(--text-muted);">YouTube, Vimeo, Twitch, TikTok, SoundCloud, Bandcamp, and hundreds more through yt-dlp.</p>
+                                <div class="mock-card-header">Supported sites</div>
+                                <p style="margin:0; color:var(--text-soft);">YouTube, Vimeo, Twitch, TikTok, SoundCloud, Bandcamp, and hundreds more through yt-dlp.</p>
                             </div>
                         </div>
                     </div>
@@ -582,7 +624,7 @@
             <div class="container">
                 <div data-reveal style="max-width:760px; margin-bottom:2rem;">
                     <p class="version-badge" style="margin-bottom:1rem;">How KoalaPull works</p>
-                    <h2 style="font-size:2.4rem; line-height:1.15; margin-bottom:1rem;">A simple path from copied URL to finished file.</h2>
+                    <h2 style="font-size:2.2rem; line-height:1.15; margin-bottom:1rem;">A simple path from copied URL to finished file.</h2>
                 </div>
                 <div class="features-grid">
                     <article class="feature-card" data-reveal>
@@ -618,7 +660,7 @@
             <div class="container">
                 <div data-reveal style="max-width:760px; margin-bottom:2rem;">
                     <p class="version-badge" style="margin-bottom:1rem;">FAQ</p>
-                    <h2 style="font-size:2.4rem; line-height:1.15; margin-bottom:1rem;">Answers to the questions people usually ask first.</h2>
+                    <h2 style="font-size:2.2rem; line-height:1.15; margin-bottom:1rem;">Answers to the questions people usually ask first.</h2>
                 </div>
                 <div class="faq-grid">
                     <details class="faq-item" data-reveal>
