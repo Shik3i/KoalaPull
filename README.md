@@ -7,6 +7,7 @@
 <div align="center">
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/release/Shik3i/KoalaPull?logo=github)](https://github.com/Shik3i/KoalaPull/releases)
 [![Go Report Card](https://goreportcard.com/badge/github.com/Shik3i/KoalaPull)](https://goreportcard.com/report/github.com/Shik3i/KoalaPull)
 ![Go Version](https://img.shields.io/badge/Go-1.23+-blue)
 ![Wails](https://img.shields.io/badge/Wails-v2.12.0-blue)
