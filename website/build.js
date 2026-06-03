@@ -1,8 +1,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 const crypto = require('node:crypto');
-const esbuild = require('esbuild');
 const sharp = require('sharp');
+const { minifyCss, minifyJs } = require('./lib/minify');
 
 const websiteDir = __dirname;
 const rootDir = path.resolve(websiteDir, '..');
@@ -13,6 +13,10 @@ const sourceFontsDir = path.join(rootDir, 'frontend', 'public', 'fonts');
 const placeholderDomain = 'https://pull.koalastuff.net';
 const repoUrl = 'https://github.com/Shik3i/KoalaPull';
 const languages = ['en', 'de', 'fr'];
+const legalPages = [
+  { template: 'impressum.html', output: { en: 'imprint.html', de: 'impressum.html' } },
+  { template: 'datenschutz.html', output: { en: 'privacy.html', de: 'datenschutz.html' } }
+];
 
 const log = (msg) => console.log(`[build] ${msg}`);
 
@@ -28,24 +32,6 @@ function readText(filePath) {
   return fs.readFileSync(filePath, 'utf8');
 }
 
-function minifyCss(code) {
-  return code
-    .replace(/\/\*[\s\S]*?\*\//g, '')
-    .replace(/\s+/g, ' ')
-    .replace(/\s*([{}:;,>+~])\s*/g, '$1')
-    .replace(/;}/g, '}')
-    .trim();
-}
-
-async function minifyJs(code) {
-  const result = await esbuild.transform(code, {
-    loader: 'js',
-    minify: true,
-    target: 'es2020'
-  });
-  return result.code.trim();
-}
-
 function flattenObject(obj, prefix = '', out = {}) {
   if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return out;
   for (const [key, value] of Object.entries(obj)) {
@@ -57,6 +43,30 @@ function flattenObject(obj, prefix = '', out = {}) {
     }
   }
   return out;
+}
+
+function assertLocaleKeyParity(flatLocales) {
+  const entries = Object.entries(flatLocales);
+  if (!entries.length) return;
+
+  const [baseLang, baseLocale] = entries[0];
+  const baseKeys = Object.keys(baseLocale).sort();
+
+  for (const [lang, locale] of entries.slice(1)) {
+    const keys = Object.keys(locale).sort();
+    const missing = baseKeys.filter((key) => !keys.includes(key));
+    const extra = [];
+
+    if (missing.length || extra.length) {
+      throw new Error(
+        [
+          `Locale key mismatch: ${lang} vs ${baseLang}`,
+          missing.length ? `missing: ${missing.join(', ')}` : '',
+          extra.length ? `extra: ${extra.join(', ')}` : ''
+        ].filter(Boolean).join(' | ')
+      );
+    }
+  }
 }
 
 function escapeRegExp(input) {
@@ -76,6 +86,7 @@ function injectDefaults(html, localeCode, assetPrefix) {
     ASSET_PATH: assetPrefix,
     BASE_URL: placeholderDomain,
     GITHUB_URL: repoUrl,
+    HOME_URL: './',
     CANONICAL_URL: localeCode === 'en' ? `${placeholderDomain}/` : `${placeholderDomain}/${localeCode}/`,
     CANONICAL_PATH: localeCode === 'en' ? '' : `${localeCode}/`,
     LOCALE_CODE: localeCode,
@@ -158,6 +169,8 @@ async function buildImages() {
 
   for (const spec of [
     { name: 'NewLogoIcon', width: 200 },
+    { name: 'NewLogoIcon_384', width: 384 },
+    { name: 'NewLogoIcon_768', width: 768 },
     { name: 'NewLogoIcon_128', width: 128 },
     { name: 'NewLogoIcon_64', width: 64 },
     { name: 'IconHero-1x', width: 180 },
@@ -186,7 +199,7 @@ async function build() {
   ensureDir(assetsOutDir);
 
   log('Checking source files...');
-  const requiredSources = ['template.html', 'style.css', 'app.js', 'lang-init.js'];
+  const requiredSources = ['template.html', 'impressum.html', 'datenschutz.html', 'style.css', 'app.js', 'lang-init.js'];
   for (const file of requiredSources) {
     const filePath = path.join(websiteDir, file);
     if (!fs.existsSync(filePath)) {
@@ -196,12 +209,15 @@ async function build() {
 
   log('Reading template and source assets...');
   const template = readText(path.join(websiteDir, 'template.html'));
+  const legalTemplates = Object.fromEntries(
+    legalPages.map((page) => [page.template, readText(path.join(websiteDir, page.template))])
+  );
   const styleRaw = readText(path.join(websiteDir, 'style.css'));
   const appRaw = readText(path.join(websiteDir, 'app.js'));
   const langRaw = readText(path.join(websiteDir, 'lang-init.js'));
 
   log('Minifying CSS...');
-  const styleMin = minifyCss(styleRaw);
+  const styleMin = await minifyCss(styleRaw);
   log('Minifying JS...');
   const [appMin, langMin] = await Promise.all([
     minifyJs(appRaw),
@@ -219,7 +235,6 @@ async function build() {
       fs.rmSync(path.join(wwwDir, file), { force: true });
     }
   }
-
   log(`Writing ${styleName}, ${appName}, ${langName}`);
   fs.writeFileSync(path.join(wwwDir, styleName), styleMin);
   fs.writeFileSync(path.join(wwwDir, appName), appMin);
@@ -234,9 +249,14 @@ async function build() {
   }
 
   const flatLocales = {};
+  const baseLocale = flattenObject(JSON.parse(readText(path.join(localeDir, 'en.json'))));
   for (const lang of localeFiles) {
-    flatLocales[lang] = flattenObject(JSON.parse(readText(path.join(localeDir, `${lang}.json`))));
+    flatLocales[lang] = {
+      ...baseLocale,
+      ...flattenObject(JSON.parse(readText(path.join(localeDir, `${lang}.json`))))
+    };
   }
+  assertLocaleKeyParity(flatLocales);
 
   log('Generating locale pages...');
   for (const lang of localeFiles) {
@@ -245,21 +265,68 @@ async function build() {
     const outputDir = lang === 'en' ? wwwDir : path.join(wwwDir, lang);
     ensureDir(outputDir);
 
+    const faqPairs = [];
+    for (let i = 1; i <= 6; i++) {
+      const q = locale[`FAQ_Q${i}`];
+      const a = locale[`FAQ_A${i}`];
+      if (q && a) {
+        faqPairs.push({
+          '@type': 'Question',
+          name: q,
+          acceptedAnswer: { '@type': 'Answer', text: a }
+        });
+      }
+    }
+    const faqJsonld = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@type': 'FAQPage',
+      mainEntity: faqPairs
+    }, null, 0).replace(/[\n\r]+/g, '');
+
+    const dictionary = {
+      ...locale,
+      SELECTED_EN: lang === 'en' ? 'selected' : '',
+      SELECTED_DE: lang === 'de' ? 'selected' : '',
+      SELECTED_FR: lang === 'fr' ? 'selected' : '',
+      VERSION: versionInfo.version,
+      BUILD_DATE: versionInfo.date || '',
+      FAQ_JSONLD: faqJsonld
+    };
+
     let html = template;
     html = injectDefaults(html, lang, assetPrefix);
-    html = replaceAllPlaceholders(html, {
-      ...locale,
-      VERSION: versionInfo.version,
-      BUILD_DATE: versionInfo.date || ''
-    });
+    html = replaceAllPlaceholders(html, dictionary);
     html = rewriteAssetNames(html, styleName, appName, langName);
     html = injectAvifPictures(html);
 
+    const unresolved = html.match(/\{\{[A-Z0-9_.-]+\}\}/g);
+    if (unresolved) {
+      throw new Error(`Unresolved placeholders in ${lang}: ${unresolved.join(', ')}`);
+    }
+
     fs.writeFileSync(path.join(outputDir, 'index.html'), html);
     log(`  ${lang}/index.html`);
+
+    for (const page of legalPages) {
+      const outputName = page.output[lang];
+      if (!outputName) continue;
+      let legalHtml = legalTemplates[page.template];
+      legalHtml = injectDefaults(legalHtml, lang, assetPrefix);
+      legalHtml = replaceAllPlaceholders(legalHtml, dictionary);
+      legalHtml = rewriteAssetNames(legalHtml, styleName, appName, langName);
+      legalHtml = injectAvifPictures(legalHtml);
+
+      const legalUnresolved = legalHtml.match(/\{\{[A-Z0-9_.-]+\}\}/g);
+      if (legalUnresolved) {
+        throw new Error(`Unresolved placeholders in ${lang}/${outputName}: ${legalUnresolved.join(', ')}`);
+      }
+
+      fs.writeFileSync(path.join(outputDir, outputName), legalHtml);
+      log(`  ${lang}/${outputName}`);
+    }
   }
 
-  const staticFiles = ['robots.txt', 'site.webmanifest', 'sitemap.xml', 'version.json'];
+  const staticFiles = ['robots.txt', 'site.webmanifest', 'sitemap.xml', 'version.json', '_headers'];
   for (const file of staticFiles) {
     const ok = copyFileIfExists(path.join(websiteDir, file), path.join(wwwDir, file));
     if (ok) log(`  copied ${file}`);

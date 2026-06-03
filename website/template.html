@@ -5,9 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{META_TITLE}}</title>
     <meta name="description" content="{{META_DESCRIPTION}}">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#0c111d">
+    <meta name="color-scheme" content="dark light">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; font-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'; object-src 'none'; manifest-src 'self'; upgrade-insecure-requests">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <script type="application/ld+json">{{FAQ_JSONLD}}</script>
 
     <link rel="preload" href="{{ASSET_PATH}}style.min.css" as="style">
-    <link rel="preload" as="image" href="{{ASSET_PATH}}assets/NewLogoIcon.webp" fetchpriority="high">
+    <link rel="preload" href="{{ASSET_PATH}}assets/NewLogoIcon.webp" as="image" fetchpriority="high">
     <link rel="stylesheet" href="{{ASSET_PATH}}style.min.css">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ASSET_PATH}}assets/favicon-16x16.png">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ASSET_PATH}}assets/favicon-32x32.png">
@@ -17,7 +23,7 @@
     <link rel="alternate" hreflang="de" href="{{BASE_URL}}/de/">
     <link rel="alternate" hreflang="fr" href="{{BASE_URL}}/fr/">
     <link rel="alternate" hreflang="x-default" href="{{BASE_URL}}/">
-    <meta name="robots" content="index, follow">
+    <link rel="manifest" href="{{ASSET_PATH}}site.webmanifest">
 
     <meta property="og:type" content="website">
     <meta property="og:url" content="{{BASE_URL}}/{{CANONICAL_PATH}}">
@@ -35,170 +41,42 @@
     <meta name="twitter:description" content="{{TWITTER_DESCRIPTION}}">
     <meta name="twitter:image" content="{{BASE_URL}}/assets/IconHero.webp">
 
-    <meta name="theme-color" content="#0f172a">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="manifest" href="{{ASSET_PATH}}site.webmanifest">
-
     <script src="{{ASSET_PATH}}lang-init.min.js"></script>
     <script defer src="{{ASSET_PATH}}app.min.js"></script>
-
-    <script type="application/ld+json" id="schema-org">
-    {
-      "@context": "https://schema.org",
-      "@type": "Organization",
-      "name": "{{SITE_NAME}}",
-      "url": "{{BASE_URL}}/",
-      "logo": "{{BASE_URL}}/assets/NewLogoIcon.webp",
-      "sameAs": [
-        "https://github.com/Shik3i/KoalaPull",
-        "https://github.com/Shik3i/KoalaPull/releases"
-      ]
-    }
-    </script>
-    <script type="application/ld+json" id="schema-website">
-    {
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      "name": "{{SITE_NAME}}",
-      "url": "{{BASE_URL}}/",
-      "inLanguage": ["en", "de", "fr"]
-    }
-    </script>
-    <script type="application/ld+json" id="schema-software">
-    {
-      "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      "name": "{{SITE_NAME}}",
-      "operatingSystem": "Windows, macOS, Linux",
-      "applicationCategory": "MultimediaApplication",
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD"
-      },
-      "description": "{{META_DESCRIPTION}}",
-      "license": "https://opensource.org/licenses/MIT",
-      "sameAs": "https://github.com/Shik3i/KoalaPull",
-      "image": "{{BASE_URL}}/assets/NewLogoIcon.webp",
-      "screenshot": "{{BASE_URL}}/assets/IconHero.webp"
-    }
-    </script>
-    <script type="application/ld+json" id="schema-howto">
-    {
-      "@context": "https://schema.org",
-      "@type": "HowTo",
-      "name": "{{HOWTO_TITLE}}",
-      "description": "{{HOWTO_DESC}}",
-      "step": [
-        {
-          "@type": "HowToStep",
-          "position": 1,
-          "name": "{{HOWTO_STEP_1_NAME}}",
-          "text": "{{HOWTO_STEP_1_TEXT}}",
-          "url": "{{BASE_URL}}/#how-it-works"
-        },
-        {
-          "@type": "HowToStep",
-          "position": 2,
-          "name": "{{HOWTO_STEP_2_NAME}}",
-          "text": "{{HOWTO_STEP_2_TEXT}}",
-          "url": "{{BASE_URL}}/#how-it-works"
-        },
-        {
-          "@type": "HowToStep",
-          "position": 3,
-          "name": "{{HOWTO_STEP_3_NAME}}",
-          "text": "{{HOWTO_STEP_3_TEXT}}",
-          "url": "{{BASE_URL}}/#how-it-works"
-        },
-        {
-          "@type": "HowToStep",
-          "position": 4,
-          "name": "{{HOWTO_STEP_4_NAME}}",
-          "text": "{{HOWTO_STEP_4_TEXT}}",
-          "url": "{{BASE_URL}}/#how-it-works"
-        },
-        {
-          "@type": "HowToStep",
-          "position": 5,
-          "name": "{{HOWTO_STEP_5_NAME}}",
-          "text": "{{HOWTO_STEP_5_TEXT}}",
-          "url": "{{BASE_URL}}/#how-it-works"
-        }
-      ]
-    }
-    </script>
-    <script type="application/ld+json" id="schema-faq">
-    {
-      "@context": "https://schema.org",
-      "@type": "FAQPage",
-      "mainEntity": [
-        {
-          "@type": "Question",
-          "name": "{{FAQ_Q1}}",
-          "acceptedAnswer": { "@type": "Answer", "text": "{{FAQ_A1}}" }
-        },
-        {
-          "@type": "Question",
-          "name": "{{FAQ_Q2}}",
-          "acceptedAnswer": { "@type": "Answer", "text": "{{FAQ_A2}}" }
-        },
-        {
-          "@type": "Question",
-          "name": "{{FAQ_Q3}}",
-          "acceptedAnswer": { "@type": "Answer", "text": "{{FAQ_A3}}" }
-        },
-        {
-          "@type": "Question",
-          "name": "{{FAQ_Q4}}",
-          "acceptedAnswer": { "@type": "Answer", "text": "{{FAQ_A4}}" }
-        },
-        {
-          "@type": "Question",
-          "name": "{{FAQ_Q5}}",
-          "acceptedAnswer": { "@type": "Answer", "text": "{{FAQ_A5}}" }
-        },
-        {
-          "@type": "Question",
-          "name": "{{FAQ_Q6}}",
-          "acceptedAnswer": { "@type": "Answer", "text": "{{FAQ_A6}}" }
-        }
-      ]
-    }
-    </script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
 
-    <div class="bg-blobs">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-        <div class="blob blob-3"></div>
+    <div class="site-bg" aria-hidden="true">
+        <div class="site-glow glow-a"></div>
+        <div class="site-glow glow-b"></div>
+        <div class="site-grid"></div>
     </div>
 
     <nav data-sticky-nav class="site-nav">
         <div class="container nav-content">
-            <div class="logo-area">
+            <a class="logo-area" href="#main-content" aria-label="{{SITE_NAME}}">
                 <img src="{{ASSET_PATH}}assets/NewLogoIcon.webp" alt="{{SITE_NAME}} logo" width="64" height="64">
                 <span>{{SITE_NAME}}</span>
-            </div>
+            </a>
+
             <div class="nav-links" id="primary-nav" role="navigation" aria-label="Primary" data-nav-menu>
-                <a href="#features"><span>{{NAV_FEATURES}}</span></a>
-                <a href="#mockup"><span>{{NAV_MOCKUP}}</span></a>
-                <a href="#how-it-works"><span>{{NAV_HOW_IT_WORKS}}</span></a>
-                <a href="#faq"><span>{{NAV_FAQ}}</span></a>
+                <a href="#experience">{{NAV_MOCKUP}}</a>
+                <a href="#features">{{NAV_FEATURES}}</a>
+                <a href="#how-it-works">{{NAV_HOW_IT_WORKS}}</a>
+                <a href="#faq">{{NAV_FAQ}}</a>
                 <a href="https://github.com/Shik3i/KoalaPull" target="_blank" rel="noreferrer">GitHub</a>
             </div>
+
             <div class="nav-right">
                 <div class="lang-select-container">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="globe-icon"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                    <select class="lang-dropdown" aria-label="Select Language" data-language-select>
+                    <svg class="globe-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    <select class="lang-dropdown" aria-label="Select language" data-language-select>
                         <option value="en" data-url="/" {{SELECTED_EN}}>English</option>
                         <option value="de" data-url="/de/" {{SELECTED_DE}}>Deutsch</option>
                         <option value="fr" data-url="/fr/" {{SELECTED_FR}}>Français</option>
                     </select>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="chevron-icon"><polyline points="6 9 12 15 18 9"/></svg>
+                    <svg class="chevron-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
                 </div>
                 <a class="lang-toggle" href="{{LANG_TOGGLE_URL}}">{{LANG_TOGGLE_TEXT}}</a>
                 <button class="hamburger nav-toggle" data-nav-toggle aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="primary-nav">
@@ -210,144 +88,331 @@
 
     <header class="hero" id="main-content">
         <div class="container hero-grid">
-            <div class="hero-text">
-                <a href="https://github.com/Shik3i/KoalaPull/releases" target="_blank" rel="noreferrer" class="version-badge" data-reveal>
-                    {{HERO_BADGE}}
-                </a>
+            <div class="hero-copy">
+                <span class="eyebrow" data-reveal>{{HERO_BADGE}}</span>
                 <h1 data-reveal>{{HERO_TITLE}}</h1>
                 <p class="hero-subtitle" data-reveal>{{HERO_SUBTITLE}}</p>
+                <p class="hero-note" data-reveal>{{HERO_NOTE}}</p>
                 <div class="cta-group" data-reveal>
-                    <a href="https://github.com/Shik3i/KoalaPull" target="_blank" rel="noreferrer" class="btn btn-primary">{{HERO_PRIMARY_CTA}}</a>
-                    <a href="https://github.com/Shik3i/KoalaPull/releases" target="_blank" rel="noreferrer" class="btn btn-secondary">{{HERO_SECONDARY_CTA}}</a>
+                    <a href="https://github.com/Shik3i/KoalaPull/releases" target="_blank" rel="noreferrer" class="btn btn-primary">{{HERO_PRIMARY_CTA}}</a>
+                    <a href="https://github.com/Shik3i/KoalaPull" target="_blank" rel="noreferrer" class="btn btn-secondary">{{HERO_SECONDARY_CTA}}</a>
                 </div>
-                <ul style="display:flex; flex-wrap:wrap; gap:0.75rem 1.25rem; margin-top:1.5rem; list-style:none; color:var(--text-soft); font-size:0.95rem;" data-reveal>
+                <ul class="trust-list" data-reveal>
                     <li>{{HERO_TRUST_1}}</li>
                     <li>{{HERO_TRUST_2}}</li>
                     <li>{{HERO_TRUST_3}}</li>
                 </ul>
             </div>
 
-            <div class="hero-mockup-wrapper" data-reveal>
-                <div class="app-window">
-                    <div class="app-sidebar">
-                        <div class="app-sidebar-header">
-                            <img src="{{ASSET_PATH}}assets/NewLogoIcon.webp" alt="" width="64" height="64">
-                            <span>{{SITE_NAME}}</span>
-                        </div>
-                        <div class="app-sidebar-nav">
-                            <button class="app-sidebar-tab active">
-                                <svg class="app-sidebar-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
-                                {{MOCK_TAB_DOWNLOADS}}
-                            </button>
-                            <button class="app-sidebar-tab">
-                                <svg class="app-sidebar-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                {{MOCK_TAB_HISTORY}}
-                            </button>
-                            <button class="app-sidebar-tab">
-                                <svg class="app-sidebar-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                                {{MOCK_TAB_SETTINGS}}
-                            </button>
-                            <button class="app-sidebar-tab">
-                                <svg class="app-sidebar-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                                {{MOCK_TAB_HELP}}
-                            </button>
-                        </div>
-                        <div class="app-sidebar-footer">
-                            <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.38.6.11.79-.26.79-.58v-2.23c-3.34.73-4.03-1.41-4.03-1.41-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49 1 .11-.78.42-1.31.76-1.61-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.53-1.53.12-3.18 0 0 1-.32 3.3 1.23.96-.27 1.98-.4 3-.4s2.05.13 3.01.4c2.29-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.48 5.92.43.37.82 1.1.82 2.22v3.29c0 .32.19.69.8.57C20.56 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z"/></svg>
-                            <span>v0.1.0</span>
-                        </div>
-                    </div>
-                    <div class="app-content">
-                        <div class="url-row">
-                            <input type="text" value="{{MOCK_DOWNLOADS_URL}}" readonly aria-label="{{MOCK_DOWNLOADS_URL_LABEL}}">
-                            <button type="button" class="mock-fetch-btn">{{MOCK_DOWNLOADS_FETCH}}</button>
-                        </div>
-                        <div class="mock-card">
-                            <div class="mock-card-header">{{MOCK_DOWNLOADS_PREVIEW}}</div>
-                            <div class="meta-preview">
-                                <div class="meta-thumb">
-                                    <img src="{{ASSET_PATH}}assets/IconHero-1x.webp" srcset="{{ASSET_PATH}}assets/IconHero-1x.webp 180w, {{ASSET_PATH}}assets/IconHero.webp 360w" sizes="80px" alt="" width="80" height="60">
-                                </div>
-                                <div class="meta-info">
-                                    <p class="meta-title">{{MOCK_META_TITLE_VALUE}}</p>
-                                    <p class="meta-channel">{{MOCK_META_CHANNEL_VALUE}} &bull; {{MOCK_META_DURATION_VALUE}}</p>
-                                    <div class="meta-badges">
-                                        <span class="mock-server-badge">{{MOCK_PRESET_BEST}}</span>
-                                        <span class="mock-server-badge outline">{{MOCK_PRESET_COMPATIBLE}}</span>
-                                        <span class="mock-server-badge outline">{{MOCK_PRESET_AUDIO}}</span>
-                                    </div>
-                                    <div class="meta-stats">
-                                        <div class="meta-stat">
-                                            <div class="meta-stat-label">{{MOCK_META_FORMATS_LABEL}}</div>
-                                            <div class="meta-stat-value">{{MOCK_META_FORMATS_VALUE}}</div>
-                                        </div>
-                                        <div class="meta-stat">
-                                            <div class="meta-stat-label">{{MOCK_META_SIZE_LABEL}}</div>
-                                            <div class="meta-stat-value">{{MOCK_META_SIZE_VALUE}}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="queue-section">
-                            <div class="queue-header">
-                                <strong>{{MOCK_QUEUE_SUMMARY}}</strong>
-                                <span class="queue-preset">{{MOCK_PRESET_BEST}}</span>
-                            </div>
-                            <div class="queue-list">
-                                <div class="queue-item">
-                                    <div class="queue-item-header">
-                                        <span class="queue-item-title">{{MOCK_QUEUE_ITEM_1_TITLE}}</span>
-                                        <span class="queue-item-status downloading">{{MOCK_QUEUE_ITEM_1_STATUS}}</span>
-                                    </div>
-                                    <div class="progress-bar">
-                                        <div data-progress-fill data-progress-min="68" data-progress-max="92" style="width:74%"></div>
-                                    </div>
-                                    <div class="queue-item-progress">74% &middot; 6.2 MB/s &middot; 00:41 left</div>
-                                </div>
-                                <div class="queue-item">
-                                    <div class="queue-item-header">
-                                        <span class="queue-item-title">{{MOCK_QUEUE_ITEM_2_TITLE}}</span>
-                                        <span class="queue-item-status queued">{{MOCK_QUEUE_ITEM_2_STATUS}}</span>
-                                    </div>
-                                    <div class="progress-bar">
-                                        <div data-progress-fill data-progress-min="0" data-progress-max="10" style="width:0%"></div>
-                                    </div>
-                                    <div class="queue-item-progress">{{MOCK_QUEUE_ITEM_2_PROGRESS}}</div>
-                                </div>
-                                <div class="queue-item">
-                                    <div class="queue-item-header">
-                                        <span class="queue-item-title">{{MOCK_QUEUE_ITEM_3_TITLE}}</span>
-                                        <span class="queue-item-status completed">{{MOCK_QUEUE_ITEM_3_STATUS}}</span>
-                                    </div>
-                                    <div class="progress-bar green">
-                                        <div style="width:100%"></div>
-                                    </div>
-                                    <div class="queue-item-progress">{{MOCK_QUEUE_ITEM_3_PROGRESS}}</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+            <div class="hero-stack" data-reveal>
+                <div class="hero-art" aria-hidden="true">
+                    <img src="{{ASSET_PATH}}assets/NewLogoIcon_384.webp" srcset="{{ASSET_PATH}}assets/NewLogoIcon_384.webp 1x, {{ASSET_PATH}}assets/NewLogoIcon_768.webp 2x" alt="" width="320" height="320">
                 </div>
+                <article class="hero-panel hero-panel-primary">
+                    <div class="hero-panel-top">
+                        <p>{{HERO_STAT_1_LABEL}}</p>
+                        <strong>{{HERO_STAT_1_VALUE}}</strong>
+                    </div>
+                    <p>{{HERO_STAT_1_TEXT}}</p>
+                </article>
+                <article class="hero-panel">
+                    <div class="hero-panel-top">
+                        <p>{{HERO_STAT_2_LABEL}}</p>
+                        <strong>{{HERO_STAT_2_VALUE}}</strong>
+                    </div>
+                    <p>{{HERO_STAT_2_TEXT}}</p>
+                </article>
+                <article class="hero-panel">
+                    <div class="hero-panel-top">
+                        <p>{{HERO_STAT_3_LABEL}}</p>
+                        <strong>{{HERO_STAT_3_VALUE}}</strong>
+                    </div>
+                    <p>{{HERO_STAT_3_TEXT}}</p>
+                </article>
             </div>
         </div>
     </header>
 
     <main>
+        <section id="experience" class="experience-section">
+            <div class="container">
+                <div class="section-heading" data-reveal>
+                    <span class="eyebrow">{{MOCKUP_TITLE}}</span>
+                    <h2>{{MOCKUP_SUBTITLE}}</h2>
+                    <p>{{MOCKUP_TEXT}}</p>
+                </div>
+
+                <div class="experience-shell" data-demo data-reveal
+                    data-toast-analyzing="{{MOCK_TOAST_ANALYZING}}"
+                    data-toast-ready="{{MOCK_TOAST_READY}}"
+                    data-toast-queued="{{MOCK_TOAST_QUEUED}}"
+                    data-toast-done="{{MOCK_TOAST_DONE}}"
+                    data-toast-reset="{{MOCK_TOAST_RESET}}"
+                    data-status-idle="{{MOCK_META_STATUS_IDLE}}"
+                    data-status-busy="{{MOCK_META_STATUS_BUSY}}"
+                    data-status-done="{{MOCK_META_STATUS_DONE}}">
+                    <div class="experience-sidebar" role="tablist" aria-label="{{MOCKUP_TITLE}}">
+                        <div class="experience-brand">
+                            <img src="{{ASSET_PATH}}assets/NewLogoIcon.webp" alt="" width="64" height="64">
+                            <span>{{SITE_NAME}}</span>
+                        </div>
+                        <button type="button" class="experience-tab is-active" data-mock-tab="downloads" aria-pressed="true">
+                            <svg class="experience-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+                            {{MOCK_TAB_DOWNLOADS}}
+                        </button>
+                        <button type="button" class="experience-tab" data-mock-tab="history" aria-pressed="false">
+                            <svg class="experience-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                            {{MOCK_TAB_HISTORY}}
+                        </button>
+                        <button type="button" class="experience-tab" data-mock-tab="settings" aria-pressed="false">
+                            <svg class="experience-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                            {{MOCK_TAB_SETTINGS}}
+                        </button>
+                        <button type="button" class="experience-tab" data-mock-tab="help" aria-pressed="false">
+                            <svg class="experience-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                            {{MOCK_TAB_HELP}}
+                        </button>
+                        <div class="experience-sidebar-footer">
+                            <svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.38.6.11.79-.26.79-.58v-2.23c-3.34.73-4.03-1.41-4.03-1.41-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49 1 .11-.78.42-1.31.76-1.61-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.53-1.53.12-3.18 0 0 1-.32 3.3 1.23.96-.27 1.98-.4 3-.4s2.05.13 3.01.4c2.29-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.48 5.92.43.37.82 1.1.82 2.22v3.29c0 .32.19.69.8.57C20.56 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z"/></svg>
+                            <span>v0.1.0</span>
+                        </div>
+                    </div>
+
+                    <div class="experience-panel">
+                        <div class="mock-screen is-active" data-mock-panel="downloads">
+                            <article class="mock-card mock-card-main">
+                                <div class="url-row">
+                                    <input type="text" value="{{MOCK_DOWNLOADS_URL}}" readonly aria-label="{{MOCK_DOWNLOADS_URL_LABEL}}">
+                                    <button type="button" class="mock-action-btn" data-demo-analyze>{{MOCK_DOWNLOADS_FETCH}}</button>
+                                </div>
+                                <p class="card-note">{{MOCK_DOWNLOADS_FETCH_HELP}}</p>
+                                <div class="mock-fetch-state">
+                                    <div class="status-pill" data-demo-status>{{MOCK_META_STATUS_IDLE}}</div>
+                                    <span class="mock-fetch-summary" data-demo-summary>{{MOCK_META_TITLE}}</span>
+                                </div>
+                            </article>
+
+                            <article class="mock-card">
+                                <div class="meta-preview">
+                                    <div class="meta-thumb">
+                                        <img src="{{ASSET_PATH}}assets/IconHero-1x.webp" srcset="{{ASSET_PATH}}assets/IconHero-1x.webp 180w, {{ASSET_PATH}}assets/IconHero.webp 360w" sizes="80px" alt="" width="80" height="60">
+                                    </div>
+                                    <div class="meta-info">
+                                        <p class="meta-title">{{MOCK_META_TITLE_VALUE}}</p>
+                                        <p class="meta-channel">{{MOCK_META_CHANNEL_VALUE}}</p>
+                                        <div class="meta-stats meta-stats-compact">
+                                            <div class="meta-stat">
+                                                <div class="meta-stat-label">{{MOCK_META_FORMATS_LABEL}}</div>
+                                                <div class="meta-stat-value">{{MOCK_META_FORMATS_VALUE}}</div>
+                                            </div>
+                                            <div class="meta-stat">
+                                                <div class="meta-stat-label">{{MOCK_META_SIZE_LABEL}}</div>
+                                                <div class="meta-stat-value">{{MOCK_META_SIZE_VALUE}}</div>
+                                            </div>
+                                            <div class="meta-stat">
+                                                <div class="meta-stat-label">{{MOCK_META_DURATION_LABEL}}</div>
+                                                <div class="meta-stat-value">{{MOCK_META_DURATION_VALUE}}</div>
+                                            </div>
+                                        </div>
+                                        <div class="preset-row">
+                                            <label class="preset-label">{{MOCK_PRESET_LABEL}}</label>
+                                            <div class="preset-group" role="group" aria-label="{{MOCK_PRESET_LABEL}}">
+                                                <button type="button" class="preset-chip is-active" data-demo-preset="best">{{MOCK_PRESET_BEST}}</button>
+                                                <button type="button" class="preset-chip" data-demo-preset="compatible">{{MOCK_PRESET_COMPATIBLE}}</button>
+                                                <button type="button" class="preset-chip" data-demo-preset="audio">{{MOCK_PRESET_AUDIO}}</button>
+                                                <button type="button" class="preset-chip" data-demo-preset="custom">{{MOCK_PRESET_CUSTOM}}</button>
+                                            </div>
+                                        </div>
+                                        <div class="demo-actions demo-actions-native">
+                                            <button type="button" class="mock-native-btn" data-demo-queue>
+                                                <svg class="mock-native-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                                                <span>{{MOCK_DOWNLOADS_QUEUE_ACTION}}</span>
+                                            </button>
+                                            <button type="button" class="mock-native-btn ghost" data-demo-open>
+                                                <svg class="mock-native-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"/></svg>
+                                                <span>{{MOCK_DOWNLOADS_OPEN}}</span>
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </article>
+
+                            <article class="mock-card">
+                                <div class="queue-card-head">
+                                    <div class="mock-card-header">{{MOCK_DOWNLOADS_QUEUE_TITLE}}</div>
+                                    <div class="queue-summary">{{MOCK_QUEUE_SUMMARY}}</div>
+                                </div>
+                                <div class="queue-layout">
+                                    <div class="queue-list">
+                                        <div class="queue-item">
+                                            <div class="queue-item-header">
+                                                <span class="queue-item-title">{{MOCK_QUEUE_ITEM_1_TITLE}}</span>
+                                                <span class="queue-item-status downloading" data-queue-primary-status>{{MOCK_QUEUE_ITEM_1_STATUS}}</span>
+                                            </div>
+                                            <div class="progress-bar">
+                                                <div data-progress-fill data-progress-min="0" data-progress-max="100"></div>
+                                            </div>
+                                            <div class="queue-item-progress" data-queue-primary-progress>{{MOCK_QUEUE_ITEM_1_PROGRESS}}</div>
+                                        </div>
+                                        <div class="queue-item">
+                                            <div class="queue-item-header">
+                                                <span class="queue-item-title">{{MOCK_QUEUE_ITEM_2_TITLE}}</span>
+                                                <span class="queue-item-status queued">{{MOCK_QUEUE_ITEM_2_STATUS}}</span>
+                                            </div>
+                                            <div class="progress-bar">
+                                                <div data-progress-fill data-progress-min="6" data-progress-max="14"></div>
+                                            </div>
+                                            <div class="queue-item-progress">{{MOCK_QUEUE_ITEM_2_PROGRESS}}</div>
+                                        </div>
+                                        <div class="queue-item">
+                                            <div class="queue-item-header">
+                                                <span class="queue-item-title">{{MOCK_QUEUE_ITEM_3_TITLE}}</span>
+                                                <span class="queue-item-status completed">{{MOCK_QUEUE_ITEM_3_STATUS}}</span>
+                                            </div>
+                                            <div class="progress-bar progress-bar-success">
+                                                <div data-progress-static class="is-full"></div>
+                                            </div>
+                                            <div class="queue-item-progress">{{MOCK_QUEUE_ITEM_3_PROGRESS}}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </article>
+                        </div>
+
+                        <div class="mock-screen" data-mock-panel="history" hidden>
+                            <article class="mock-card">
+                                <div class="mock-card-header">{{MOCK_HISTORY_TITLE}}</div>
+                                <div class="history-toolbar">
+                                    <div class="mock-input-history">{{MOCK_HISTORY_SEARCH}}</div>
+                                    <div class="filter-group" role="group" aria-label="{{MOCK_HISTORY_TITLE}}">
+                                        <button type="button" class="filter-chip is-active" data-history-filter>{{MOCK_HISTORY_FILTER_1}}</button>
+                                        <button type="button" class="filter-chip" data-history-filter>{{MOCK_HISTORY_FILTER_2}}</button>
+                                        <button type="button" class="filter-chip" data-history-filter>{{MOCK_HISTORY_FILTER_3}}</button>
+                                    </div>
+                                </div>
+                                <div class="mock-peer-list">
+                                    <div class="mock-peer-item">
+                                        <div class="mock-peer-header">
+                                            <span class="mock-peer-name">{{MOCK_HISTORY_ITEM_1_TITLE}}</span>
+                                            <span class="mock-peer-meta">{{MOCK_HISTORY_ITEM_1_META}}</span>
+                                        </div>
+                                    </div>
+                                    <div class="mock-peer-item">
+                                        <div class="mock-peer-header">
+                                            <span class="mock-peer-name">{{MOCK_HISTORY_ITEM_2_TITLE}}</span>
+                                            <span class="mock-peer-meta">{{MOCK_HISTORY_ITEM_2_META}}</span>
+                                        </div>
+                                    </div>
+                                    <div class="mock-peer-item">
+                                        <div class="mock-peer-header">
+                                            <span class="mock-peer-name">{{MOCK_HISTORY_ITEM_3_TITLE}}</span>
+                                            <span class="mock-peer-meta">{{MOCK_HISTORY_ITEM_3_META}}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </article>
+
+                            <article class="mock-card">
+                                <div class="mock-card-header">{{MOCK_HISTORY_SUMMARY_TITLE}}</div>
+                                <div class="meta-stats meta-stats-wide">
+                                    <div class="meta-stat">
+                                        <div class="meta-stat-label">{{MOCK_HISTORY_TOTAL_LABEL}}</div>
+                                        <div class="meta-stat-value">{{MOCK_HISTORY_TOTAL_VALUE}}</div>
+                                    </div>
+                                    <div class="meta-stat">
+                                        <div class="meta-stat-label">{{MOCK_HISTORY_SPEED_LABEL}}</div>
+                                        <div class="meta-stat-value">{{MOCK_HISTORY_SPEED_VALUE}}</div>
+                                    </div>
+                                    <div class="meta-stat">
+                                        <div class="meta-stat-label">{{MOCK_HISTORY_TIME_LABEL}}</div>
+                                        <div class="meta-stat-value">{{MOCK_HISTORY_TIME_VALUE}}</div>
+                                    </div>
+                                </div>
+                            </article>
+                        </div>
+
+                        <div class="mock-screen" data-mock-panel="settings" hidden>
+                            <article class="mock-card">
+                                <div class="mock-card-header">{{MOCK_SETTINGS_TITLE}}</div>
+                                <div class="settings-list">
+                                    <div class="mock-settings-row">
+                                        <div>
+                                            <strong>{{MOCK_SETTINGS_THEME}}</strong>
+                                            <p>{{MOCK_SETTINGS_THEME_DESC}}</p>
+                                        </div>
+                                        <button type="button" class="mock-status-pill" data-setting-toggle>{{MOCK_SETTINGS_THEME_VALUE}}</button>
+                                    </div>
+                                    <div class="mock-settings-row">
+                                        <div>
+                                            <strong>{{MOCK_SETTINGS_LANGUAGE}}</strong>
+                                            <p>{{MOCK_SETTINGS_LANGUAGE_DESC}}</p>
+                                        </div>
+                                        <button type="button" class="mock-status-pill" data-setting-toggle>{{MOCK_SETTINGS_LANGUAGE_VALUE}}</button>
+                                    </div>
+                                    <div class="mock-settings-row">
+                                        <div>
+                                            <strong>{{MOCK_SETTINGS_OUTPUT}}</strong>
+                                            <p>{{MOCK_SETTINGS_OUTPUT_DESC}}</p>
+                                        </div>
+                                        <button type="button" class="mock-status-pill" data-setting-toggle>{{MOCK_SETTINGS_OUTPUT_VALUE}}</button>
+                                    </div>
+                                    <div class="mock-settings-row">
+                                        <div>
+                                            <strong>{{MOCK_SETTINGS_CONCURRENCY}}</strong>
+                                            <p>{{MOCK_SETTINGS_CONCURRENCY_DESC}}</p>
+                                        </div>
+                                        <button type="button" class="mock-status-pill" data-setting-toggle>{{MOCK_SETTINGS_CONCURRENCY_VALUE}}</button>
+                                    </div>
+                                    <div class="mock-settings-row">
+                                        <div>
+                                            <strong>{{MOCK_SETTINGS_AUTOPASTE}}</strong>
+                                            <p>{{MOCK_SETTINGS_AUTOPASTE_DESC}}</p>
+                                        </div>
+                                        <button type="button" class="mock-status-pill" data-setting-toggle>{{MOCK_SETTINGS_AUTOPASTE_VALUE}}</button>
+                                    </div>
+                                </div>
+                            </article>
+                        </div>
+
+                        <div class="mock-screen" data-mock-panel="help" hidden>
+                            <article class="mock-card">
+                                <div class="mock-card-header">{{MOCK_HELP_TITLE}}</div>
+                                <div class="mock-step-list">
+                                    <div class="mock-diag-box"><span class="diag-val">1</span><span>{{MOCK_HELP_STEP_1}}</span></div>
+                                    <div class="mock-diag-box"><span class="diag-val">2</span><span>{{MOCK_HELP_STEP_2}}</span></div>
+                                    <div class="mock-diag-box"><span class="diag-val">3</span><span>{{MOCK_HELP_STEP_3}}</span></div>
+                                    <div class="mock-diag-box"><span class="diag-val">4</span><span>{{MOCK_HELP_STEP_4}}</span></div>
+                                </div>
+                                <div class="demo-actions">
+                                    <button type="button" class="btn btn-soft" data-demo-jump="downloads">{{MOCK_HELP_ACTION_1}}</button>
+                                    <button type="button" class="btn btn-ghost" data-demo-jump="history">{{MOCK_HELP_ACTION_2}}</button>
+                                </div>
+                            </article>
+
+                            <article class="mock-card">
+                                <div class="mock-card-header">{{MOCK_HELP_SITES_LABEL}}</div>
+                                <p class="body-copy">{{MOCK_HELP_SITES_TEXT}}</p>
+                            </article>
+                        </div>
+                    </div>
+
+                </div>
+            </div>
+        </section>
+
         <section id="features">
             <div class="container">
-                <div data-reveal>
-                    <p class="version-badge" style="margin-bottom:1rem;">{{FEATURES_TITLE}}</p>
-                    <h2 style="font-size:2.2rem; line-height:1.15; margin-bottom:1rem;">{{FEATURES_SUBTITLE}}</h2>
+                <div class="section-heading" data-reveal>
+                    <span class="eyebrow">{{FEATURES_TITLE}}</span>
+                    <h2>{{FEATURES_SUBTITLE}}</h2>
                 </div>
+
                 <div class="features-grid">
-                    <article class="feature-card bento-large" data-reveal>
-                        <div>
-                            <div class="feature-icon-svg" aria-hidden="true">
-                                <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 4v16"/><path d="M16 4v16"/><path d="M4 12h16"/></svg>
-                            </div>
-                            <h3>{{FEATURE_1_TITLE}}</h3>
+                    <article class="feature-card" data-reveal>
+                        <div class="feature-icon-svg" aria-hidden="true">
+                            <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 4v16"/><path d="M16 4v16"/><path d="M4 12h16"/></svg>
                         </div>
+                        <h3>{{FEATURE_1_TITLE}}</h3>
                         <p>{{FEATURE_1_DESC}}</p>
                     </article>
                     <article class="feature-card" data-reveal>
@@ -389,266 +454,36 @@
             </div>
         </section>
 
-        <section id="mockup">
-            <div class="container">
-                <div data-reveal style="max-width:760px; margin-bottom:2rem;">
-                    <p class="version-badge" style="margin-bottom:1rem;">{{MOCKUP_TITLE}}</p>
-                    <h2 style="font-size:2.2rem; line-height:1.15; margin-bottom:1rem;">{{MOCKUP_SUBTITLE}}</h2>
-                </div>
-                <div class="mockup-layout" data-reveal>
-                    <div class="mockup-tabs">
-                        <button type="button" class="mock-tab active" data-mock-tab="downloads">
-                            <svg class="mock-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
-                            {{MOCK_TAB_DOWNLOADS}}
-                        </button>
-                        <button type="button" class="mock-tab" data-mock-tab="history">
-                            <svg class="mock-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                            {{MOCK_TAB_HISTORY}}
-                        </button>
-                        <button type="button" class="mock-tab" data-mock-tab="settings">
-                            <svg class="mock-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                            {{MOCK_TAB_SETTINGS}}
-                        </button>
-                        <button type="button" class="mock-tab" data-mock-tab="help">
-                            <svg class="mock-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                            {{MOCK_TAB_HELP}}
-                        </button>
-                    </div>
-                    <div class="mock-panel-container">
-                        <div class="mock-panel-header">
-                            <div class="mock-panel-title">
-                                <img src="{{ASSET_PATH}}assets/NewLogoIcon.webp" alt="" width="80" height="80">
-                                <div>
-                                    <h3 style="margin:0; font-size:1.1rem;">{{SITE_NAME}}</h3>
-                                    <p style="margin:0; color:var(--text-soft); font-size:0.8rem;">{{MOCKUP_SUBTITLE}}</p>
-                                </div>
-                            </div>
-                            <div class="status-pill">
-                                <span class="status-pill-dot"></span>
-                                {{MOCK_META_STATUS}}
-                            </div>
-                        </div>
-
-                        <div class="mock-screen active" data-mock-panel="downloads">
-                            <div class="mock-card">
-                                <div class="mock-card-header">{{MOCK_DOWNLOADS_URL_LABEL}}</div>
-                                <div class="url-row">
-                                    <input type="text" value="{{MOCK_DOWNLOADS_URL}}" readonly aria-label="{{MOCK_DOWNLOADS_URL_LABEL}}">
-                                    <button type="button" class="mock-fetch-btn" style="width:96px;">{{MOCK_DOWNLOADS_FETCH}}</button>
-                                </div>
-                                <p style="margin-top:0.75rem; color:var(--text-soft); font-size:0.82rem;">{{MOCK_DOWNLOADS_FETCH_HELP}}</p>
-                            </div>
-                            <div class="mock-card">
-                                <div class="mock-card-header">{{MOCK_DOWNLOADS_PREVIEW}}</div>
-                                <div class="meta-preview">
-                                    <div class="meta-thumb">
-                                        <img src="{{ASSET_PATH}}assets/IconHero-1x.webp" srcset="{{ASSET_PATH}}assets/IconHero-1x.webp 180w, {{ASSET_PATH}}assets/IconHero.webp 360w" sizes="80px" alt="" width="80" height="60">
-                                    </div>
-                                    <div class="meta-info">
-                                        <p class="meta-title">{{MOCK_META_TITLE_VALUE}}</p>
-                                        <p class="meta-channel">{{MOCK_META_CHANNEL_VALUE}} &bull; {{MOCK_META_DURATION_VALUE}}</p>
-                                        <div class="meta-badges">
-                                            <span class="mock-server-badge">{{MOCK_PRESET_BEST}}</span>
-                                            <span class="mock-server-badge outline">{{MOCK_PRESET_COMPATIBLE}}</span>
-                                            <span class="mock-server-badge outline">{{MOCK_PRESET_AUDIO}}</span>
-                                        </div>
-                                        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:0.5rem; margin-top:0.65rem;">
-                                            <div class="meta-stat">
-                                                <div class="meta-stat-label">{{MOCK_META_FORMATS_LABEL}}</div>
-                                                <div class="meta-stat-value">{{MOCK_META_FORMATS_VALUE}}</div>
-                                            </div>
-                                            <div class="meta-stat">
-                                                <div class="meta-stat-label">{{MOCK_META_SIZE_LABEL}}</div>
-                                                <div class="meta-stat-value">{{MOCK_META_SIZE_VALUE}}</div>
-                                            </div>
-                                            <div class="meta-stat">
-                                                <div class="meta-stat-label">{{MOCK_META_STATUS_LABEL}}</div>
-                                                <div class="meta-stat-value" style="color:#4ade80;">{{MOCK_META_STATUS}}</div>
-                                            </div>
-                                            <div class="meta-stat">
-                                                <div class="meta-stat-label">{{MOCK_PRESET_LABEL}}</div>
-                                                <div class="meta-stat-value">{{MOCK_PRESET_CUSTOM}}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="mock-card">
-                                <div class="mock-card-header">{{MOCK_DOWNLOADS_QUEUE_TITLE}}</div>
-                                <div class="mock-peer-list">
-                                    <div class="mock-peer-item">
-                                        <div class="mock-peer-header">
-                                            <span class="mock-peer-name">{{MOCK_QUEUE_ITEM_1_TITLE}}</span>
-                                            <span class="mock-peer-meta">{{MOCK_QUEUE_ITEM_1_STATUS}}</span>
-                                        </div>
-                                        <div class="mock-peer-status">{{MOCK_QUEUE_ITEM_1_PROGRESS}}</div>
-                                    </div>
-                                    <div class="mock-peer-item">
-                                        <div class="mock-peer-header">
-                                            <span class="mock-peer-name">{{MOCK_QUEUE_ITEM_2_TITLE}}</span>
-                                            <span class="mock-peer-meta">{{MOCK_QUEUE_ITEM_2_STATUS}}</span>
-                                        </div>
-                                        <div class="mock-peer-status">{{MOCK_QUEUE_ITEM_2_PROGRESS}}</div>
-                                    </div>
-                                    <div class="mock-peer-item">
-                                        <div class="mock-peer-header">
-                                            <span class="mock-peer-name">{{MOCK_QUEUE_ITEM_3_TITLE}}</span>
-                                            <span class="mock-peer-meta">{{MOCK_QUEUE_ITEM_3_STATUS}}</span>
-                                        </div>
-                                        <div class="mock-peer-status">{{MOCK_QUEUE_ITEM_3_PROGRESS}}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="mock-screen" data-mock-panel="history" hidden>
-                            <div class="mock-card">
-                                <div class="mock-card-header">{{MOCK_HISTORY_TITLE}}</div>
-                                <div class="mock-input-history">{{MOCK_HISTORY_SEARCH}}</div>
-                                <div class="mock-peer-list">
-                                    <div class="mock-peer-item">
-                                        <div class="mock-peer-header">
-                                            <span class="mock-peer-name">{{MOCK_HISTORY_ITEM_1_TITLE}}</span>
-                                            <span class="mock-peer-meta">{{MOCK_HISTORY_ITEM_1_META}}</span>
-                                        </div>
-                                    </div>
-                                    <div class="mock-peer-item">
-                                        <div class="mock-peer-header">
-                                            <span class="mock-peer-name">{{MOCK_HISTORY_ITEM_2_TITLE}}</span>
-                                            <span class="mock-peer-meta">{{MOCK_HISTORY_ITEM_2_META}}</span>
-                                        </div>
-                                    </div>
-                                    <div class="mock-peer-item">
-                                        <div class="mock-peer-header">
-                                            <span class="mock-peer-name">{{MOCK_HISTORY_ITEM_3_TITLE}}</span>
-                                            <span class="mock-peer-meta">{{MOCK_HISTORY_ITEM_3_META}}</span>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="mock-card">
-                                <div class="mock-card-header">{{MOCK_HISTORY_SUMMARY_TITLE}}</div>
-                                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.75rem;">
-                                    <div class="meta-stat">
-                                        <div class="meta-stat-label">{{MOCK_HISTORY_TOTAL_LABEL}}</div>
-                                        <div class="meta-stat-value">{{MOCK_HISTORY_TOTAL_VALUE}}</div>
-                                    </div>
-                                    <div class="meta-stat">
-                                        <div class="meta-stat-label">{{MOCK_HISTORY_SPEED_LABEL}}</div>
-                                        <div class="meta-stat-value">{{MOCK_HISTORY_SPEED_VALUE}}</div>
-                                    </div>
-                                    <div class="meta-stat">
-                                        <div class="meta-stat-label">{{MOCK_HISTORY_TIME_LABEL}}</div>
-                                        <div class="meta-stat-value">{{MOCK_HISTORY_TIME_VALUE}}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="mock-screen" data-mock-panel="settings" hidden>
-                            <div class="mock-card">
-                                <div class="mock-card-header">{{MOCK_SETTINGS_TITLE}}</div>
-                                <div>
-                                    <div class="mock-settings-row">
-                                        <div>
-                                            <strong>{{MOCK_SETTINGS_THEME}}</strong>
-                                            <p>{{MOCK_SETTINGS_THEME_DESC}}</p>
-                                        </div>
-                                        <span class="mock-status-pill">{{MOCK_SETTINGS_THEME_VALUE}}</span>
-                                    </div>
-                                    <div class="mock-settings-row">
-                                        <div>
-                                            <strong>{{MOCK_SETTINGS_LANGUAGE}}</strong>
-                                            <p>{{MOCK_SETTINGS_LANGUAGE_DESC}}</p>
-                                        </div>
-                                        <span class="mock-status-pill">{{MOCK_SETTINGS_LANGUAGE_VALUE}}</span>
-                                    </div>
-                                    <div class="mock-settings-row">
-                                        <div>
-                                            <strong>{{MOCK_SETTINGS_OUTPUT}}</strong>
-                                            <p>{{MOCK_SETTINGS_OUTPUT_DESC}}</p>
-                                        </div>
-                                        <span class="mock-status-pill">{{MOCK_SETTINGS_OUTPUT_VALUE}}</span>
-                                    </div>
-                                    <div class="mock-settings-row">
-                                        <div>
-                                            <strong>{{MOCK_SETTINGS_CONCURRENCY}}</strong>
-                                            <p>{{MOCK_SETTINGS_CONCURRENCY_DESC}}</p>
-                                        </div>
-                                        <span class="mock-status-pill">{{MOCK_SETTINGS_CONCURRENCY_VALUE}}</span>
-                                    </div>
-                                    <div class="mock-settings-row">
-                                        <div>
-                                            <strong>{{MOCK_SETTINGS_AUTOPASTE}}</strong>
-                                            <p>{{MOCK_SETTINGS_AUTOPASTE_DESC}}</p>
-                                        </div>
-                                        <span class="mock-status-pill">{{MOCK_SETTINGS_AUTOPASTE_VALUE}}</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-
-                        <div class="mock-screen" data-mock-panel="help" hidden>
-                            <div class="mock-card">
-                                <div class="mock-card-header">{{MOCK_HELP_TITLE}}</div>
-                                <div style="display:grid; gap:0.7rem;">
-                                    <div class="mock-diag-box">
-                                        <span class="diag-val">1</span>
-                                        <span>{{MOCK_HELP_STEP_1}}</span>
-                                    </div>
-                                    <div class="mock-diag-box">
-                                        <span class="diag-val">2</span>
-                                        <span>{{MOCK_HELP_STEP_2}}</span>
-                                    </div>
-                                    <div class="mock-diag-box">
-                                        <span class="diag-val">3</span>
-                                        <span>{{MOCK_HELP_STEP_3}}</span>
-                                    </div>
-                                    <div class="mock-diag-box">
-                                        <span class="diag-val">4</span>
-                                        <span>{{MOCK_HELP_STEP_4}}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            <div class="mock-card">
-                                <div class="mock-card-header">{{MOCK_HELP_SITES_LABEL}}</div>
-                                <p style="margin:0; color:var(--text-soft);">{{MOCK_HELP_SITES_TEXT}}</p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
         <section id="how-it-works">
             <div class="container">
-                <div data-reveal style="max-width:760px; margin-bottom:2rem;">
-                    <p class="version-badge" style="margin-bottom:1rem;">{{HOWTO_TITLE}}</p>
-                    <h2 style="font-size:2.2rem; line-height:1.15; margin-bottom:1rem;">{{HOWTO_DESC}}</h2>
+                <div class="section-heading" data-reveal>
+                    <span class="eyebrow">{{HOWTO_TITLE}}</span>
+                    <h2>{{HOWTO_DESC}}</h2>
                 </div>
-                <div class="features-grid">
-                    <article class="feature-card" data-reveal>
-                        <div class="feature-icon-svg" aria-hidden="true"><span style="font-weight:800;">1</span></div>
+
+                <div class="steps-grid">
+                    <article class="step-card" data-reveal>
+                        <span class="step-number">1</span>
                         <h3>{{HOWTO_STEP_1_NAME}}</h3>
                         <p>{{HOWTO_STEP_1_TEXT}}</p>
                     </article>
-                    <article class="feature-card" data-reveal>
-                        <div class="feature-icon-svg" aria-hidden="true"><span style="font-weight:800;">2</span></div>
+                    <article class="step-card" data-reveal>
+                        <span class="step-number">2</span>
                         <h3>{{HOWTO_STEP_2_NAME}}</h3>
                         <p>{{HOWTO_STEP_2_TEXT}}</p>
                     </article>
-                    <article class="feature-card" data-reveal>
-                        <div class="feature-icon-svg" aria-hidden="true"><span style="font-weight:800;">3</span></div>
+                    <article class="step-card" data-reveal>
+                        <span class="step-number">3</span>
                         <h3>{{HOWTO_STEP_3_NAME}}</h3>
                         <p>{{HOWTO_STEP_3_TEXT}}</p>
                     </article>
-                    <article class="feature-card" data-reveal>
-                        <div class="feature-icon-svg" aria-hidden="true"><span style="font-weight:800;">4</span></div>
+                    <article class="step-card" data-reveal>
+                        <span class="step-number">4</span>
                         <h3>{{HOWTO_STEP_4_NAME}}</h3>
                         <p>{{HOWTO_STEP_4_TEXT}}</p>
                     </article>
-                    <article class="feature-card" data-reveal>
-                        <div class="feature-icon-svg" aria-hidden="true"><span style="font-weight:800;">5</span></div>
+                    <article class="step-card" data-reveal>
+                        <span class="step-number">5</span>
                         <h3>{{HOWTO_STEP_5_NAME}}</h3>
                         <p>{{HOWTO_STEP_5_TEXT}}</p>
                     </article>
@@ -658,10 +493,11 @@
 
         <section id="faq">
             <div class="container">
-                <div data-reveal style="max-width:760px; margin-bottom:2rem;">
-                    <p class="version-badge" style="margin-bottom:1rem;">{{FAQ_TITLE}}</p>
-                    <h2 style="font-size:2.2rem; line-height:1.15; margin-bottom:1rem;">{{FAQ_SUBTITLE}}</h2>
+                <div class="section-heading" data-reveal>
+                    <span class="eyebrow">{{FAQ_TITLE}}</span>
+                    <h2>{{FAQ_SUBTITLE}}</h2>
                 </div>
+
                 <div class="faq-grid">
                     <details class="faq-item" data-reveal>
                         <summary>{{FAQ_Q1}}</summary>
@@ -691,28 +527,28 @@
             </div>
         </section>
 
-        <section id="github">
+        <section id="github" class="cta-section">
             <div class="container">
-                <div class="feature-card bento-large" data-reveal style="grid-template-columns:1fr; text-align:center;">
-                    <div>
-                        <h3 style="justify-content:center;">{{CTA_TITLE}}</h3>
-                        <p style="max-width:700px; margin:1rem auto 0;">{{CTA_TEXT}}</p>
-                        <div class="cta-group" style="justify-content:center; margin-top:1.5rem;">
-                            <a href="https://github.com/Shik3i/KoalaPull" target="_blank" rel="noreferrer" class="btn btn-primary">{{CTA_PRIMARY}}</a>
-                            <a href="https://github.com/Shik3i/KoalaPull/releases" target="_blank" rel="noreferrer" class="btn btn-secondary">{{CTA_SECONDARY}}</a>
-                        </div>
+                <div class="cta-card" data-reveal>
+                    <span class="eyebrow">{{CTA_TITLE}}</span>
+                    <h2>{{CTA_TEXT}}</h2>
+                    <div class="cta-group cta-group-center">
+                        <a href="https://github.com/Shik3i/KoalaPull/releases" target="_blank" rel="noreferrer" class="btn btn-primary">{{CTA_PRIMARY}}</a>
+                        <a href="https://github.com/Shik3i/KoalaPull" target="_blank" rel="noreferrer" class="btn btn-secondary">{{CTA_SECONDARY}}</a>
                     </div>
                 </div>
             </div>
         </section>
     </main>
 
-    <footer>
+    <footer class="site-footer">
         <div class="container">
-            <p style="margin-bottom:1rem;">{{FOOTER_MIT}}</p>
-            <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+            <p>{{FOOTER_MIT}}</p>
+            <div class="footer-links">
                 <a href="https://github.com/Shik3i/KoalaPull" target="_blank" rel="noreferrer">{{FOOTER_GITHUB}}</a>
                 <a href="https://github.com/Shik3i/KoalaPull/releases" target="_blank" rel="noreferrer">{{FOOTER_RELEASES}}</a>
+                <a href="{{ASSET_PATH}}{{IMPRINT_PATH}}">{{FOOTER_IMPRINT}}</a>
+                <a href="{{ASSET_PATH}}{{PRIVACY_PATH}}">{{FOOTER_PRIVACY}}</a>
             </div>
         </div>
     </footer>

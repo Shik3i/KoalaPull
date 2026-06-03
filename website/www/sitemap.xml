@@ -31,4 +31,40 @@
     <xhtml:link rel="alternate" hreflang="fr" href="https://pull.koalastuff.net/fr/"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://pull.koalastuff.net/"/>
   </url>
+  <url>
+    <loc>https://pull.koalastuff.net/imprint.html</loc>
+    <lastmod>2026-06-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pull.koalastuff.net/imprint.html"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://pull.koalastuff.net/de/impressum.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pull.koalastuff.net/imprint.html"/>
+  </url>
+  <url>
+    <loc>https://pull.koalastuff.net/de/impressum.html</loc>
+    <lastmod>2026-06-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pull.koalastuff.net/imprint.html"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://pull.koalastuff.net/de/impressum.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pull.koalastuff.net/imprint.html"/>
+  </url>
+  <url>
+    <loc>https://pull.koalastuff.net/privacy.html</loc>
+    <lastmod>2026-06-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pull.koalastuff.net/privacy.html"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://pull.koalastuff.net/de/datenschutz.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pull.koalastuff.net/privacy.html"/>
+  </url>
+  <url>
+    <loc>https://pull.koalastuff.net/de/datenschutz.html</loc>
+    <lastmod>2026-06-03</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.3</priority>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pull.koalastuff.net/privacy.html"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://pull.koalastuff.net/de/datenschutz.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pull.koalastuff.net/privacy.html"/>
+  </url>
 </urlset>

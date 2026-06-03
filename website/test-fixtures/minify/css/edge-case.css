@@ -1,0 +1,13 @@
+.banner::before {
+  content: "/* keep this string */";
+}
+
+.banner {
+  margin: calc(100% - 2rem);
+  background-image: url("data:image/svg+xml;base64,AAA BBB==");
+}
+
+/* remove this comment */
+.banner > .copy {
+  padding: 1rem  2rem;
+}

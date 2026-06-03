@@ -10,9 +10,11 @@ KoalaPull website copy is compiled ahead of time from locale JSON files.
 
 ## Rules
 
-- Keep locale keys in sync across all three files.
+- Missing landing-page keys fall back to English during build.
 - Use short, product-focused copy.
-- Keep legal or policy text out of the site for now.
+- Legal pages are generated only as English `imprint.html` / `privacy.html` and German `de/impressum.html` / `de/datenschutz.html`.
+- Unknown or unsupported language paths should fall back to English unless German is explicitly selected.
+- The build now fails on missing or extra locale keys.
 
 ## Build flow
 

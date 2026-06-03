@@ -3,12 +3,18 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>KoalaPull | Native yt-dlp download manager</title>
-    <meta name="description" content="A clean, native desktop download manager for yt-dlp. Download videos, audio, playlists, subtitles, and metadata with a simple app for macOS, Windows, and Linux.">
+    <title>KoalaPull | Download almost any media</title>
+    <meta name="description" content="KoalaPull is a native desktop app for yt-dlp. Download videos, audio, playlists, subtitles, and metadata on macOS, Windows, and Linux without terminal friction.">
+    <meta name="robots" content="index, follow">
+    <meta name="theme-color" content="#0c111d">
+    <meta name="color-scheme" content="dark light">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; font-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'; object-src 'none'; manifest-src 'self'; upgrade-insecure-requests">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+    <script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is KoalaPull free and open source?","acceptedAnswer":{"@type":"Answer","text":"Yes. KoalaPull is open source under the MIT License and free to use."}},{"@type":"Question","name":"Do I need yt-dlp or ffmpeg installed first?","acceptedAnswer":{"@type":"Answer","text":"No. KoalaPull downloads the required tools into your app data folder on first launch."}},{"@type":"Question","name":"What sites does it support?","acceptedAnswer":{"@type":"Answer","text":"KoalaPull uses yt-dlp, so it can work with hundreds of supported sites, including YouTube, Vimeo, Twitch, SoundCloud, and more."}},{"@type":"Question","name":"Can it handle playlists and subtitles?","acceptedAnswer":{"@type":"Answer","text":"Yes. Playlist downloads, subtitle options, and metadata previews are built into the app."}},{"@type":"Question","name":"How private is it?","acceptedAnswer":{"@type":"Answer","text":"Local-first and privacy-friendly. No telemetry, no account, and no extra hosted script dependencies on the site."}},{"@type":"Question","name":"Why use KoalaPull instead of the terminal?","acceptedAnswer":{"@type":"Answer","text":"It keeps the power of yt-dlp, but adds buttons, previews, history, presets, and queue control in a native desktop flow."}}]}</script>
 
-    <link rel="preload" href="style.f84b56fe.min.css" as="style">
-    <link rel="preload" as="image" href="assets/NewLogoIcon.webp" fetchpriority="high">
-    <link rel="stylesheet" href="style.f84b56fe.min.css">
+    <link rel="preload" href="style.4dad7261.min.css" as="style">
+    <link rel="preload" href="assets/NewLogoIcon.webp" as="image" fetchpriority="high">
+    <link rel="stylesheet" href="style.4dad7261.min.css">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
@@ -17,12 +23,12 @@
     <link rel="alternate" hreflang="de" href="https://pull.koalastuff.net/de/">
     <link rel="alternate" hreflang="fr" href="https://pull.koalastuff.net/fr/">
     <link rel="alternate" hreflang="x-default" href="https://pull.koalastuff.net/">
-    <meta name="robots" content="index, follow">
+    <link rel="manifest" href="site.webmanifest">
 
     <meta property="og:type" content="website">
     <meta property="og:url" content="https://pull.koalastuff.net/">
-    <meta property="og:title" content="KoalaPull | Native yt-dlp download manager">
-    <meta property="og:description" content="Download videos, audio, playlists, subtitles, and metadata with a clean desktop app for macOS, Windows, and Linux.">
+    <meta property="og:title" content="KoalaPull | Download almost any media">
+    <meta property="og:description" content="Paste a link, pick a format, and let KoalaPull handle yt-dlp with a clean native desktop flow.">
     <meta property="og:image" content="https://pull.koalastuff.net/assets/IconHero.webp">
     <meta property="og:locale" content="en_US">
     <meta property="og:locale:alternate" content="en_US">
@@ -31,174 +37,46 @@
     <meta property="og:site_name" content="KoalaPull">
 
     <meta name="twitter:card" content="summary_large_image">
-    <meta name="twitter:title" content="KoalaPull | Native yt-dlp download manager">
-    <meta name="twitter:description" content="Download videos, audio, playlists, subtitles, and metadata with a clean desktop app for macOS, Windows, and Linux.">
+    <meta name="twitter:title" content="KoalaPull | Download almost any media">
+    <meta name="twitter:description" content="A native desktop app for yt-dlp. Pull videos, audio, playlists, subtitles, and metadata without terminal friction.">
     <meta name="twitter:image" content="https://pull.koalastuff.net/assets/IconHero.webp">
 
-    <meta name="theme-color" content="#0f172a">
-    <meta name="mobile-web-app-capable" content="yes">
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="manifest" href="site.webmanifest">
-
     <script src="lang-init.39957d7e.min.js"></script>
-    <script defer src="app.e5ff38d7.min.js"></script>
-
-    <script type="application/ld+json" id="schema-org">
-    {
-      "@context": "https://schema.org",
-      "@type": "Organization",
-      "name": "KoalaPull",
-      "url": "https://pull.koalastuff.net/",
-      "logo": "https://pull.koalastuff.net/assets/NewLogoIcon.webp",
-      "sameAs": [
-        "https://github.com/Shik3i/KoalaPull",
-        "https://github.com/Shik3i/KoalaPull/releases"
-      ]
-    }
-    </script>
-    <script type="application/ld+json" id="schema-website">
-    {
-      "@context": "https://schema.org",
-      "@type": "WebSite",
-      "name": "KoalaPull",
-      "url": "https://pull.koalastuff.net/",
-      "inLanguage": ["en", "de", "fr"]
-    }
-    </script>
-    <script type="application/ld+json" id="schema-software">
-    {
-      "@context": "https://schema.org",
-      "@type": "SoftwareApplication",
-      "name": "KoalaPull",
-      "operatingSystem": "Windows, macOS, Linux",
-      "applicationCategory": "MultimediaApplication",
-      "offers": {
-        "@type": "Offer",
-        "price": "0",
-        "priceCurrency": "USD"
-      },
-      "description": "A clean, native desktop download manager for yt-dlp. Download videos, audio, playlists, subtitles, and metadata with a simple app for macOS, Windows, and Linux.",
-      "license": "https://opensource.org/licenses/MIT",
-      "sameAs": "https://github.com/Shik3i/KoalaPull",
-      "image": "https://pull.koalastuff.net/assets/NewLogoIcon.webp",
-      "screenshot": "https://pull.koalastuff.net/assets/IconHero.webp"
-    }
-    </script>
-    <script type="application/ld+json" id="schema-howto">
-    {
-      "@context": "https://schema.org",
-      "@type": "HowTo",
-      "name": "How KoalaPull works",
-      "description": "A simple path from copied URL to finished file.",
-      "step": [
-        {
-          "@type": "HowToStep",
-          "position": 1,
-          "name": "Paste a URL",
-          "text": "Copy a video or playlist link from your browser and drop it into KoalaPull.",
-          "url": "https://pull.koalastuff.net/#how-it-works"
-        },
-        {
-          "@type": "HowToStep",
-          "position": 2,
-          "name": "Fetch metadata",
-          "text": "Inspect title, thumbnail, duration, uploader, and available formats before downloading.",
-          "url": "https://pull.koalastuff.net/#how-it-works"
-        },
-        {
-          "@type": "HowToStep",
-          "position": 3,
-          "name": "Choose a format",
-          "text": "Use the recommended preset or switch to audio-only and custom options when you need them.",
-          "url": "https://pull.koalastuff.net/#how-it-works"
-        },
-        {
-          "@type": "HowToStep",
-          "position": 4,
-          "name": "Add to the queue",
-          "text": "Queue one or many jobs, then let KoalaPull run up to 10 downloads in parallel.",
-          "url": "https://pull.koalastuff.net/#how-it-works"
-        },
-        {
-          "@type": "HowToStep",
-          "position": 5,
-          "name": "Open the file",
-          "text": "Watch the progress, then open the output folder when the download is finished.",
-          "url": "https://pull.koalastuff.net/#how-it-works"
-        }
-      ]
-    }
-    </script>
-    <script type="application/ld+json" id="schema-faq">
-    {
-      "@context": "https://schema.org",
-      "@type": "FAQPage",
-      "mainEntity": [
-        {
-          "@type": "Question",
-          "name": "Is KoalaPull free and open source?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Yes. KoalaPull is open source under the MIT License and free to use." }
-        },
-        {
-          "@type": "Question",
-          "name": "Do I need yt-dlp or ffmpeg installed first?",
-          "acceptedAnswer": { "@type": "Answer", "text": "No. KoalaPull downloads the required tools into your app data folder on first launch." }
-        },
-        {
-          "@type": "Question",
-          "name": "What sites does it support?",
-          "acceptedAnswer": { "@type": "Answer", "text": "KoalaPull uses yt-dlp, so it can work with hundreds of supported sites, including YouTube, Vimeo, Twitch, SoundCloud, and more." }
-        },
-        {
-          "@type": "Question",
-          "name": "Can it handle playlists and subtitles?",
-          "acceptedAnswer": { "@type": "Answer", "text": "Yes. Playlist downloads, subtitle options, and metadata previews are built into the app." }
-        },
-        {
-          "@type": "Question",
-          "name": "How private is it?",
-          "acceptedAnswer": { "@type": "Answer", "text": "It is local-first and privacy-friendly. No telemetry, no external CDNs, and no account required." }
-        },
-        {
-          "@type": "Question",
-          "name": "Why use KoalaPull instead of the terminal?",
-          "acceptedAnswer": { "@type": "Answer", "text": "KoalaPull keeps the power of yt-dlp but gives you buttons, queues, history, and settings in a native desktop app." }
-        }
-      ]
-    }
-    </script>
+    <script defer src="app.85c36b3a.min.js"></script>
 </head>
 <body>
     <a class="skip-link" href="#main-content">Skip to main content</a>
 
-    <div class="bg-blobs">
-        <div class="blob blob-1"></div>
-        <div class="blob blob-2"></div>
-        <div class="blob blob-3"></div>
+    <div class="site-bg" aria-hidden="true">
+        <div class="site-glow glow-a"></div>
+        <div class="site-glow glow-b"></div>
+        <div class="site-grid"></div>
     </div>
 
     <nav data-sticky-nav class="site-nav">
         <div class="container nav-content">
-            <div class="logo-area">
+            <a class="logo-area" href="#main-content" aria-label="KoalaPull">
                 <picture><source srcset="assets/NewLogoIcon.avif" type="image/avif"><img src="assets/NewLogoIcon.webp" alt="KoalaPull logo" width="64" height="64"></picture>
                 <span>KoalaPull</span>
-            </div>
+            </a>
+
             <div class="nav-links" id="primary-nav" role="navigation" aria-label="Primary" data-nav-menu>
-                <a href="#features"><span>Features</span></a>
-                <a href="#mockup"><span>Mockup</span></a>
-                <a href="#how-it-works"><span>How it works</span></a>
-                <a href="#faq"><span>FAQ</span></a>
+                <a href="#experience">Live demo</a>
+                <a href="#features">Features</a>
+                <a href="#how-it-works">How it works</a>
+                <a href="#faq">FAQ</a>
                 <a href="https://github.com/Shik3i/KoalaPull" target="_blank" rel="noreferrer">GitHub</a>
             </div>
+
             <div class="nav-right">
                 <div class="lang-select-container">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="globe-icon"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                    <select class="lang-dropdown" aria-label="Select Language" data-language-select>
+                    <svg class="globe-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                    <select class="lang-dropdown" aria-label="Select language" data-language-select>
                         <option value="en" data-url="/" selected>English</option>
                         <option value="de" data-url="/de/" >Deutsch</option>
                         <option value="fr" data-url="/fr/" >Français</option>
                     </select>
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" class="chevron-icon"><polyline points="6 9 12 15 18 9"/></svg>
+                    <svg class="chevron-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="6 9 12 15 18 9"/></svg>
                 </div>
                 <a class="lang-toggle" href="de/">DE</a>
                 <button class="hamburger nav-toggle" data-nav-toggle aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="primary-nav">
@@ -210,249 +88,119 @@
 
     <header class="hero" id="main-content">
         <div class="container hero-grid">
-            <div class="hero-text">
-                <a href="https://github.com/Shik3i/KoalaPull/releases" target="_blank" rel="noreferrer" class="version-badge" data-reveal>
-                    Native desktop app
-                </a>
-                <h1 data-reveal>The easy desktop face of yt-dlp.</h1>
-                <p class="hero-subtitle" data-reveal>Paste a URL, preview the media, choose a format, and let KoalaPull handle yt-dlp and ffmpeg without the terminal.</p>
+            <div class="hero-copy">
+                <span class="eyebrow" data-reveal>Native desktop app for yt-dlp</span>
+                <h1 data-reveal>Download almost any media.</h1>
+                <p class="hero-subtitle" data-reveal>Paste a link, choose a format, and let KoalaPull handle videos, audio, playlists, subtitles, and metadata with a native app instead of terminal commands.</p>
+                <p class="hero-note" data-reveal>KoalaPull keeps the power of yt-dlp close: pull what you want with KoalaPull.</p>
                 <div class="cta-group" data-reveal>
-                    <a href="https://github.com/Shik3i/KoalaPull" target="_blank" rel="noreferrer" class="btn btn-primary">GitHub</a>
-                    <a href="https://github.com/Shik3i/KoalaPull/releases" target="_blank" rel="noreferrer" class="btn btn-secondary">Releases</a>
+                    <a href="https://github.com/Shik3i/KoalaPull/releases" target="_blank" rel="noreferrer" class="btn btn-primary">Download app</a>
+                    <a href="https://github.com/Shik3i/KoalaPull" target="_blank" rel="noreferrer" class="btn btn-secondary">View source</a>
                 </div>
-                <ul style="display:flex; flex-wrap:wrap; gap:0.75rem 1.25rem; margin-top:1.5rem; list-style:none; color:var(--text-soft); font-size:0.95rem;" data-reveal>
+                <ul class="trust-list" data-reveal>
                     <li>Open source under MIT</li>
                     <li>macOS, Windows, Linux</li>
                     <li>No telemetry, no account</li>
                 </ul>
             </div>
 
-            <div class="hero-mockup-wrapper" data-reveal>
-                <div class="app-window">
-                    <div class="app-sidebar">
-                        <div class="app-sidebar-header">
-                            <picture><source srcset="assets/NewLogoIcon.avif" type="image/avif"><img src="assets/NewLogoIcon.webp" alt="" width="64" height="64"></picture>
-                            <span>KoalaPull</span>
-                        </div>
-                        <div class="app-sidebar-nav">
-                            <button class="app-sidebar-tab active">
-                                <svg class="app-sidebar-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
-                                Downloads
-                            </button>
-                            <button class="app-sidebar-tab">
-                                <svg class="app-sidebar-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                History
-                            </button>
-                            <button class="app-sidebar-tab">
-                                <svg class="app-sidebar-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
-                                Settings
-                            </button>
-                            <button class="app-sidebar-tab">
-                                <svg class="app-sidebar-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                                Help
-                            </button>
-                        </div>
-                        <div class="app-sidebar-footer">
-                            <svg fill="currentColor" viewBox="0 0 24 24"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.38.6.11.79-.26.79-.58v-2.23c-3.34.73-4.03-1.41-4.03-1.41-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49 1 .11-.78.42-1.31.76-1.61-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.53-1.53.12-3.18 0 0 1-.32 3.3 1.23.96-.27 1.98-.4 3-.4s2.05.13 3.01.4c2.29-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.48 5.92.43.37.82 1.1.82 2.22v3.29c0 .32.19.69.8.57C20.56 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z"/></svg>
-                            <span>v0.1.0</span>
-                        </div>
-                    </div>
-                    <div class="app-content">
-                        <div class="url-row">
-                            <input type="text" value="https://www.youtube.com/watch?v=koalapull-demo" readonly aria-label="Paste a URL">
-                            <button type="button" class="mock-fetch-btn">Fetch</button>
-                        </div>
-                        <div class="mock-card">
-                            <div class="mock-card-header">Metadata preview</div>
-                            <div class="meta-preview">
-                                <div class="meta-thumb">
-                                    <picture><source srcset="assets/IconHero-1x.avif 180w, assets/IconHero.avif 360w" type="image/avif"><img src="assets/IconHero-1x.webp" srcset="assets/IconHero-1x.webp 180w, assets/IconHero.webp 360w" sizes="80px" alt="" width="80" height="60"></picture>
-                                </div>
-                                <div class="meta-info">
-                                    <p class="meta-title">Open Source Build Tour</p>
-                                    <p class="meta-channel">Koala Dev &bull; 18:42</p>
-                                    <div class="meta-badges">
-                                        <span class="mock-server-badge">Best</span>
-                                        <span class="mock-server-badge outline">Compatible</span>
-                                        <span class="mock-server-badge outline">Audio</span>
-                                    </div>
-                                    <div class="meta-stats">
-                                        <div class="meta-stat">
-                                            <div class="meta-stat-label">Formats</div>
-                                            <div class="meta-stat-value">1080p, 720p, audio</div>
-                                        </div>
-                                        <div class="meta-stat">
-                                            <div class="meta-stat-label">Estimated size</div>
-                                            <div class="meta-stat-value">184 MB</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="queue-section">
-                            <div class="queue-header">
-                                <strong>3 downloads queued, 1 active</strong>
-                                <span class="queue-preset">Best</span>
-                            </div>
-                            <div class="queue-list">
-                                <div class="queue-item">
-                                    <div class="queue-item-header">
-                                        <span class="queue-item-title">Build Tour - 1080p</span>
-                                        <span class="queue-item-status downloading">Downloading</span>
-                                    </div>
-                                    <div class="progress-bar">
-                                        <div data-progress-fill data-progress-min="68" data-progress-max="92" style="width:74%"></div>
-                                    </div>
-                                    <div class="queue-item-progress">74% &middot; 6.2 MB/s &middot; 00:41 left</div>
-                                </div>
-                                <div class="queue-item">
-                                    <div class="queue-item-header">
-                                        <span class="queue-item-title">Podcast clip - audio</span>
-                                        <span class="queue-item-status queued">Queued</span>
-                                    </div>
-                                    <div class="progress-bar">
-                                        <div data-progress-fill data-progress-min="0" data-progress-max="10" style="width:0%"></div>
-                                    </div>
-                                    <div class="queue-item-progress">Waiting for a free slot</div>
-                                </div>
-                                <div class="queue-item">
-                                    <div class="queue-item-header">
-                                        <span class="queue-item-title">Playlist batch - 12 videos</span>
-                                        <span class="queue-item-status completed">Completed</span>
-                                    </div>
-                                    <div class="progress-bar green">
-                                        <div style="width:100%"></div>
-                                    </div>
-                                    <div class="queue-item-progress">Finished in the history list</div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+            <div class="hero-stack" data-reveal>
+                <div class="hero-art" aria-hidden="true">
+                    <picture><source srcset="assets/NewLogoIcon_384.avif 1x, assets/NewLogoIcon_768.avif 2x" type="image/avif"><img src="assets/NewLogoIcon_384.webp" srcset="assets/NewLogoIcon_384.webp 1x, assets/NewLogoIcon_768.webp 2x" alt="" width="320" height="320"></picture>
                 </div>
+                <article class="hero-panel hero-panel-primary">
+                    <div class="hero-panel-top">
+                        <p>Queue flow</p>
+                        <strong>10 jobs</strong>
+                    </div>
+                    <p>Run one link or a full playlist with live status, clean presets, and visible history.</p>
+                </article>
+                <article class="hero-panel">
+                    <div class="hero-panel-top">
+                        <p>First launch</p>
+                        <strong>1 click</strong>
+                    </div>
+                    <p>KoalaPull downloads yt-dlp and ffmpeg for you. No manual setup dance.</p>
+                </article>
+                <article class="hero-panel">
+                    <div class="hero-panel-top">
+                        <p>Built for</p>
+                        <strong>real use</strong>
+                    </div>
+                    <p>Preview metadata, choose the right output, and keep control over where files go.</p>
+                </article>
             </div>
         </div>
     </header>
 
     <main>
-        <section id="features">
+        <section id="experience" class="experience-section">
             <div class="container">
-                <div data-reveal>
-                    <p class="version-badge" style="margin-bottom:1rem;">Why KoalaPull</p>
-                    <h2 style="font-size:2.2rem; line-height:1.15; margin-bottom:1rem;">Everything you need to download media with less friction and more control.</h2>
+                <div class="section-heading" data-reveal>
+                    <span class="eyebrow">Interactive demo</span>
+                    <h2>See the desktop flow before you download.</h2>
+                    <p>Click through the screens, queue a fake job, switch presets, and get a quick feel for how KoalaPull looks and behaves.</p>
                 </div>
-                <div class="features-grid">
-                    <article class="feature-card bento-large" data-reveal>
-                        <div>
-                            <div class="feature-icon-svg" aria-hidden="true">
-                                <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 4v16"/><path d="M16 4v16"/><path d="M4 12h16"/></svg>
-                            </div>
-                            <h3>Auto-setup on first launch</h3>
-                        </div>
-                        <p>KoalaPull downloads yt-dlp and ffmpeg into your app data folder, so setup is one click and done.</p>
-                    </article>
-                    <article class="feature-card" data-reveal>
-                        <div class="feature-icon-svg" aria-hidden="true">
-                            <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 21l-5.2-5.2"/><circle cx="10.5" cy="10.5" r="6.5"/></svg>
-                        </div>
-                        <h3>Preview before you download</h3>
-                        <p>See the title, uploader, thumbnail, duration, and available formats before you start a job.</p>
-                    </article>
-                    <article class="feature-card" data-reveal>
-                        <div class="feature-icon-svg" aria-hidden="true">
-                            <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v16H5z"/><path d="M9 9h6"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>
-                        </div>
-                        <h3>Choose the right format</h3>
-                        <p>Pick best quality, audio-only, or a custom container and subtitle combo that fits your needs.</p>
-                    </article>
-                    <article class="feature-card" data-reveal>
-                        <div class="feature-icon-svg" aria-hidden="true">
-                            <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18"/><path d="M7 8l4 4-4 4"/><path d="M11 8l4 4-4 4"/></svg>
-                        </div>
-                        <h3>Queue and concurrency</h3>
-                        <p>Add multiple downloads, keep them moving, and run up to 10 jobs in parallel with live progress.</p>
-                    </article>
-                    <article class="feature-card" data-reveal>
-                        <div class="feature-icon-svg" aria-hidden="true">
-                            <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/><circle cx="8" cy="7" r="1"/><circle cx="14" cy="12" r="1"/><circle cx="10" cy="17" r="1"/></svg>
-                        </div>
-                        <h3>Playlists and history</h3>
-                        <p>Handle full playlists, then review past downloads with timestamps, sizes, and speed stats.</p>
-                    </article>
-                    <article class="feature-card" data-reveal>
-                        <div class="feature-icon-svg" aria-hidden="true">
-                            <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M4 6h16"/><path d="M4 18h16"/><path d="M5 6c2.5 3 2.5 9 0 12"/><path d="M19 6c-2.5 3-2.5 9 0 12"/></svg>
-                        </div>
-                        <h3>Themes, updates, and support</h3>
-                        <p>Use light or dark mode, check for updates, and work across hundreds of supported sites.</p>
-                    </article>
-                </div>
-            </div>
-        </section>
 
-        <section id="mockup">
-            <div class="container">
-                <div data-reveal style="max-width:760px; margin-bottom:2rem;">
-                    <p class="version-badge" style="margin-bottom:1rem;">App mockup</p>
-                    <h2 style="font-size:2.2rem; line-height:1.15; margin-bottom:1rem;">A static clickdummy of the KoalaPull desktop app.</h2>
-                </div>
-                <div class="mockup-layout" data-reveal>
-                    <div class="mockup-tabs">
-                        <button type="button" class="mock-tab active" data-mock-tab="downloads">
-                            <svg class="mock-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
+                <div class="experience-shell" data-demo data-reveal
+                    data-toast-analyzing="Scanning fake metadata..."
+                    data-toast-ready="Metadata ready. Pick a preset."
+                    data-toast-queued="Demo queued. Fake download running."
+                    data-toast-done="Demo finished. Open folder would fire now."
+                    data-toast-reset="Demo reset. Queue back to idle."
+                    data-status-idle="Ready"
+                    data-status-busy="Downloading"
+                    data-status-done="Completed">
+                    <div class="experience-sidebar" role="tablist" aria-label="Interactive demo">
+                        <div class="experience-brand">
+                            <picture><source srcset="assets/NewLogoIcon.avif" type="image/avif"><img src="assets/NewLogoIcon.webp" alt="" width="64" height="64"></picture>
+                            <span>KoalaPull</span>
+                        </div>
+                        <button type="button" class="experience-tab is-active" data-mock-tab="downloads" aria-pressed="true">
+                            <svg class="experience-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><path d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4"/></svg>
                             Downloads
                         </button>
-                        <button type="button" class="mock-tab" data-mock-tab="history">
-                            <svg class="mock-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        <button type="button" class="experience-tab" data-mock-tab="history" aria-pressed="false">
+                            <svg class="experience-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
                             History
                         </button>
-                        <button type="button" class="mock-tab" data-mock-tab="settings">
-                            <svg class="mock-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+                        <button type="button" class="experience-tab" data-mock-tab="settings" aria-pressed="false">
+                            <svg class="experience-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
                             Settings
                         </button>
-                        <button type="button" class="mock-tab" data-mock-tab="help">
-                            <svg class="mock-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+                        <button type="button" class="experience-tab" data-mock-tab="help" aria-pressed="false">
+                            <svg class="experience-tab-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                             Help
                         </button>
-                    </div>
-                    <div class="mock-panel-container">
-                        <div class="mock-panel-header">
-                            <div class="mock-panel-title">
-                                <picture><source srcset="assets/NewLogoIcon.avif" type="image/avif"><img src="assets/NewLogoIcon.webp" alt="" width="80" height="80"></picture>
-                                <div>
-                                    <h3 style="margin:0; font-size:1.1rem;">KoalaPull</h3>
-                                    <p style="margin:0; color:var(--text-soft); font-size:0.8rem;">A static clickdummy of the KoalaPull desktop app.</p>
-                                </div>
-                            </div>
-                            <div class="status-pill">
-                                <span class="status-pill-dot"></span>
-                                Ready
-                            </div>
+                        <div class="experience-sidebar-footer">
+                            <svg fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.38.6.11.79-.26.79-.58v-2.23c-3.34.73-4.03-1.41-4.03-1.41-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49 1 .11-.78.42-1.31.76-1.61-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.53-1.53.12-3.18 0 0 1-.32 3.3 1.23.96-.27 1.98-.4 3-.4s2.05.13 3.01.4c2.29-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.48 5.92.43.37.82 1.1.82 2.22v3.29c0 .32.19.69.8.57C20.56 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z"/></svg>
+                            <span>v0.1.0</span>
                         </div>
+                    </div>
 
-                        <div class="mock-screen active" data-mock-panel="downloads">
-                            <div class="mock-card">
-                                <div class="mock-card-header">Paste a URL</div>
+                    <div class="experience-panel">
+                        <div class="mock-screen is-active" data-mock-panel="downloads">
+                            <article class="mock-card mock-card-main">
                                 <div class="url-row">
                                     <input type="text" value="https://www.youtube.com/watch?v=koalapull-demo" readonly aria-label="Paste a URL">
-                                    <button type="button" class="mock-fetch-btn" style="width:96px;">Fetch</button>
+                                    <button type="button" class="mock-action-btn" data-demo-analyze>Fetch</button>
                                 </div>
-                                <p style="margin-top:0.75rem; color:var(--text-soft); font-size:0.82rem;">Grab title, formats, duration, and playlist count before you queue.</p>
-                            </div>
-                            <div class="mock-card">
-                                <div class="mock-card-header">Metadata preview</div>
+                                <p class="card-note">Fake scan. Real button. Click it to simulate metadata lookup before the queue starts.</p>
+                                <div class="mock-fetch-state">
+                                    <div class="status-pill" data-demo-status>Ready</div>
+                                    <span class="mock-fetch-summary" data-demo-summary>Dummy data. Real interaction.</span>
+                                </div>
+                            </article>
+
+                            <article class="mock-card">
                                 <div class="meta-preview">
                                     <div class="meta-thumb">
                                         <picture><source srcset="assets/IconHero-1x.avif 180w, assets/IconHero.avif 360w" type="image/avif"><img src="assets/IconHero-1x.webp" srcset="assets/IconHero-1x.webp 180w, assets/IconHero.webp 360w" sizes="80px" alt="" width="80" height="60"></picture>
                                     </div>
                                     <div class="meta-info">
                                         <p class="meta-title">Open Source Build Tour</p>
-                                        <p class="meta-channel">Koala Dev &bull; 18:42</p>
-                                        <div class="meta-badges">
-                                            <span class="mock-server-badge">Best</span>
-                                            <span class="mock-server-badge outline">Compatible</span>
-                                            <span class="mock-server-badge outline">Audio</span>
-                                        </div>
-                                        <div style="display:grid; grid-template-columns:repeat(4, 1fr); gap:0.5rem; margin-top:0.65rem;">
+                                        <p class="meta-channel">Koala Dev</p>
+                                        <div class="meta-stats meta-stats-compact">
                                             <div class="meta-stat">
                                                 <div class="meta-stat-label">Formats</div>
                                                 <div class="meta-stat-value">1080p, 720p, audio</div>
@@ -462,49 +210,86 @@
                                                 <div class="meta-stat-value">184 MB</div>
                                             </div>
                                             <div class="meta-stat">
-                                                <div class="meta-stat-label">Status</div>
-                                                <div class="meta-stat-value" style="color:#4ade80;">Ready</div>
+                                                <div class="meta-stat-label">Duration</div>
+                                                <div class="meta-stat-value">18:42</div>
                                             </div>
-                                            <div class="meta-stat">
-                                                <div class="meta-stat-label">Preset</div>
-                                                <div class="meta-stat-value">Custom</div>
+                                        </div>
+                                        <div class="preset-row">
+                                            <label class="preset-label">Preset</label>
+                                            <div class="preset-group" role="group" aria-label="Preset">
+                                                <button type="button" class="preset-chip is-active" data-demo-preset="best">Best</button>
+                                                <button type="button" class="preset-chip" data-demo-preset="compatible">Compatible</button>
+                                                <button type="button" class="preset-chip" data-demo-preset="audio">Audio</button>
+                                                <button type="button" class="preset-chip" data-demo-preset="custom">Custom</button>
                                             </div>
+                                        </div>
+                                        <div class="demo-actions demo-actions-native">
+                                            <button type="button" class="mock-native-btn" data-demo-queue>
+                                                <svg class="mock-native-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4v16m8-8H4"/></svg>
+                                                <span>Add to Queue</span>
+                                            </button>
+                                            <button type="button" class="mock-native-btn ghost" data-demo-open>
+                                                <svg class="mock-native-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z"/></svg>
+                                                <span>Open folder</span>
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                            <div class="mock-card">
-                                <div class="mock-card-header">Queue</div>
-                                <div class="mock-peer-list">
-                                    <div class="mock-peer-item">
-                                        <div class="mock-peer-header">
-                                            <span class="mock-peer-name">Build Tour - 1080p</span>
-                                            <span class="mock-peer-meta">Downloading</span>
+                            </article>
+
+                            <article class="mock-card">
+                                <div class="queue-card-head">
+                                    <div class="mock-card-header">Queue</div>
+                                    <div class="queue-summary">3 downloads queued, 1 active</div>
+                                </div>
+                                <div class="queue-layout">
+                                    <div class="queue-list">
+                                        <div class="queue-item">
+                                            <div class="queue-item-header">
+                                                <span class="queue-item-title">Build Tour - 1080p</span>
+                                                <span class="queue-item-status downloading" data-queue-primary-status>Queued</span>
+                                            </div>
+                                            <div class="progress-bar">
+                                                <div data-progress-fill data-progress-min="0" data-progress-max="100"></div>
+                                            </div>
+                                            <div class="queue-item-progress" data-queue-primary-progress>Waiting for a fake start</div>
                                         </div>
-                                        <div class="mock-peer-status">74% - 6.2 MB/s - 00:41 left</div>
-                                    </div>
-                                    <div class="mock-peer-item">
-                                        <div class="mock-peer-header">
-                                            <span class="mock-peer-name">Podcast clip - audio</span>
-                                            <span class="mock-peer-meta">Queued</span>
+                                        <div class="queue-item">
+                                            <div class="queue-item-header">
+                                                <span class="queue-item-title">Podcast clip - audio</span>
+                                                <span class="queue-item-status queued">Queued</span>
+                                            </div>
+                                            <div class="progress-bar">
+                                                <div data-progress-fill data-progress-min="6" data-progress-max="14"></div>
+                                            </div>
+                                            <div class="queue-item-progress">Waiting for a free slot</div>
                                         </div>
-                                        <div class="mock-peer-status">Waiting for a free slot</div>
-                                    </div>
-                                    <div class="mock-peer-item">
-                                        <div class="mock-peer-header">
-                                            <span class="mock-peer-name">Playlist batch - 12 videos</span>
-                                            <span class="mock-peer-meta">Completed</span>
+                                        <div class="queue-item">
+                                            <div class="queue-item-header">
+                                                <span class="queue-item-title">Playlist batch - 12 videos</span>
+                                                <span class="queue-item-status completed">Completed</span>
+                                            </div>
+                                            <div class="progress-bar progress-bar-success">
+                                                <div data-progress-static class="is-full"></div>
+                                            </div>
+                                            <div class="queue-item-progress">Finished and moved into history</div>
                                         </div>
-                                        <div class="mock-peer-status">Finished in the history list</div>
                                     </div>
                                 </div>
-                            </div>
+                            </article>
                         </div>
 
                         <div class="mock-screen" data-mock-panel="history" hidden>
-                            <div class="mock-card">
+                            <article class="mock-card">
                                 <div class="mock-card-header">Download history</div>
-                                <div class="mock-input-history">Search history...</div>
+                                <div class="history-toolbar">
+                                    <div class="mock-input-history">Search history...</div>
+                                    <div class="filter-group" role="group" aria-label="Download history">
+                                        <button type="button" class="filter-chip is-active" data-history-filter>All jobs</button>
+                                        <button type="button" class="filter-chip" data-history-filter>Completed</button>
+                                        <button type="button" class="filter-chip" data-history-filter>Large batches</button>
+                                    </div>
+                                </div>
                                 <div class="mock-peer-list">
                                     <div class="mock-peer-item">
                                         <div class="mock-peer-header">
@@ -525,10 +310,11 @@
                                         </div>
                                     </div>
                                 </div>
-                            </div>
-                            <div class="mock-card">
+                            </article>
+
+                            <article class="mock-card">
                                 <div class="mock-card-header">History summary</div>
-                                <div style="display:grid; grid-template-columns:repeat(3, 1fr); gap:0.75rem;">
+                                <div class="meta-stats meta-stats-wide">
                                     <div class="meta-stat">
                                         <div class="meta-stat-label">Saved jobs</div>
                                         <div class="meta-stat-value">128</div>
@@ -542,115 +328,164 @@
                                         <div class="meta-stat-value">3 min ago</div>
                                     </div>
                                 </div>
-                            </div>
+                            </article>
                         </div>
 
                         <div class="mock-screen" data-mock-panel="settings" hidden>
-                            <div class="mock-card">
+                            <article class="mock-card">
                                 <div class="mock-card-header">Settings</div>
-                                <div>
+                                <div class="settings-list">
                                     <div class="mock-settings-row">
                                         <div>
                                             <strong>Theme</strong>
-                                            <p>Light and dark modes follow your saved preference.</p>
+                                            <p>Switch the feel of the app without hiding the important bits.</p>
                                         </div>
-                                        <span class="mock-status-pill">Dark</span>
+                                        <button type="button" class="mock-status-pill" data-setting-toggle>Dark</button>
                                     </div>
                                     <div class="mock-settings-row">
                                         <div>
                                             <strong>Language</strong>
-                                            <p>Switch the app UI between the supported locales.</p>
+                                            <p>Move between supported locales without leaving the app shell.</p>
                                         </div>
-                                        <span class="mock-status-pill">English</span>
+                                        <button type="button" class="mock-status-pill" data-setting-toggle>English</button>
                                     </div>
                                     <div class="mock-settings-row">
                                         <div>
                                             <strong>Output folder</strong>
-                                            <p>Choose where finished downloads are written.</p>
+                                            <p>Keep finished files where you actually expect them.</p>
                                         </div>
-                                        <span class="mock-status-pill">~/Downloads/KoalaPull</span>
+                                        <button type="button" class="mock-status-pill" data-setting-toggle>~/Downloads/KoalaPull</button>
                                     </div>
                                     <div class="mock-settings-row">
                                         <div>
                                             <strong>Parallel downloads</strong>
-                                            <p>Set how many jobs can run at once.</p>
+                                            <p>Set how aggressive the queue should feel.</p>
                                         </div>
-                                        <span class="mock-status-pill">3 of 10</span>
+                                        <button type="button" class="mock-status-pill" data-setting-toggle>3 of 10</button>
                                     </div>
                                     <div class="mock-settings-row">
                                         <div>
                                             <strong>Auto-paste URL</strong>
-                                            <p>Optional clipboard detection for supported links.</p>
+                                            <p>Optional clipboard pickup for supported links.</p>
                                         </div>
-                                        <span class="mock-status-pill">Off</span>
+                                        <button type="button" class="mock-status-pill" data-setting-toggle>Off</button>
                                     </div>
                                 </div>
-                            </div>
+                            </article>
                         </div>
 
                         <div class="mock-screen" data-mock-panel="help" hidden>
-                            <div class="mock-card">
+                            <article class="mock-card">
                                 <div class="mock-card-header">Help</div>
-                                <div style="display:grid; gap:0.7rem;">
-                                    <div class="mock-diag-box">
-                                        <span class="diag-val">1</span>
-                                        <span>Paste a video or playlist URL into Downloads.</span>
-                                    </div>
-                                    <div class="mock-diag-box">
-                                        <span class="diag-val">2</span>
-                                        <span>Fetch metadata and check the preview.</span>
-                                    </div>
-                                    <div class="mock-diag-box">
-                                        <span class="diag-val">3</span>
-                                        <span>Choose a preset or custom format.</span>
-                                    </div>
-                                    <div class="mock-diag-box">
-                                        <span class="diag-val">4</span>
-                                        <span>Add it to the queue and watch progress.</span>
-                                    </div>
+                                <div class="mock-step-list">
+                                    <div class="mock-diag-box"><span class="diag-val">1</span><span>Paste a video or playlist URL into Downloads.</span></div>
+                                    <div class="mock-diag-box"><span class="diag-val">2</span><span>Analyze the link and check the preview.</span></div>
+                                    <div class="mock-diag-box"><span class="diag-val">3</span><span>Choose a preset or custom output.</span></div>
+                                    <div class="mock-diag-box"><span class="diag-val">4</span><span>Queue the job and watch the progress state shift.</span></div>
                                 </div>
-                            </div>
-                            <div class="mock-card">
+                                <div class="demo-actions">
+                                    <button type="button" class="btn btn-soft" data-demo-jump="downloads">Back to downloads</button>
+                                    <button type="button" class="btn btn-ghost" data-demo-jump="history">Open history</button>
+                                </div>
+                            </article>
+
+                            <article class="mock-card">
                                 <div class="mock-card-header">Supported sites</div>
-                                <p style="margin:0; color:var(--text-soft);">YouTube, Vimeo, Twitch, TikTok, SoundCloud, Bandcamp, and hundreds more through yt-dlp.</p>
-                            </div>
+                                <p class="body-copy">YouTube, Vimeo, Twitch, TikTok, SoundCloud, Bandcamp, and hundreds more through yt-dlp.</p>
+                            </article>
                         </div>
                     </div>
+
+                </div>
+            </div>
+        </section>
+
+        <section id="features">
+            <div class="container">
+                <div class="section-heading" data-reveal>
+                    <span class="eyebrow">Why KoalaPull</span>
+                    <h2>A desktop flow that makes yt-dlp feel obvious instead of hidden behind flags and copy-pasted commands.</h2>
+                </div>
+
+                <div class="features-grid">
+                    <article class="feature-card" data-reveal>
+                        <div class="feature-icon-svg" aria-hidden="true">
+                            <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M8 4v16"/><path d="M16 4v16"/><path d="M4 12h16"/></svg>
+                        </div>
+                        <h3>Fast first-run setup</h3>
+                        <p>KoalaPull downloads yt-dlp and ffmpeg into your app data folder on first launch, so setup stays short and local.</p>
+                    </article>
+                    <article class="feature-card" data-reveal>
+                        <div class="feature-icon-svg" aria-hidden="true">
+                            <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 21l-5.2-5.2"/><circle cx="10.5" cy="10.5" r="6.5"/></svg>
+                        </div>
+                        <h3>Preview before download</h3>
+                        <p>See title, uploader, duration, formats, and estimated size before you commit a job.</p>
+                    </article>
+                    <article class="feature-card" data-reveal>
+                        <div class="feature-icon-svg" aria-hidden="true">
+                            <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 4h14v16H5z"/><path d="M9 9h6"/><path d="M9 13h6"/><path d="M9 17h4"/></svg>
+                        </div>
+                        <h3>Presets and custom output</h3>
+                        <p>Start with best quality, compatible output, or audio-only, then switch to custom when you need more control.</p>
+                    </article>
+                    <article class="feature-card" data-reveal>
+                        <div class="feature-icon-svg" aria-hidden="true">
+                            <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12h18"/><path d="M7 8l4 4-4 4"/><path d="M11 8l4 4-4 4"/></svg>
+                        </div>
+                        <h3>Queue and concurrency</h3>
+                        <p>Load up several jobs, keep them moving, and watch progress without losing the bigger picture.</p>
+                    </article>
+                    <article class="feature-card" data-reveal>
+                        <div class="feature-icon-svg" aria-hidden="true">
+                            <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16"/><path d="M4 12h16"/><path d="M4 17h16"/><circle cx="8" cy="7" r="1"/><circle cx="14" cy="12" r="1"/><circle cx="10" cy="17" r="1"/></svg>
+                        </div>
+                        <h3>Playlists and history</h3>
+                        <p>Pull single clips or bigger batches, then track what finished, when it ran, and how fast it moved.</p>
+                    </article>
+                    <article class="feature-card" data-reveal>
+                        <div class="feature-icon-svg" aria-hidden="true">
+                            <svg class="bento-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v20"/><path d="M4 6h16"/><path d="M4 18h16"/><path d="M5 6c2.5 3 2.5 9 0 12"/><path d="M19 6c-2.5 3-2.5 9 0 12"/></svg>
+                        </div>
+                        <h3>Private and local-first</h3>
+                        <p>No account, no telemetry, no CDN dependency for the site, and no need to live in a terminal window.</p>
+                    </article>
                 </div>
             </div>
         </section>
 
         <section id="how-it-works">
             <div class="container">
-                <div data-reveal style="max-width:760px; margin-bottom:2rem;">
-                    <p class="version-badge" style="margin-bottom:1rem;">How KoalaPull works</p>
-                    <h2 style="font-size:2.2rem; line-height:1.15; margin-bottom:1rem;">A simple path from copied URL to finished file.</h2>
+                <div class="section-heading" data-reveal>
+                    <span class="eyebrow">How it works</span>
+                    <h2>Simple path. Copy link. Pick output. Pull media with KoalaPull.</h2>
                 </div>
-                <div class="features-grid">
-                    <article class="feature-card" data-reveal>
-                        <div class="feature-icon-svg" aria-hidden="true"><span style="font-weight:800;">1</span></div>
+
+                <div class="steps-grid">
+                    <article class="step-card" data-reveal>
+                        <span class="step-number">1</span>
                         <h3>Paste a URL</h3>
-                        <p>Copy a video or playlist link from your browser and drop it into KoalaPull.</p>
+                        <p>Drop in one video link or a playlist URL from your browser.</p>
                     </article>
-                    <article class="feature-card" data-reveal>
-                        <div class="feature-icon-svg" aria-hidden="true"><span style="font-weight:800;">2</span></div>
-                        <h3>Fetch metadata</h3>
-                        <p>Inspect title, thumbnail, duration, uploader, and available formats before downloading.</p>
+                    <article class="step-card" data-reveal>
+                        <span class="step-number">2</span>
+                        <h3>Analyze metadata</h3>
+                        <p>Inspect title, uploader, duration, and available formats before you start.</p>
                     </article>
-                    <article class="feature-card" data-reveal>
-                        <div class="feature-icon-svg" aria-hidden="true"><span style="font-weight:800;">3</span></div>
+                    <article class="step-card" data-reveal>
+                        <span class="step-number">3</span>
                         <h3>Choose a format</h3>
-                        <p>Use the recommended preset or switch to audio-only and custom options when you need them.</p>
+                        <p>Use the fast preset or switch to audio-only and custom output when needed.</p>
                     </article>
-                    <article class="feature-card" data-reveal>
-                        <div class="feature-icon-svg" aria-hidden="true"><span style="font-weight:800;">4</span></div>
-                        <h3>Add to the queue</h3>
-                        <p>Queue one or many jobs, then let KoalaPull run up to 10 downloads in parallel.</p>
+                    <article class="step-card" data-reveal>
+                        <span class="step-number">4</span>
+                        <h3>Queue the job</h3>
+                        <p>Run one job or several and watch progress without juggling terminal windows.</p>
                     </article>
-                    <article class="feature-card" data-reveal>
-                        <div class="feature-icon-svg" aria-hidden="true"><span style="font-weight:800;">5</span></div>
+                    <article class="step-card" data-reveal>
+                        <span class="step-number">5</span>
                         <h3>Open the file</h3>
-                        <p>Watch the progress, then open the output folder when the download is finished.</p>
+                        <p>When the job finishes, jump straight to the output folder and move on.</p>
                     </article>
                 </div>
             </div>
@@ -658,10 +493,11 @@
 
         <section id="faq">
             <div class="container">
-                <div data-reveal style="max-width:760px; margin-bottom:2rem;">
-                    <p class="version-badge" style="margin-bottom:1rem;">FAQ</p>
-                    <h2 style="font-size:2.2rem; line-height:1.15; margin-bottom:1rem;">Answers to the questions people usually ask first.</h2>
+                <div class="section-heading" data-reveal>
+                    <span class="eyebrow">FAQ</span>
+                    <h2>Short answers to the first questions people usually have.</h2>
                 </div>
+
                 <div class="faq-grid">
                     <details class="faq-item" data-reveal>
                         <summary>Is KoalaPull free and open source?</summary>
@@ -681,38 +517,38 @@
                     </details>
                     <details class="faq-item" data-reveal>
                         <summary>How private is it?</summary>
-                        <p>It is local-first and privacy-friendly. No telemetry, no external CDNs, and no account required.</p>
+                        <p>Local-first and privacy-friendly. No telemetry, no account, and no extra hosted script dependencies on the site.</p>
                     </details>
                     <details class="faq-item" data-reveal>
                         <summary>Why use KoalaPull instead of the terminal?</summary>
-                        <p>KoalaPull keeps the power of yt-dlp but gives you buttons, queues, history, and settings in a native desktop app.</p>
+                        <p>It keeps the power of yt-dlp, but adds buttons, previews, history, presets, and queue control in a native desktop flow.</p>
                     </details>
                 </div>
             </div>
         </section>
 
-        <section id="github">
+        <section id="github" class="cta-section">
             <div class="container">
-                <div class="feature-card bento-large" data-reveal style="grid-template-columns:1fr; text-align:center;">
-                    <div>
-                        <h3 style="justify-content:center;">Ready to pull your next download?</h3>
-                        <p style="max-width:700px; margin:1rem auto 0;">Grab the latest release or inspect the code on GitHub. KoalaPull is built for people who want yt-dlp power without terminal friction.</p>
-                        <div class="cta-group" style="justify-content:center; margin-top:1.5rem;">
-                            <a href="https://github.com/Shik3i/KoalaPull" target="_blank" rel="noreferrer" class="btn btn-primary">GitHub</a>
-                            <a href="https://github.com/Shik3i/KoalaPull/releases" target="_blank" rel="noreferrer" class="btn btn-secondary">Releases</a>
-                        </div>
+                <div class="cta-card" data-reveal>
+                    <span class="eyebrow">Ready to pull your next download?</span>
+                    <h2>Grab the latest release or inspect the code on GitHub. KoalaPull is for people who want yt-dlp power without terminal friction.</h2>
+                    <div class="cta-group cta-group-center">
+                        <a href="https://github.com/Shik3i/KoalaPull/releases" target="_blank" rel="noreferrer" class="btn btn-primary">Download release</a>
+                        <a href="https://github.com/Shik3i/KoalaPull" target="_blank" rel="noreferrer" class="btn btn-secondary">View GitHub</a>
                     </div>
                 </div>
             </div>
         </section>
     </main>
 
-    <footer>
+    <footer class="site-footer">
         <div class="container">
-            <p style="margin-bottom:1rem;">Open source under the MIT License.</p>
-            <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+            <p>Open source under the MIT License.</p>
+            <div class="footer-links">
                 <a href="https://github.com/Shik3i/KoalaPull" target="_blank" rel="noreferrer">GitHub</a>
                 <a href="https://github.com/Shik3i/KoalaPull/releases" target="_blank" rel="noreferrer">Releases</a>
+                <a href="imprint.html">Imprint</a>
+                <a href="privacy.html">Privacy</a>
             </div>
         </div>
     </footer>

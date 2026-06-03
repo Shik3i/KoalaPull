@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="{{LANG_CODE}}" class="{{HTML_CLASS}}">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{IMPRINT_META_TITLE}}</title>
+    <meta name="description" content="{{IMPRINT_META_DESCRIPTION}}">
+    <meta name="robots" content="noindex, follow">
+    <meta name="theme-color" content="#0c111d">
+    <meta name="color-scheme" content="dark light">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'; img-src 'self' data:; font-src 'self'; script-src 'self'; style-src 'self'; connect-src 'none'; object-src 'none'; manifest-src 'self'; upgrade-insecure-requests">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
+
+    <link rel="preload" href="{{ASSET_PATH}}style.min.css" as="style">
+    <link rel="stylesheet" href="{{ASSET_PATH}}style.min.css">
+    <link rel="icon" type="image/png" sizes="16x16" href="{{ASSET_PATH}}assets/favicon-16x16.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="{{ASSET_PATH}}assets/favicon-32x32.png">
+    <link rel="canonical" href="{{BASE_URL}}/{{CANONICAL_PATH}}{{IMPRINT_PATH}}">
+    <link rel="alternate" hreflang="en" href="{{BASE_URL}}/imprint.html">
+    <link rel="alternate" hreflang="de" href="{{BASE_URL}}/de/impressum.html">
+    <link rel="alternate" hreflang="x-default" href="{{BASE_URL}}/imprint.html">
+
+    <script src="{{ASSET_PATH}}lang-init.min.js"></script>
+    <script defer src="{{ASSET_PATH}}app.min.js"></script>
+</head>
+<body>
+    <a class="skip-link" href="#main-content">Skip to main content</a>
+    <div class="site-bg" aria-hidden="true">
+        <div class="site-glow glow-a"></div>
+        <div class="site-glow glow-b"></div>
+        <div class="site-grid"></div>
+    </div>
+
+    <nav data-sticky-nav class="site-nav">
+        <div class="container nav-content">
+            <a class="logo-area" href="{{HOME_URL}}">
+                <img src="{{ASSET_PATH}}assets/NewLogoIcon.webp" alt="{{SITE_NAME}} logo" width="64" height="64">
+                <span>{{SITE_NAME}}</span>
+            </a>
+            <div class="nav-links" id="primary-nav" role="navigation" aria-label="Primary" data-nav-menu>
+                <a href="{{HOME_URL}}">{{LEGAL_NAV_HOME}}</a>
+                <a href="https://github.com/Shik3i/KoalaPull" target="_blank" rel="noreferrer">GitHub</a>
+            </div>
+            <div class="nav-right">
+                <a class="lang-toggle" href="{{IMPRINT_LANG_URL}}">{{LANG_TOGGLE_TEXT}}</a>
+                <button class="hamburger nav-toggle" data-nav-toggle aria-label="Toggle navigation menu" aria-expanded="false" aria-controls="primary-nav">
+                    <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+                </button>
+            </div>
+        </div>
+    </nav>
+
+    <main id="main-content" class="legal-content">
+        <article class="legal-card" data-reveal>
+            <span class="eyebrow">{{IMPRINT_EYEBROW}}</span>
+            <h1>{{IMPRINT_TITLE}}</h1>
+
+            <section>
+                <h2>{{IMPRINT_PROVIDER_TITLE}}</h2>
+                <p>{{IMPRINT_PROVIDER_BODY}}</p>
+                <p>{{IMPRINT_EMAIL_LABEL}} <button type="button" class="email-reveal" data-user="koalapull_admin" data-domain="koalamail.rocks">{{IMPRINT_EMAIL_REVEAL}}</button></p>
+                <p>{{IMPRINT_ISSUES_LABEL}} <a href="https://github.com/Shik3i/KoalaPull/issues" target="_blank" rel="noreferrer">GitHub Issues</a></p>
+            </section>
+
+            <section>
+                <h2>{{IMPRINT_DDG_TITLE}}</h2>
+                <p>{{IMPRINT_DDG_BODY}}</p>
+            </section>
+
+            <section>
+                <h2>{{IMPRINT_APP_USE_TITLE}}</h2>
+                <p>{{IMPRINT_APP_USE_BODY}}</p>
+            </section>
+
+            <section>
+                <h2>{{IMPRINT_CONTENT_TITLE}}</h2>
+                <p>{{IMPRINT_CONTENT_BODY}}</p>
+            </section>
+
+            <section>
+                <h2>{{IMPRINT_LINKS_TITLE}}</h2>
+                <p>{{IMPRINT_LINKS_BODY}}</p>
+            </section>
+
+            <section>
+                <h2>{{IMPRINT_COPYRIGHT_TITLE}}</h2>
+                <p>{{IMPRINT_COPYRIGHT_BODY}}</p>
+            </section>
+        </article>
+    </main>
+
+    <footer class="site-footer">
+        <div class="container">
+            <p>{{FOOTER_MIT}}</p>
+            <div class="footer-links">
+                <a href="{{HOME_URL}}">{{LEGAL_NAV_HOME}}</a>
+                <a href="{{ASSET_PATH}}{{PRIVACY_PATH}}">{{FOOTER_PRIVACY}}</a>
+                <a href="https://github.com/Shik3i/KoalaPull" target="_blank" rel="noreferrer">{{FOOTER_GITHUB}}</a>
+            </div>
+        </div>
+    </footer>
+</body>
+</html>
