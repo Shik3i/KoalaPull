@@ -9,7 +9,7 @@ import (
 func hiddenProcAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{
 		HideWindow:    true,
-		CreationFlags: syscall.CREATE_NO_WINDOW,
+		CreationFlags: 0x08000000, // CREATE_NO_WINDOW
 	}
 }
 

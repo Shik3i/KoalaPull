@@ -99,8 +99,18 @@ When precision, safety, debugging, or user comprehension genuinely requires more
 
 ---
 
-## Quality Gate (For Push Operations)
+## Quality Gate (For Push and Tag Operations)
 
-- No push before running `./scripts/verify.sh`.
-- Only push when `go test -count=1 ./...`, `go vet ./...`, `npm run test`, and `npm run build` all pass.
-- Release tags follow the same rule. Run verification first, then push the tag.
+Before ANY push:
+- MUST run `./scripts/verify.sh`
+- MUST pass: `go test -count=1 ./...`, `go vet ./...`, `npm run test`, `npm run build`
+
+Before ANY release tag push (HARD VIOLATION):
+- MUST run ALL quality gate checks above FIRST
+- MUST additionally verify cross-compilation for ALL 3 target platforms:
+  - `GOOS=windows GOARCH=amd64 go build ./...`
+  - `GOOS=darwin GOARCH=amd64 go build ./...`
+  - `GOOS=linux GOARCH=amd64 go build ./...`
+- MUST verify frontend type-check: `npx tsc --noEmit` in `frontend/`
+- MUST NOT push tag if any of the above fail
+- This rule applies to both human and AI-initiated tag pushes

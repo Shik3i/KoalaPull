@@ -130,8 +130,10 @@ func TestFrontendPackageHasAutomatedTestScript(t *testing.T) {
 func TestAgentsDefinesNoPushWithoutVerification(t *testing.T) {
 	data := mustReadRepoFile(t, "AGENTS.md")
 	for _, want := range []string{
-		"No push before running `./scripts/verify.sh`.",
-		"Only push when `go test -count=1 ./...`, `go vet ./...`, `npm run test`, and `npm run build` all pass.",
+		"Before ANY push:",
+		"MUST run `./scripts/verify.sh`",
+		"Before ANY release tag push (HARD VIOLATION):",
+		"cross-compilation for ALL 3 target platforms",
 	} {
 		if !strings.Contains(data, want) {
 			t.Fatalf("AGENTS.md missing %q", want)

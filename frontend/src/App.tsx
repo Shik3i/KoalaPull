@@ -1063,7 +1063,8 @@ function fmtTime(t: string): string {
             <div className="px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--color-surface-border)' }}>
               <h2 className="text-base font-semibold" title={tt('languageSelect')}>{t('settings.title')}</h2>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-5 space-y-6 max-w-2xl">
+            <div className="flex-1 overflow-y-auto px-6 py-5">
+              <div className="space-y-6 max-w-2xl">
               {/* Theme */}
               <section>
                 <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('themeDark')}>{t('settings.appearance')}</h3>
@@ -1277,6 +1278,7 @@ function fmtTime(t: string): string {
                   )}
                 </div>
               </section>
+              </div>
             </div>
           </div>
         )}
