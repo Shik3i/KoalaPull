@@ -6,18 +6,42 @@ import (
 	"context"
 	"os/exec"
 	"syscall"
+	"time"
 )
 
 func commandContext(ctx context.Context, name string, arg ...string) *exec.Cmd {
 	cmd := exec.Command(name, arg...)
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	return cmd
+}
+
+func startCommand(ctx context.Context, cmd *exec.Cmd) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
 	go func() {
 		<-ctx.Done()
 		if cmd.Process != nil {
 			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
 	}()
-	return cmd
+	return nil
+}
+
+func commandOutput(ctx context.Context, name string, arg ...string) ([]byte, error) {
+	cmd := exec.Command(name, arg...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	go func() {
+		<-ctx.Done()
+		for i := 0; i < 100; i++ {
+			if cmd.Process != nil {
+				syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				return
+			}
+			time.Sleep(10 * time.Millisecond)
+		}
+	}()
+	return cmd.Output()
 }
 
 func command(name string, arg ...string) *exec.Cmd {

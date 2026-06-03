@@ -550,7 +550,7 @@ func (a *App) GetYtdlpVersion() string {
 	// retry once — macOS Gatekeeper can delay first launch
 	for i := 0; i < 2; i++ {
 		ctx, cancel := context.WithTimeout(a.appContext(), 5*time.Second)
-		out, err := commandContext(ctx, a.ytdlpPath(), "--version").Output()
+		out, err := commandOutput(ctx, a.ytdlpPath(), "--version")
 		cancel()
 		if err == nil {
 			return strings.TrimSpace(string(out))
@@ -570,7 +570,7 @@ func (a *App) GetYtdlpVersion() string {
 func (a *App) GetFfmpegVersion() string {
 	for i := 0; i < 2; i++ {
 		ctx, cancel := context.WithTimeout(a.appContext(), 5*time.Second)
-		out, err := commandContext(ctx, a.ffmpegPath(), "-version").Output()
+		out, err := commandOutput(ctx, a.ffmpegPath(), "-version")
 		cancel()
 		if err == nil {
 			parts := strings.SplitN(string(out), " ", 4)
@@ -993,9 +993,7 @@ func extractFFmpegFromZip(archivePath, destDir string) error {
 		closeErr := dst.Close()
 		rcErr := rc.Close()
 		if copyErr != nil || closeErr != nil || rcErr != nil {
-			if copyErr != nil {
-				os.Remove(dstPath)
-			}
+			os.Remove(dstPath)
 			return errors.Join(copyErr, closeErr, rcErr)
 		}
 	}
@@ -1075,9 +1073,11 @@ func extractFFmpegFromTarXz(archivePath, destDir string) error {
 			_, copyErr := io.Copy(dst, src)
 			closeErr := dst.Close()
 			if copyErr != nil {
+				os.Remove(filepath.Join(destDir, "ffmpeg"))
 				return copyErr
 			}
 			if closeErr != nil {
+				os.Remove(filepath.Join(destDir, "ffmpeg"))
 				return closeErr
 			}
 			found = true
@@ -1161,8 +1161,7 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	args := []string{"--no-check-formats", "--no-warnings", "--dump-json", "--skip-download", "--flat-playlist", "--", url}
 	ctx, cancel, seq := a.newMetadataContext()
 	defer a.clearMetadataContext(cancel, seq)
-	cmd := commandContext(ctx, a.ytdlpPath(), args...)
-	stdout, err := cmd.Output()
+	stdout, err := commandOutput(ctx, a.ytdlpPath(), args...)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("yt-dlp metadata timed out: %w", ctx.Err())
@@ -1359,7 +1358,7 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 		return
 	}
 
-	if err := cmd.Start(); err != nil {
+	if err := startCommand(ctx, cmd); err != nil {
 		if ctx.Err() == context.Canceled {
 			a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "cancelled", StartTime: startTime, EndTime: time.Now()})
 			a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")

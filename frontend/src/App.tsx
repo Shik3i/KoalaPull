@@ -140,8 +140,10 @@ function formatAppVersionLabel(version: string): string {
 
 function siteLogoUrl(site: SupportedSite): string {
   if (site.name === 'Niconico') return 'https://www.nicovideo.jp/favicon.ico'
-  const hostname = new URL(site.href).hostname
-  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`
+  try {
+    const hostname = new URL(site.href).hostname
+    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`
+  } catch { return '' }
 }
 
 function SiteMark({ site }: { site: SupportedSite }) {
