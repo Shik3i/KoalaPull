@@ -32,39 +32,39 @@
     <xhtml:link rel="alternate" hreflang="x-default" href="https://pull.koalastuff.net/"/>
   </url>
   <url>
-    <loc>https://pull.koalastuff.net/imprint.html</loc>
+    <loc>https://pull.koalastuff.net/imprint</loc>
     <lastmod>2026-06-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
-    <xhtml:link rel="alternate" hreflang="en" href="https://pull.koalastuff.net/imprint.html"/>
-    <xhtml:link rel="alternate" hreflang="de" href="https://pull.koalastuff.net/de/impressum.html"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://pull.koalastuff.net/imprint.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pull.koalastuff.net/imprint"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://pull.koalastuff.net/de/impressum"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pull.koalastuff.net/imprint"/>
   </url>
   <url>
-    <loc>https://pull.koalastuff.net/de/impressum.html</loc>
+    <loc>https://pull.koalastuff.net/de/impressum</loc>
     <lastmod>2026-06-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
-    <xhtml:link rel="alternate" hreflang="en" href="https://pull.koalastuff.net/imprint.html"/>
-    <xhtml:link rel="alternate" hreflang="de" href="https://pull.koalastuff.net/de/impressum.html"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://pull.koalastuff.net/imprint.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pull.koalastuff.net/imprint"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://pull.koalastuff.net/de/impressum"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pull.koalastuff.net/imprint"/>
   </url>
   <url>
-    <loc>https://pull.koalastuff.net/privacy.html</loc>
+    <loc>https://pull.koalastuff.net/privacy</loc>
     <lastmod>2026-06-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
-    <xhtml:link rel="alternate" hreflang="en" href="https://pull.koalastuff.net/privacy.html"/>
-    <xhtml:link rel="alternate" hreflang="de" href="https://pull.koalastuff.net/de/datenschutz.html"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://pull.koalastuff.net/privacy.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pull.koalastuff.net/privacy"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://pull.koalastuff.net/de/datenschutz"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pull.koalastuff.net/privacy"/>
   </url>
   <url>
-    <loc>https://pull.koalastuff.net/de/datenschutz.html</loc>
+    <loc>https://pull.koalastuff.net/de/datenschutz</loc>
     <lastmod>2026-06-03</lastmod>
     <changefreq>monthly</changefreq>
     <priority>0.3</priority>
-    <xhtml:link rel="alternate" hreflang="en" href="https://pull.koalastuff.net/privacy.html"/>
-    <xhtml:link rel="alternate" hreflang="de" href="https://pull.koalastuff.net/de/datenschutz.html"/>
-    <xhtml:link rel="alternate" hreflang="x-default" href="https://pull.koalastuff.net/privacy.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://pull.koalastuff.net/privacy"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://pull.koalastuff.net/de/datenschutz"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://pull.koalastuff.net/privacy"/>
   </url>
 </urlset>

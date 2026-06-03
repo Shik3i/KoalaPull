@@ -293,6 +293,16 @@ async function build() {
       FAQ_JSONLD: faqJsonld
     };
 
+    for (const page of legalPages) {
+      const isImprint = page.template === 'impressum.html';
+      const key = isImprint ? 'IMPRINT_LINK' : 'PRIVACY_LINK';
+      if (page.output[lang]) {
+        dictionary[key] = page.output[lang].replace(/\.html$/, '');
+      } else {
+        dictionary[key] = `${assetPrefix}${page.output['en'].replace(/\.html$/, '')}`;
+      }
+    }
+
     let html = template;
     html = injectDefaults(html, lang, assetPrefix);
     html = replaceAllPlaceholders(html, dictionary);
