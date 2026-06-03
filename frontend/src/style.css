@@ -79,6 +79,7 @@
     color: var(--text-primary);
     margin: 0;
     overflow: hidden;
+    min-width: 720px;
   }
 
   ::-webkit-scrollbar {

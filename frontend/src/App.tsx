@@ -158,7 +158,7 @@ function SiteMark({ site }: { site: SupportedSite }) {
 function SiteBadge({ site, blurb }: { site: SupportedSite; blurb: string }) {
   return (
     <div
-      className="group h-full rounded-2xl p-3.5 border transition-colors"
+      className="group h-full rounded-2xl p-3.5 lg:p-4 border transition-colors"
       style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}
     >
       <div className="flex items-start gap-3">
@@ -174,11 +174,8 @@ function SiteBadge({ site, blurb }: { site: SupportedSite; blurb: string }) {
 
 function AppLogo({ sizeClass }: { sizeClass: string }) {
   return (
-    <div
-      className={`${sizeClass} shrink-0 rounded-xl flex items-center justify-center overflow-hidden`}
-      style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}
-    >
-      <img src={appIcon} alt="" className="w-full h-full object-contain" draggable={false} />
+    <div className={`${sizeClass} shrink-0 flex items-center justify-center overflow-hidden`}>
+      <img src={appIcon} alt="" className="w-full h-full object-cover" draggable={false} />
     </div>
   )
 }
@@ -228,7 +225,7 @@ function HistoryEntries({ entries, search, onDelete, fmtTime, t }: { entries: ma
 function HistoryRow({ entry, onDelete, fmtTime, t }: { entry: main.HistoryEntry; onDelete: (id: string) => void; fmtTime: (t: string) => string; t: (key: string, params?: Record<string, string | number>) => string }) {
   const statusKey = `downloads.status.${entry.status}`
   return (
-    <div className="rounded-lg p-3.5 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
+    <div className="rounded-lg p-3.5 lg:p-4 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{entry.title || t('common.untitled')}</p>
         <div className="flex flex-wrap gap-x-4 gap-y-1 mt-1.5 text-xs" style={{ color: 'var(--text-secondary)' }}>
@@ -457,7 +454,7 @@ function App() {
     if (!depsReady) return
     void loadToolVersions()
     void loadUpdateInfo()
-  }, [depsReady, t])
+  }, [depsReady])
 
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
@@ -690,12 +687,12 @@ function fmtTime(t: string): string {
 
   // --- Main App ---
   return (
-    <div className="h-screen flex" style={{ background: 'var(--color-surface)', color: 'var(--text-primary)' }}>
+    <div className="h-screen flex min-w-[720px]" style={{ background: 'var(--color-surface)', color: 'var(--text-primary)' }}>
       {/* Sidebar */}
       <aside className="w-52 shrink-0 flex flex-col border-r" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
-        <div className="flex items-center gap-2.5 px-5 py-4 border-b" style={{ borderColor: 'var(--color-surface-border)' }}>
-          <AppLogo sizeClass="w-7 h-7" />
-          <span className="font-semibold text-sm">{t('app.name')}</span>
+        <div className="flex items-center gap-1.5 px-5 py-4" style={{ background: 'var(--color-surface-light)', borderBottom: '1px solid var(--color-surface-border)' }}>
+          <AppLogo sizeClass="w-16 h-16" />
+          <span className="font-bold text-2xl tracking-tight">{t('app.name')}</span>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1" style={{ color: 'var(--text-secondary)' }}>
           {tabs.map((t) => (
@@ -736,8 +733,8 @@ function fmtTime(t: string): string {
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* --- Downloads Tab --- */}
         {activeTab === 'downloads' && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--color-surface-border)' }}>
+            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-4 lg:px-8 py-4 lg:py-5 shrink-0">
               <div className="flex gap-2">
                 <div className="flex-1 relative">
                   <input
@@ -745,7 +742,7 @@ function fmtTime(t: string): string {
                     onChange={(e) => setUrl(e.target.value)}
                     onKeyDown={(e) => { if (e.key === 'Enter') handleFetch() }}
                     placeholder={t('downloads.urlPlaceholder')}
-                    className="input-dark w-full pr-10"
+                    className="input-dark w-full pr-10 lg:text-sm"
                     title={tt('urlInput')}
                     aria-label={tt('urlInput')}
                   />
@@ -775,14 +772,14 @@ function fmtTime(t: string): string {
               )}
             </div>
 
-            <div className="flex-1 overflow-y-auto px-6 py-4 space-y-4">
+            <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 lg:py-6 space-y-4">
               {fetched && metadata && (
                 <div className="rounded-lg overflow-hidden" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
                   <div className="flex gap-4 p-4">
                     {metadata.thumbnail ? (
-                      <img src={metadata.thumbnail} alt={metadata.title} loading="lazy" className="w-44 h-24 rounded-md object-cover shrink-0" style={{ background: 'var(--color-surface-lighter)' }} />
+                      <img src={metadata.thumbnail} alt={metadata.title} loading="lazy" className="w-36 lg:w-52 h-20 lg:h-28 rounded-md object-cover shrink-0" style={{ background: 'var(--color-surface-lighter)' }} />
                     ) : (
-                      <div className="w-44 h-24 rounded-md shrink-0 flex items-center justify-center" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}>
+                      <div className="w-36 lg:w-52 h-20 lg:h-28 rounded-md shrink-0 flex items-center justify-center" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}>
                         <svg className="w-8 h-8" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 10l4.553-2.276A1 1 0 0121 8.618v6.764a1 1 0 01-1.447.894L15 14M5 18h8a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v8a2 2 0 002 2z" />
                         </svg>
@@ -887,17 +884,19 @@ function fmtTime(t: string): string {
               )}
 
               <div>
-                <div className="flex items-center justify-between mb-3">
-                  <h3 className="text-sm font-medium uppercase tracking-wider" style={{ color: 'var(--text-secondary)' }} title={tt('downloadList')}>
-                    {t('downloads.summary', { count: queue.length })}
-                    {activeCount > 0 && (
-                      <span className="ml-2 font-normal normal-case" style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
-                        {t('downloads.activeSummary', { count: activeCount })}{totalEta ? ` · ${totalEta}` : ''}
-                      </span>
-                    )}
-                  </h3>
+                <div className="flex items-center mb-3">
+                  <div className="flex-1 text-center">
+                    <h3 className="text-sm font-medium uppercase tracking-wider inline-block" style={{ color: 'var(--text-secondary)' }} title={tt('downloadList')}>
+                      {t('downloads.summary', { count: queue.length })}
+                      {activeCount > 0 && (
+                        <span className="ml-2 font-normal normal-case" style={{ color: 'var(--text-muted)', fontSize: '0.75rem' }}>
+                          {t('downloads.activeSummary', { count: activeCount })}{totalEta ? ` · ${totalEta}` : ''}
+                        </span>
+                      )}
+                    </h3>
+                  </div>
                   {queue.some((i) => ['completed', 'error', 'cancelled'].includes(i.status)) && (
-                    <button onClick={handleClearCompleted} className="text-xs transition-colors" style={{ color: 'var(--text-muted)' }} title={tt('clearCompleted')} aria-label={tt('clearCompleted')}>{t('actions.clearCompleted')}</button>
+                    <button onClick={handleClearCompleted} className="text-xs transition-colors shrink-0" style={{ color: 'var(--text-muted)' }} title={tt('clearCompleted')} aria-label={tt('clearCompleted')}>{t('actions.clearCompleted')}</button>
                   )}
                 </div>
                 {queue.length === 0 ? (
@@ -911,7 +910,7 @@ function fmtTime(t: string): string {
                 ) : (
                   <div className="space-y-2">
                     {reversedQueue.map((item) => (
-                      <div key={item.id} className="rounded-lg p-3 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
+                      <div key={item.id} className="rounded-lg p-3 lg:p-4 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
                         <div className="w-16 h-10 rounded shrink-0 flex items-center justify-center overflow-hidden" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}>
                           {item.thumbnail ? (
                             <img src={item.thumbnail} alt="" loading="lazy" className="w-full h-full object-cover" />
@@ -1013,17 +1012,19 @@ function fmtTime(t: string): string {
 
         {/* --- History Tab --- */}
         {activeTab === 'history' && (
-          <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--color-surface-border)' }}>
-              <h2 className="text-base font-semibold" title={tt('searchHistory')}>{t('history.title')}</h2>
-              <div className="flex items-center gap-3">
+            <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 lg:px-8 py-4 shrink-0">
+              <div className="flex-1 text-center">
+                <h2 className="text-base font-semibold inline-block" title={tt('searchHistory')}>{t('history.title')}</h2>
+              </div>
+              <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
                 {history.length > 0 && (
                   <>
                     <input
                       type="text" value={historySearch}
                       onChange={(e) => setHistorySearch(e.target.value)}
                       placeholder={t('history.searchPlaceholder')}
-                      className="input-dark text-xs w-44"
+                      className="input-dark text-xs w-full sm:w-44 lg:w-56"
                       title={tt('searchHistory')}
                       aria-label={tt('searchHistory')}
                     />
@@ -1037,7 +1038,7 @@ function fmtTime(t: string): string {
                 )}
               </div>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-4">
+            <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 lg:py-6">
               {historyLoading ? (
                 <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--text-muted)' }}>
                   <div className="w-6 h-6 border-2 rounded-full animate-spin mb-3" style={{ borderColor: 'var(--color-accent)', borderTopColor: 'transparent' }} />
@@ -1060,13 +1061,13 @@ function fmtTime(t: string): string {
         {/* --- Settings Tab --- */}
         {activeTab === 'settings' && (
           <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--color-surface-border)' }}>
-              <h2 className="text-base font-semibold" title={tt('languageSelect')}>{t('settings.title')}</h2>
+            <div className="px-4 lg:px-8 py-4 lg:py-5 shrink-0">
+              <h2 className="text-base lg:text-lg font-semibold" title={tt('languageSelect')}>{t('settings.title')}</h2>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-5">
-              <div className="space-y-6 max-w-2xl">
+            <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-5 lg:py-6">
+              <div className="max-w-4xl grid gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3 items-start">
               {/* Theme */}
-              <section>
+              <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('themeDark')}>{t('settings.appearance')}</h3>
                 <div className="flex gap-3">
                   {(['dark', 'light'] as const).map((themeOption) => (
@@ -1088,9 +1089,9 @@ function fmtTime(t: string): string {
                 </div>
               </section>
 
-              <section>
+              <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('languageSelect')}>{t('settings.language')}</h3>
-                <select value={language} onChange={(e) => { void handleLanguageChange(e.target.value as LanguageCode) }} className="select-dark text-sm w-full max-w-xs" title={tt('languageSelect')} aria-label={tt('languageSelect')}>
+                <select value={language} onChange={(e) => { void handleLanguageChange(e.target.value as LanguageCode) }} className="select-dark text-sm w-full" title={tt('languageSelect')} aria-label={tt('languageSelect')}>
                   <option value="en">{t('settings.languageEnglish')}</option>
                   <option value="de">{t('settings.languageGerman')}</option>
                   <option value="fr">{t('settings.languageFrench')}</option>
@@ -1098,7 +1099,7 @@ function fmtTime(t: string): string {
               </section>
 
               {/* Download Location */}
-              <section>
+              <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('downloadLocation')}>{t('settings.downloadLocation')}</h3>
                 <div className="flex gap-2">
                   <div className="flex-1 rounded-md px-3 py-2 text-xs leading-5 break-all whitespace-normal" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)', color: 'var(--text-secondary)' }} title={tt('downloadLocation')}>
@@ -1109,7 +1110,7 @@ function fmtTime(t: string): string {
               </section>
 
               {/* Max Concurrency */}
-              <section>
+              <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('maxConcurrency')}>{t('settings.downloads')}</h3>
                 <div className="flex items-center gap-3">
                   <label className="text-xs" style={{ color: 'var(--text-muted)', minWidth: '7rem' }} title={tt('maxConcurrency')}>{t('settings.maxParallelDownloads')}</label>
@@ -1129,7 +1130,7 @@ function fmtTime(t: string): string {
               </section>
 
               {/* Auto-Paste URL */}
-              <section>
+              <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <div className="flex items-center justify-between">
                   <div>
                     <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }} title={tt('autoPaste')}>{t('settings.autoPasteTitle')}</h3>
@@ -1157,7 +1158,7 @@ function fmtTime(t: string): string {
               </section>
 
               {/* Version Info */}
-              <section>
+              <section className="md:col-span-2 xl:col-span-3 rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('versionKoalaPull')}>{t('settings.versions')}</h3>
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center gap-2">
@@ -1186,7 +1187,7 @@ function fmtTime(t: string): string {
                       title={tt('versionYtdlp')}
                       aria-label={tt('versionYtdlp')}
                     >
-                      {toolVersionsLoading ? t('common.loading') : (toolVersions?.ytdlp || t('common.unavailable'))}
+                      {toolVersionsLoading ? t('common.loading') : (toolVersions?.ytdlp || '-')}
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ opacity: 0.6 }}>
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
@@ -1203,7 +1204,7 @@ function fmtTime(t: string): string {
                       title={tt('versionFfmpeg')}
                       aria-label={tt('versionFfmpeg')}
                     >
-                      {toolVersions?.ffmpeg || t('common.unavailable')}
+                      {toolVersionsLoading ? t('common.loading') : (toolVersions?.ffmpeg || '-')}
                       <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ opacity: 0.6 }}>
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
                       </svg>
@@ -1213,7 +1214,7 @@ function fmtTime(t: string): string {
               </section>
 
               {/* Updates */}
-              <section>
+              <section className="md:col-span-2 xl:col-span-3 rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('redownloadDependencies')}>{t('settings.updates')}</h3>
                 <div className="text-xs space-y-3" style={{ color: 'var(--text-muted)' }}>
                   {updateInfo ? (
@@ -1286,14 +1287,14 @@ function fmtTime(t: string): string {
         {/* --- Help Tab --- */}
         {activeTab === 'help' && (
           <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="px-6 py-4 border-b shrink-0" style={{ borderColor: 'var(--color-surface-border)' }}>
-              <h2 className="text-base font-semibold" title={tt('helpSteps')}>{t('help.title')}</h2>
+            <div className="px-4 lg:px-8 py-4 lg:py-5 shrink-0">
+              <h2 className="text-base lg:text-lg font-semibold" title={tt('helpSteps')}>{t('help.title')}</h2>
             </div>
-            <div className="flex-1 overflow-y-auto px-6 py-5">
-              <div className="space-y-6 max-w-4xl">
-                <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
-                  <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }} title={tt('helpSteps')}>{t('help.howToTitle')}</h3>
-                  <div className="grid gap-3 sm:grid-cols-2">
+            <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-5 lg:py-6">
+              <div className="space-y-6 max-w-6xl">
+                <section className="rounded-xl p-4 lg:p-6 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+                  <h3 className="text-sm lg:text-base font-medium mb-2" style={{ color: 'var(--text-secondary)' }} title={tt('helpSteps')}>{t('help.howToTitle')}</h3>
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
                     {[
                       {
                         step: '1',
@@ -1318,7 +1319,7 @@ function fmtTime(t: string): string {
                     ].map((item) => (
                       <div
                         key={item.step}
-                        className="rounded-xl border p-3"
+                        className="rounded-xl border p-3 lg:p-4"
                         style={{ background: 'var(--color-surface)', borderColor: 'var(--color-surface-border)' }}
                       >
                         <div className="flex items-start gap-3">
@@ -1341,8 +1342,8 @@ function fmtTime(t: string): string {
                 <section className="space-y-4">
                   <div className="flex items-end justify-between gap-4">
                     <div>
-                      <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }} title={tt('supportedSites')}>{t('help.supportedTitle')}</h3>
-                      <p className="text-xs mt-1 max-w-2xl" style={{ color: 'var(--text-muted)' }}>
+                      <h3 className="text-sm lg:text-base font-medium" style={{ color: 'var(--text-secondary)' }} title={tt('supportedSites')}>{t('help.supportedTitle')}</h3>
+                      <p className="text-xs lg:text-sm mt-1 max-w-2xl" style={{ color: 'var(--text-muted)' }}>
                         {t('help.supportedText')}
                       </p>
                     </div>
@@ -1357,7 +1358,7 @@ function fmtTime(t: string): string {
                     </button>
                   </div>
 
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-6">
                     {supportedSites.map((site) => (
                       <button
                         key={site.name}
@@ -1372,9 +1373,9 @@ function fmtTime(t: string): string {
                   </div>
                 </section>
 
-                <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
-                  <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }} title={tt('underTheHood')}>{t('help.underTheHood')}</h3>
-                  <div className="space-y-3 text-sm leading-6" style={{ color: 'var(--text-secondary)' }}>
+                <section className="rounded-xl p-4 lg:p-6 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+                  <h3 className="text-sm lg:text-base font-medium mb-2" style={{ color: 'var(--text-secondary)' }} title={tt('underTheHood')}>{t('help.underTheHood')}</h3>
+                  <div className="space-y-3 text-sm lg:text-base leading-6 lg:leading-7" style={{ color: 'var(--text-secondary)' }}>
                     <p>{t('help.underTheHoodText.one')}</p>
                     <p>{t('help.underTheHoodText.two')}</p>
                     <p>{t('help.underTheHoodText.three')}</p>

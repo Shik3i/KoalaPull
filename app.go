@@ -547,25 +547,45 @@ func (a *App) CheckDependencies() DependencyStatus {
 }
 
 func (a *App) GetYtdlpVersion() string {
-	ctx, cancel := context.WithTimeout(a.appContext(), 5*time.Second)
-	defer cancel()
-	out, err := commandContext(ctx, a.ytdlpPath(), "--version").Output()
-	if err != nil {
-		return ""
+	// retry once — macOS Gatekeeper can delay first launch
+	for i := 0; i < 2; i++ {
+		ctx, cancel := context.WithTimeout(a.appContext(), 5*time.Second)
+		out, err := commandContext(ctx, a.ytdlpPath(), "--version").Output()
+		cancel()
+		if err == nil {
+			return strings.TrimSpace(string(out))
+		}
+		if i == 0 {
+			if ee, ok := err.(*exec.ExitError); ok {
+				fmt.Fprintf(os.Stderr, "yt-dlp version attempt %d stderr: %s\n", i, string(ee.Stderr))
+			} else {
+				fmt.Fprintf(os.Stderr, "yt-dlp version attempt %d: %v\n", i, err)
+			}
+			time.Sleep(2 * time.Second)
+		}
 	}
-	return strings.TrimSpace(string(out))
+	return ""
 }
 
 func (a *App) GetFfmpegVersion() string {
-	ctx, cancel := context.WithTimeout(a.appContext(), 5*time.Second)
-	defer cancel()
-	out, err := commandContext(ctx, a.ffmpegPath(), "-version").Output()
-	if err != nil {
-		return ""
-	}
-	parts := strings.SplitN(string(out), " ", 4)
-	if len(parts) >= 3 {
-		return strings.TrimSpace(parts[2])
+	for i := 0; i < 2; i++ {
+		ctx, cancel := context.WithTimeout(a.appContext(), 5*time.Second)
+		out, err := commandContext(ctx, a.ffmpegPath(), "-version").Output()
+		cancel()
+		if err == nil {
+			parts := strings.SplitN(string(out), " ", 4)
+			if len(parts) >= 3 {
+				return strings.TrimSpace(parts[2])
+			}
+		}
+		if i == 0 {
+			if ee, ok := err.(*exec.ExitError); ok {
+				fmt.Fprintf(os.Stderr, "ffmpeg version attempt %d stderr: %s\n", i, string(ee.Stderr))
+			} else {
+				fmt.Fprintf(os.Stderr, "ffmpeg version attempt %d: %v\n", i, err)
+			}
+			time.Sleep(2 * time.Second)
+		}
 	}
 	return ""
 }
@@ -606,11 +626,19 @@ func (a *App) OpenOutputDir() error {
 }
 
 func (a *App) GetVersionInfo() VersionInfo {
-	return VersionInfo{
-		Ytdlp:  a.GetYtdlpVersion(),
-		Ffmpeg: a.GetFfmpegVersion(),
-		App:    AppVersion,
-	}
+	vi := VersionInfo{App: AppVersion}
+	done := make(chan struct{}, 2)
+	go func() {
+		vi.Ytdlp = a.GetYtdlpVersion()
+		done <- struct{}{}
+	}()
+	go func() {
+		vi.Ffmpeg = a.GetFfmpegVersion()
+		done <- struct{}{}
+	}()
+	<-done
+	<-done
+	return vi
 }
 
 func (a *App) GetAppVersion() string {
