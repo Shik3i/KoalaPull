@@ -48,6 +48,7 @@ type App struct {
 	semLimit         atomic.Int32
 	semWake          chan struct{}
 	historyMu        sync.Mutex
+	cachedSettings   Settings
 	metadataMu       sync.Mutex
 	metadataCancel   context.CancelFunc
 	metadataSeq      uint64
@@ -136,7 +137,7 @@ type UpdateInfo struct {
 	LatestKoalaPullVersion   string `json:"latestKoalaPullVersion"`
 }
 
-var progressRegex = regexp.MustCompile(`\[download\]\s+([\d.]+)%\s+of\s+~?([\d.]+\S+)\s+at\s+([\d.]+\S+)\s+ETA\s+(\S+)`)
+var progressRegex = regexp.MustCompile(`\[download\]\s+([\d.]+)%\s+of\s+~?([\d.]+\S+)\s+at\s+([\d.]+\S+)(?:\s+ETA\s+(\S+))?`)
 
 var sizeLineRegex = regexp.MustCompile(`\[download\]\s+100%\s+of\s+~?([\d.]+\S+)`)
 
@@ -158,7 +159,7 @@ func NewApp() *App {
 		activeDownloads: make(map[string]context.CancelFunc),
 		lastFileSize:    make(map[string]string),
 		lastSpeed:       make(map[string]string),
-		semWake:         make(chan struct{}, 1),
+		semWake:         make(chan struct{}, maxMaxConcurrency),
 	}
 	a.semLimit.Store(defaultMaxConcurrency)
 	return a
@@ -175,7 +176,7 @@ func (a *App) initSemaphore() {
 	s := a.GetSettings()
 	a.semLimit.Store(int32(s.MaxConcurrency))
 	if a.semWake == nil {
-		a.semWake = make(chan struct{}, 1)
+		a.semWake = make(chan struct{}, maxMaxConcurrency)
 	}
 }
 
@@ -224,6 +225,8 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.activeDownloads = make(map[string]context.CancelFunc)
 	a.initSemaphore()
+	a.loadSettings()
+	a.migrateHistoryIfNeeded()
 	a.cleanupStaleTempFiles()
 }
 
@@ -330,19 +333,16 @@ func defaultOutputDir() string {
 	return filepath.Join(home, "Downloads", "KoalaPull")
 }
 
-func (a *App) GetSettings() Settings {
+func (a *App) loadSettings() {
 	a.settingsMu.Lock()
 	defer a.settingsMu.Unlock()
-	return a.getSettingsLocked()
-}
-
-func (a *App) getSettingsLocked() Settings {
 	path := a.settingsPath()
 	data, err := os.ReadFile(path)
 	if err == nil {
 		var s Settings
 		if json.Unmarshal(data, &s) == nil {
-			return validateSettings(s)
+			a.cachedSettings = validateSettings(s)
+			return
 		}
 	}
 	s := validateSettings(Settings{
@@ -356,10 +356,20 @@ func (a *App) getSettingsLocked() Settings {
 		CustomContainer:  defaultCustomContainer,
 		CustomSubtitle:   defaultCustomSubtitle,
 	})
+	a.cachedSettings = s
 	if err := a.writeSettingsLocked(s); err != nil {
 		println("writeSettings error:", err.Error())
 	}
-	return s
+}
+
+func (a *App) GetSettings() Settings {
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+	return a.getSettingsLocked()
+}
+
+func (a *App) getSettingsLocked() Settings {
+	return a.cachedSettings
 }
 
 func (a *App) writeSettings(s Settings) error {
@@ -370,6 +380,7 @@ func (a *App) writeSettings(s Settings) error {
 
 func (a *App) writeSettingsLocked(s Settings) error {
 	s = validateSettings(s)
+	a.cachedSettings = s
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal settings: %w", err)
@@ -393,9 +404,11 @@ func (a *App) UpdateSettings(s Settings) error {
 		oldLimit := int(a.semLimit.Load())
 		a.semLimit.Store(int32(s.MaxConcurrency))
 		if s.MaxConcurrency > oldLimit {
-			select {
-			case a.semWake <- struct{}{}:
-			default:
+			for i := oldLimit; i < s.MaxConcurrency; i++ {
+				select {
+				case a.semWake <- struct{}{}:
+				default:
+				}
 			}
 		}
 	}
@@ -471,19 +484,62 @@ func (a *App) SelectDirectory() (string, error) {
 
 // ---------- History ----------
 
-func (a *App) historyPath() string {
-	return filepath.Join(a.configDir, "history.json")
+func (a *App) portableHistoryPath() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(exe), "history.json")
 }
 
-func (a *App) getHistoryLocked() []HistoryEntry {
+func (a *App) historyPath() string {
+	portable := a.portableHistoryPath()
+	return resolveSettingsPathFor(a.configDir, portable)
+}
+
+func (a *App) migrateHistoryIfNeeded() {
 	path := a.historyPath()
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return []HistoryEntry{}
+		return
+	}
+	if len(data) == 0 {
+		return
+	}
+	if data[0] != '[' {
+		return
 	}
 	var entries []HistoryEntry
 	if err := json.Unmarshal(data, &entries); err != nil {
-		return []HistoryEntry{}
+		return
+	}
+	f, err := os.Create(path)
+	if err != nil {
+		return
+	}
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	for _, e := range entries {
+		_ = enc.Encode(e)
+	}
+}
+
+func readHistoryFromFile(path string) []HistoryEntry {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return nil
+	}
+	entries := make([]HistoryEntry, 0, 64)
+	dec := json.NewDecoder(strings.NewReader(string(data)))
+	for dec.More() {
+		var e HistoryEntry
+		if err := dec.Decode(&e); err != nil {
+			break
+		}
+		entries = append(entries, e)
+	}
+	for i, j := 0, len(entries)-1; i < j; i, j = i+1, j-1 {
+		entries[i], entries[j] = entries[j], entries[i]
 	}
 	return entries
 }
@@ -491,28 +547,28 @@ func (a *App) getHistoryLocked() []HistoryEntry {
 func (a *App) GetHistory() []HistoryEntry {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
-	return a.getHistoryLocked()
+	return readHistoryFromFile(a.historyPath())
 }
 
 func (a *App) saveHistoryEntry(entry HistoryEntry) {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
-	entries := a.getHistoryLocked()
-	entries = append([]HistoryEntry{entry}, entries...)
-	data, err := json.MarshalIndent(entries, "", "  ")
+	f, err := os.OpenFile(a.historyPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		println("saveHistoryEntry marshal error:", err.Error())
+		println("saveHistoryEntry open error:", err.Error())
 		return
 	}
-	if err := os.WriteFile(a.historyPath(), data, 0644); err != nil {
-		println("saveHistoryEntry write error:", err.Error())
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	if err := enc.Encode(entry); err != nil {
+		println("saveHistoryEntry encode error:", err.Error())
 	}
 }
 
 func (a *App) ClearHistory() {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
-	if err := os.WriteFile(a.historyPath(), []byte("[]"), 0644); err != nil {
+	if err := os.WriteFile(a.historyPath(), nil, 0644); err != nil {
 		println("ClearHistory write error:", err.Error())
 	}
 }
@@ -520,20 +576,23 @@ func (a *App) ClearHistory() {
 func (a *App) DeleteHistoryEntry(downloadID string) {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
-	entries := a.getHistoryLocked()
+	path := a.historyPath()
+	entries := readHistoryFromFile(path)
 	filtered := make([]HistoryEntry, 0, len(entries))
 	for _, e := range entries {
 		if e.DownloadID != downloadID {
 			filtered = append(filtered, e)
 		}
 	}
-	data, err := json.MarshalIndent(filtered, "", "  ")
+	f, err := os.Create(path)
 	if err != nil {
-		println("DeleteHistoryEntry marshal error:", err.Error())
+		println("DeleteHistoryEntry create error:", err.Error())
 		return
 	}
-	if err := os.WriteFile(a.historyPath(), data, 0644); err != nil {
-		println("DeleteHistoryEntry write error:", err.Error())
+	defer f.Close()
+	enc := json.NewEncoder(f)
+	for _, e := range filtered {
+		_ = enc.Encode(e)
 	}
 }
 
@@ -1272,7 +1331,7 @@ func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subti
 	args = append(args, downloadPostProcessingArgs(preset, container, subtitle)...)
 	args = append(args, "--", url)
 
-	ctx, cancel := context.WithTimeout(a.appContext(), 1*time.Hour)
+	ctx, cancel := context.WithCancel(a.appContext())
 	a.adMu.Lock()
 	a.activeDownloads[downloadID] = cancel
 	a.adMu.Unlock()
@@ -1330,6 +1389,8 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 		}
 		a.adMu.Lock()
 		delete(a.activeDownloads, downloadID)
+		delete(a.lastFileSize, downloadID)
+		delete(a.lastSpeed, downloadID)
 		a.adMu.Unlock()
 	}()
 
@@ -1342,140 +1403,171 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 	startTime := time.Now()
 	a.emitDownloadProgress(downloadID, 0, "", "", "", "starting", "", "")
 
-	cmd := commandContext(ctx, a.ytdlpPath(), args...)
+	var lastProgress atomic.Value
+	lastProgress.Store(time.Now())
 
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: fmt.Sprintf("pipe failed: %v", err), StartTime: startTime, EndTime: time.Now()})
-		a.emitDownloadProgress(downloadID, 0, "", "", "", "error", fmt.Sprintf("pipe failed: %v", err), "")
-		return
-	}
-
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: fmt.Sprintf("stdout pipe failed: %v", err), StartTime: startTime, EndTime: time.Now()})
-		a.emitDownloadProgress(downloadID, 0, "", "", "", "error", fmt.Sprintf("stdout pipe failed: %v", err), "")
-		return
-	}
-
-	if err := startCommand(ctx, cmd); err != nil {
-		if ctx.Err() == context.Canceled {
-			a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "cancelled", StartTime: startTime, EndTime: time.Now()})
-			a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
-			return
+	for attempt := 0; attempt < 2; attempt++ {
+		if attempt > 0 {
+			if ctx.Err() != nil {
+				return
+			}
+			a.emitDownloadProgress(downloadID, 0, "", "", "", "retrying", "", "")
+			time.Sleep(2 * time.Second)
+			lastProgress.Store(time.Now())
 		}
-		a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: fmt.Sprintf("start failed: %v", err), StartTime: startTime, EndTime: time.Now()})
-		a.emitDownloadProgress(downloadID, 0, "", "", "", "error", fmt.Sprintf("start failed: %v", err), "")
-		return
-	}
 
-	type downloadLine struct {
-		source string
-		line   string
-		err    error
-	}
+		attemptCtx, attemptCancel := context.WithCancel(ctx)
 
-	lineCh := make(chan downloadLine, 128)
-	var readWG sync.WaitGroup
-	scanPipe := func(source string, r io.Reader) {
-		defer readWG.Done()
-		defer func() {
-			if r := recover(); r != nil {
-				println("scanPipe panic:", fmt.Sprint(r))
+		go func() {
+			ticker := time.NewTicker(30 * time.Second)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-ticker.C:
+					if time.Since(lastProgress.Load().(time.Time)) > 5*time.Minute {
+						attemptCancel()
+						return
+					}
+				case <-attemptCtx.Done():
+					return
+				}
 			}
 		}()
-		scanner := bufio.NewScanner(r)
-		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-		for scanner.Scan() {
-			lineCh <- downloadLine{source: source, line: scanner.Text()}
-		}
-		if scanErr := scanner.Err(); scanErr != nil {
-			lineCh <- downloadLine{source: source, err: scanErr}
-		}
-	}
-	readWG.Add(2)
-	go scanPipe("stdout", stdout)
-	go scanPipe("stderr", stderr)
-	go func() {
-		readWG.Wait()
-		close(lineCh)
-	}()
 
-	currentPS := ""
-	lastPct := 0.0
-	lastSpeed := ""
-	lastETA := ""
-	lastFileSz := ""
-	errLines := make([]string, 0, maxErrLines)
-	var stdoutScanErr error
-	var stderrScanErr error
-	for item := range lineCh {
-		if item.err != nil {
-			if item.source == "stderr" {
-				stderrScanErr = item.err
-			} else {
-				stdoutScanErr = item.err
+		func() {
+			cmd := commandContext(attemptCtx, a.ytdlpPath(), args...)
+
+			stderr, err := cmd.StderrPipe()
+			if err != nil {
+				return
 			}
+
+			stdout, err := cmd.StdoutPipe()
+			if err != nil {
+				return
+			}
+
+			if err := startCommand(attemptCtx, cmd); err != nil {
+				if ctx.Err() == context.Canceled {
+					a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "cancelled", StartTime: startTime, EndTime: time.Now()})
+					a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
+					return
+				}
+				return
+			}
+
+			type downloadLine struct {
+				source string
+				line   string
+				err    error
+			}
+
+			lineCh := make(chan downloadLine, 128)
+			var readWG sync.WaitGroup
+			scanPipe := func(source string, r io.Reader) {
+				defer readWG.Done()
+				defer func() {
+					if r := recover(); r != nil {
+						println("scanPipe panic:", fmt.Sprint(r))
+					}
+				}()
+				scanner := bufio.NewScanner(r)
+				scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+				for scanner.Scan() {
+					lineCh <- downloadLine{source: source, line: scanner.Text()}
+				}
+				if scanErr := scanner.Err(); scanErr != nil {
+					lineCh <- downloadLine{source: source, err: scanErr}
+				}
+			}
+			readWG.Add(2)
+			go scanPipe("stdout", stdout)
+			go scanPipe("stderr", stderr)
+			go func() {
+				readWG.Wait()
+				close(lineCh)
+			}()
+
+			currentPS := ""
+			lastPct := 0.0
+			lastSpeed := ""
+			lastETA := ""
+			lastFileSz := ""
+			errLines := make([]string, 0, maxErrLines)
+			var stdoutScanErr error
+			var stderrScanErr error
+			for item := range lineCh {
+				if item.err != nil {
+					if item.source == "stderr" {
+						stderrScanErr = item.err
+					} else {
+						stdoutScanErr = item.err
+					}
+					continue
+				}
+				line := item.line
+				if item.source == "stderr" {
+					if len(errLines) >= maxErrLines {
+						errLines = append(errLines[1:], line)
+					} else {
+						errLines = append(errLines, line)
+					}
+				}
+				if matches := sizeLineRegex.FindStringSubmatch(line); matches != nil {
+					lastFileSz = matches[1]
+					lastProgress.Store(time.Now())
+					a.adMu.Lock()
+					a.lastFileSize[downloadID] = matches[1]
+					a.adMu.Unlock()
+				}
+				if pct, fileSz, speed, eta, ok := parseProgressLine(line); ok {
+					lastPct, lastSpeed, lastETA, lastFileSz = pct, speed, eta, fileSz
+					lastProgress.Store(time.Now())
+					a.adMu.Lock()
+					a.lastSpeed[downloadID] = speed
+					a.lastFileSize[downloadID] = fileSz
+					a.adMu.Unlock()
+					a.emitDownloadProgress(downloadID, pct, speed, eta, fileSz, "downloading", "", currentPS)
+				} else if ps := parsePlaylistStatus(line); ps != "" {
+					currentPS = ps
+					a.emitDownloadProgress(downloadID, lastPct, lastSpeed, lastETA, lastFileSz, "downloading", "", currentPS)
+				}
+			}
+
+			err = cmd.Wait()
+			if err == nil {
+				err = errors.Join(stdoutScanErr, stderrScanErr)
+			}
+
+			endTime := time.Now()
+
+			if err != nil {
+				if ctx.Err() == context.Canceled {
+					a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "cancelled", StartTime: startTime, EndTime: endTime})
+					a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
+					return
+				}
+				errMsg := strings.Join(errLines, "\n")
+				if errMsg == "" {
+					errMsg = err.Error()
+				}
+				a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: errMsg, StartTime: startTime, EndTime: endTime})
+				a.emitDownloadProgress(downloadID, 0, "", "", "", "error", errMsg, "")
+				return
+			}
+
+			a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, FileSize: lastFileSz, AvgSpeed: lastSpeed, Status: "completed", StartTime: startTime, EndTime: endTime})
+			a.emitDownloadProgress(downloadID, 100, "", "", lastFileSz, "completed", "", "")
+		}()
+
+		attemptCancel()
+
+		// Only retry if attempt was cancelled by idle timeout (not user cancel)
+		if attempt == 0 && errors.Is(attemptCtx.Err(), context.Canceled) && ctx.Err() == nil {
 			continue
 		}
-		line := item.line
-		if item.source == "stderr" {
-			if len(errLines) >= maxErrLines {
-				errLines = append(errLines[1:], line)
-			} else {
-				errLines = append(errLines, line)
-			}
-		}
-		if matches := sizeLineRegex.FindStringSubmatch(line); matches != nil {
-			lastFileSz = matches[1]
-			a.adMu.Lock()
-			a.lastFileSize[downloadID] = matches[1]
-			a.adMu.Unlock()
-		}
-		if pct, fileSz, speed, eta, ok := parseProgressLine(line); ok {
-			lastPct, lastSpeed, lastETA, lastFileSz = pct, speed, eta, fileSz
-			a.adMu.Lock()
-			a.lastSpeed[downloadID] = speed
-			a.lastFileSize[downloadID] = fileSz
-			a.adMu.Unlock()
-			a.emitDownloadProgress(downloadID, pct, speed, eta, fileSz, "downloading", "", currentPS)
-		} else if ps := parsePlaylistStatus(line); ps != "" {
-			currentPS = ps
-			a.emitDownloadProgress(downloadID, lastPct, lastSpeed, lastETA, lastFileSz, "downloading", "", currentPS)
-		}
-	}
-
-	err = cmd.Wait()
-	if err == nil {
-		err = errors.Join(stdoutScanErr, stderrScanErr)
-	}
-
-	endTime := time.Now()
-
-	a.adMu.Lock()
-	fileSize := a.lastFileSize[downloadID]
-	avgSpeed := a.lastSpeed[downloadID]
-	delete(a.lastFileSize, downloadID)
-	delete(a.lastSpeed, downloadID)
-	a.adMu.Unlock()
-
-	if err != nil {
-		if ctx.Err() == context.Canceled {
-			a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "cancelled", StartTime: startTime, EndTime: endTime})
-			a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
-			return
-		}
-		errMsg := strings.Join(errLines, "\n")
-		if errMsg == "" {
-			errMsg = err.Error()
-		}
-		a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: errMsg, StartTime: startTime, EndTime: endTime})
-		a.emitDownloadProgress(downloadID, 0, "", "", "", "error", errMsg, "")
 		return
 	}
-
-	a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, FileSize: fileSize, AvgSpeed: avgSpeed, Status: "completed", StartTime: startTime, EndTime: endTime})
-	a.emitDownloadProgress(downloadID, 100, "", "", fileSize, "completed", "", "")
 }
 
 func parseProgressLine(line string) (percent float64, fileSize, speed, eta string, ok bool) {

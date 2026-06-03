@@ -311,12 +311,22 @@ function App() {
   const [appVersion, setAppVersion] = useState('')
   const [toolVersions, setToolVersions] = useState<VersionInfo | null>(null)
   const [toolVersionsLoading, setToolVersionsLoading] = useState(true)
+  const [addingToQueue, setAddingToQueue] = useState(false)
   const [updatingDeps, setUpdatingDeps] = useState(false)
   const [updatesError, setUpdatesError] = useState('')
   const [updateInfo, setUpdateInfo] = useState<main.UpdateInfo | null>(null)
   const [updateLoading, setUpdateLoading] = useState(true)
   const t = useMemo(() => createTranslator(language), [language])
   const tt = (key: string, params?: Record<string, string | number>) => t(`tooltips.${key}`, params)
+
+  const settingsRef = useRef<AppSettings>({
+    defaultOutputDir: '', theme: 'dark', maxConcurrency: 3, autoPasteURL: false,
+    language: 'en', downloadPreset: defaultDownloadPreset,
+    customFormatId: defaultCustomFormatId, customContainer: defaultCustomContainer, customSubtitle: defaultCustomSubtitle,
+  })
+  useEffect(() => {
+    settingsRef.current = { defaultOutputDir, theme, maxConcurrency, autoPasteURL: autoPasteEnabled, language, downloadPreset: selectedPreset, customFormatId: selectedFormat, customContainer: selectedContainer, customSubtitle: selectedSubs }
+  })
 
   const activeCount = queue.filter((i) => ['queued', 'starting', 'downloading'].includes(i.status)).length
 
@@ -333,12 +343,12 @@ function App() {
 
   const reversedQueue = useMemo(() => queue.slice().reverse(), [queue])
 
-  const tabs: { id: Tab; label: string; icon: string }[] = [
+  const tabs = useMemo<{ id: Tab; label: string; icon: string }[]>(() => [
     { id: 'downloads', label: t('tabs.downloads'), icon: '⬇' },
     { id: 'history', label: t('tabs.history'), icon: '⏱' },
     { id: 'settings', label: t('tabs.settings'), icon: '⚙' },
     { id: 'help', label: t('tabs.help'), icon: '?' },
-  ]
+  ], [t])
 
   useEffect(() => {
     document.documentElement.setAttribute('data-theme', theme)
@@ -346,6 +356,7 @@ function App() {
 
   useEffect(() => {
     document.documentElement.lang = getLanguageLocale(language)
+    fmtTimeRef.current.clear()
   }, [language])
 
   useEffect(() => {
@@ -365,19 +376,7 @@ function App() {
   }, [])
 
   const saveSettings = async (next: Partial<AppSettings>) => {
-    const settings: AppSettings = {
-      defaultOutputDir,
-      theme,
-      maxConcurrency,
-      autoPasteURL: autoPasteEnabled,
-      language,
-      downloadPreset: selectedPreset,
-      customFormatId: selectedFormat,
-      customContainer: selectedContainer,
-      customSubtitle: selectedSubs,
-      ...next,
-    }
-    await UpdateSettings(settings)
+    await UpdateSettings({ ...settingsRef.current, ...next })
   }
 
   const loadAppVersion = async () => {
@@ -439,14 +438,16 @@ function App() {
     return () => { cancelled = true; offDepProgress() }
   }, [])
 
+  const tRef = useRef(t)
+  tRef.current = t
   useEffect(() => {
     if (!installingDeps || depsReady) return
     let cancelled = false
     DownloadDependencies()
       .then(() => { if (!cancelled) { setDepsReady(true); setInstallingDeps(false) } })
-      .catch((err: any) => { if (!cancelled) { setDepError(err?.message || t('errors.dependencyInstallFailed')); setInstallingDeps(false) } })
+      .catch((err: any) => { if (!cancelled) { setDepError(err?.message || tRef.current('errors.dependencyInstallFailed')); setInstallingDeps(false) } })
     return () => { cancelled = true }
-  }, [installingDeps, depsReady, t])
+  }, [installingDeps, depsReady])
 
   useEffect(() => {
     void loadAppVersion()
@@ -478,11 +479,13 @@ function App() {
         const trimmed = text.trim()
         const ytRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/
         if (ytRegex.test(trimmed)) {
-          setUrl(trimmed)
+          setUrl((prev) => prev || trimmed)
         }
       } catch { /* clipboard errors are benign */ }
     }
     checkClipboard()
+    const interval = setInterval(checkClipboard, 2000)
+    return () => clearInterval(interval)
   }, [depsReady, autoPasteEnabled, activeTab])
 
   useEffect(() => {
@@ -552,7 +555,8 @@ function App() {
   }
 
   const handleAddToQueue = async () => {
-    if (!metadata) return
+    if (!metadata || addingToQueue) return
+    setAddingToQueue(true)
     try {
       const choice = resolveDownloadChoice(selectedPreset, selectedFormat, selectedContainer, selectedSubs)
       const downloadId = await StartDownloadWithPreset(url, choice.formatId, defaultOutputDir, choice.container, choice.subtitle, metadata.title, selectedPreset)
@@ -562,6 +566,8 @@ function App() {
       ])
     } catch (err: any) {
       console.error('Failed to start download:', err)
+    } finally {
+      setAddingToQueue(false)
     }
   }
 
@@ -624,11 +630,17 @@ function App() {
     error: 'text-red-400', cancelled: 'text-yellow-400',
   }
 
+const fmtTimeRef = useRef<Map<string, string>>(new Map())
 function fmtTime(t: string): string {
+  const cached = fmtTimeRef.current.get(t)
+  if (cached) return cached
   const d = new Date(t)
   if (Number.isNaN(d.getTime())) return '-'
   const locale = getLanguageLocale(language)
-  return d.toLocaleDateString(locale) + ' ' + d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+  const formatted = d.toLocaleDateString(locale) + ' ' + d.toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' })
+  if (fmtTimeRef.current.size > 500) fmtTimeRef.current.clear()
+  fmtTimeRef.current.set(t, formatted)
+  return formatted
 }
 
   // --- Loading Screen ---
@@ -874,11 +886,18 @@ function fmtTime(t: string): string {
                           </div>
                         )}
                       </div>
-                      <button onClick={handleAddToQueue} className="btn-primary mt-3 text-sm flex items-center gap-1.5" title={tt('addToQueue')} aria-label={tt('addToQueue')}>
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                        </svg>
-                        {t('actions.addToQueue')}
+                      <button onClick={handleAddToQueue} disabled={addingToQueue} className="btn-primary mt-3 text-sm flex items-center gap-1.5" title={tt('addToQueue')} aria-label={tt('addToQueue')}>
+                        {addingToQueue ? (
+                          <svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                        ) : (
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                          </svg>
+                        )}
+                        {addingToQueue ? '...' : t('actions.addToQueue')}
                       </button>
                     </div>
                   </div>

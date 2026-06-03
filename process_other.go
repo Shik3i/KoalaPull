@@ -6,7 +6,6 @@ import (
 	"context"
 	"os/exec"
 	"syscall"
-	"time"
 )
 
 func commandContext(ctx context.Context, name string, arg ...string) *exec.Cmd {
@@ -33,12 +32,8 @@ func commandOutput(ctx context.Context, name string, arg ...string) ([]byte, err
 	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
 	go func() {
 		<-ctx.Done()
-		for i := 0; i < 100; i++ {
-			if cmd.Process != nil {
-				syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
-				return
-			}
-			time.Sleep(10 * time.Millisecond)
+		if cmd.Process != nil {
+			syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 		}
 	}()
 	return cmd.Output()
