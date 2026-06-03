@@ -28,9 +28,15 @@ export function GetVersionInfo():Promise<main.VersionInfo>;
 
 export function GetYtdlpVersion():Promise<string>;
 
+export function IsBrowserRunning(arg1:string):Promise<boolean>;
+
+export function KillBrowser(arg1:string):Promise<void>;
+
 export function OpenExternalLink(arg1:string):Promise<void>;
 
 export function OpenOutputDir():Promise<void>;
+
+export function SelectCookieFile():Promise<string>;
 
 export function SelectDirectory():Promise<string>;
 

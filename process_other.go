@@ -5,8 +5,11 @@ package main
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os/exec"
+	"strings"
 	"syscall"
+	"time"
 )
 
 func commandContext(ctx context.Context, name string, arg ...string) *exec.Cmd {
@@ -65,4 +68,39 @@ func commandOutput(ctx context.Context, name string, arg ...string) ([]byte, err
 
 func command(name string, arg ...string) *exec.Cmd {
 	return exec.Command(name, arg...)
+}
+
+func (a *App) IsBrowserRunning(browser string) (bool, error) {
+	processes, ok := browserProcessNames[strings.ToLower(browser)]
+	if !ok {
+		return false, nil
+	}
+	for _, proc := range processes.unix {
+		ctx, cancel := context.WithTimeout(a.appContext(), 3*time.Second)
+		out, err := commandOutput(ctx, "pgrep", "-x", proc)
+		cancel()
+		if err == nil && len(strings.TrimSpace(string(out))) > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (a *App) KillBrowser(browser string) error {
+	processes, ok := browserProcessNames[strings.ToLower(browser)]
+	if !ok {
+		return fmt.Errorf("unknown browser: %s", browser)
+	}
+	var lastErr error
+	for _, proc := range processes.unix {
+		ctx, cancel := context.WithTimeout(a.appContext(), 5*time.Second)
+		_, err := commandOutput(ctx, "pkill", "-x", proc)
+		cancel()
+		if err != nil {
+			if _, ok := err.(*exec.ExitError); !ok {
+				lastErr = err
+			}
+		}
+	}
+	return lastErr
 }

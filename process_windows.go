@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"os/exec"
+	"strings"
 	"syscall"
+	"time"
 )
 
 func hiddenProcAttr() *syscall.SysProcAttr {
@@ -46,4 +49,39 @@ func command(name string, arg ...string) *exec.Cmd {
 	cmd := exec.Command(name, arg...)
 	cmd.SysProcAttr = hiddenProcAttr()
 	return cmd
+}
+
+func (a *App) IsBrowserRunning(browser string) (bool, error) {
+	processes, ok := browserProcessNames[strings.ToLower(browser)]
+	if !ok {
+		return false, nil
+	}
+	for _, proc := range processes.windows {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		out, err := commandOutput(ctx, "tasklist", "/FI", fmt.Sprintf("IMAGENAME eq %s", proc), "/FO", "CSV", "/NH")
+		cancel()
+		if err == nil && strings.Contains(strings.ToLower(string(out)), strings.ToLower(proc)) {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func (a *App) KillBrowser(browser string) error {
+	processes, ok := browserProcessNames[strings.ToLower(browser)]
+	if !ok {
+		return fmt.Errorf("unknown browser: %s", browser)
+	}
+	var lastErr error
+	for _, proc := range processes.windows {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		_, err := commandOutput(ctx, "taskkill", "/F", "/IM", proc)
+		cancel()
+		if err != nil {
+			if _, ok := err.(*exec.ExitError); !ok {
+				lastErr = err
+			}
+		}
+	}
+	return lastErr
 }

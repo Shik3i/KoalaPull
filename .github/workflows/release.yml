@@ -119,7 +119,25 @@ jobs:
           echo "asset_name=$asset_name" >> "$GITHUB_OUTPUT"
           echo "artifact_path=$artifact_path" >> "$GITHUB_OUTPUT"
 
-      - name: Upload binaries
+      - name: Upload action artifact
+        uses: actions/upload-artifact@5d5d22a31266fc26b2d1190deae512368b2299ff # v4
+        with:
+          name: koalapull-${{ matrix.goos }}-${{ matrix.goarch }}
+          path: ${{ steps.package.outputs.artifact_path }}
+          retention-days: 1
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@65a9edc5881444af0b9093a5e628f2fc476b8a49 # v4
+        with:
+          path: release-assets
+          pattern: koalapull-*
+          merge-multiple: true
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
         with:
-          files: ${{ steps.package.outputs.artifact_path }}
+          files: release-assets/*

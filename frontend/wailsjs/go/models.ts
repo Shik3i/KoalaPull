@@ -100,6 +100,9 @@ export namespace main {
 	    customFormatId: string;
 	    customContainer: string;
 	    customSubtitle: string;
+	    cookieSource: string;
+	    cookieBrowser: string;
+	    cookieFilePath: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -116,6 +119,9 @@ export namespace main {
 	        this.customFormatId = source["customFormatId"];
 	        this.customContainer = source["customContainer"];
 	        this.customSubtitle = source["customSubtitle"];
+	        this.cookieSource = source["cookieSource"];
+	        this.cookieBrowser = source["cookieBrowser"];
+	        this.cookieFilePath = source["cookieFilePath"];
 	    }
 	}
 	export class UpdateInfo {

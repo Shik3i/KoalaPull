@@ -54,12 +54,24 @@ export function GetYtdlpVersion() {
   return window['go']['main']['App']['GetYtdlpVersion']();
 }
 
+export function IsBrowserRunning(arg1) {
+  return window['go']['main']['App']['IsBrowserRunning'](arg1);
+}
+
+export function KillBrowser(arg1) {
+  return window['go']['main']['App']['KillBrowser'](arg1);
+}
+
 export function OpenExternalLink(arg1) {
   return window['go']['main']['App']['OpenExternalLink'](arg1);
 }
 
 export function OpenOutputDir() {
   return window['go']['main']['App']['OpenOutputDir']();
+}
+
+export function SelectCookieFile() {
+  return window['go']['main']['App']['SelectCookieFile']();
 }
 
 export function SelectDirectory() {

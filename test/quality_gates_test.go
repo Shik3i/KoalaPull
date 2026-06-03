@@ -113,7 +113,7 @@ func TestReleaseWorkflowPackagesArtifactsBeforeUpload(t *testing.T) {
 		"name: Package artifact",
 		"asset_name=",
 		"artifact_path=",
-		"files: ${{ steps.package.outputs.artifact_path }}",
+		"files: release-assets/*",
 	} {
 		if !strings.Contains(data, want) {
 			t.Fatalf("release workflow missing %q", want)

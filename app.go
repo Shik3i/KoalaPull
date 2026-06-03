@@ -115,6 +115,9 @@ type Settings struct {
 	CustomFormatID   string `json:"customFormatId"`
 	CustomContainer  string `json:"customContainer"`
 	CustomSubtitle   string `json:"customSubtitle"`
+	CookieSource     string `json:"cookieSource"`
+	CookieBrowser    string `json:"cookieBrowser"`
+	CookieFilePath   string `json:"cookieFilePath"`
 }
 
 type HistoryEntry struct {
@@ -370,6 +373,9 @@ func (a *App) loadSettings() {
 		CustomFormatID:   defaultCustomFormatID,
 		CustomContainer:  defaultCustomContainer,
 		CustomSubtitle:   defaultCustomSubtitle,
+		CookieSource:     "none",
+		CookieBrowser:    "chrome",
+		CookieFilePath:   "",
 	})
 	a.cachedSettings = s
 	if err := a.writeSettingsLocked(s); err != nil {
@@ -463,6 +469,17 @@ func validateSettings(s Settings) Settings {
 	if s.CustomSubtitle != "none" && s.CustomSubtitle != "auto" && s.CustomSubtitle != "embed" {
 		s.CustomSubtitle = defaultCustomSubtitle
 	}
+	if s.CookieSource != "none" && s.CookieSource != "browser" && s.CookieSource != "file" {
+		s.CookieSource = "none"
+	}
+	switch s.CookieBrowser {
+	case "brave", "chrome", "chromium", "edge", "firefox", "opera", "safari", "vivaldi", "whale":
+	default:
+		s.CookieBrowser = "chrome"
+	}
+	if len(s.CookieFilePath) > maxPathLength {
+		s.CookieFilePath = truncateToValidUTF8Prefix(s.CookieFilePath, maxPathLength)
+	}
 	return s
 }
 
@@ -495,6 +512,58 @@ func (a *App) SelectDirectory() (string, error) {
 		return "", err
 	}
 	return dir, nil
+}
+
+func (a *App) SelectCookieFile() (string, error) {
+	title := "Select Cookies File"
+	switch a.GetSettings().Language {
+	case "de":
+		title = "Cookie-Datei auswählen"
+	case "fr":
+		title = "Choisir le fichier de cookies"
+	}
+	file, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: title,
+		Filters: []wailsRuntime.FileFilter{
+			{
+				DisplayName: "Text Files (*.txt)",
+				Pattern:     "*.txt",
+			},
+			{
+				DisplayName: "All Files (*.*)",
+				Pattern:     "*.*",
+			},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	return file, nil
+}
+
+func (a *App) getCookieArgs(s Settings) []string {
+	var args []string
+	if s.CookieSource == "browser" && s.CookieBrowser != "" {
+		args = append(args, "--cookies-from-browser", s.CookieBrowser)
+	} else if s.CookieSource == "file" && s.CookieFilePath != "" {
+		args = append(args, "--cookies", s.CookieFilePath)
+	}
+	return args
+}
+
+var browserProcessNames = map[string]struct {
+	windows []string
+	unix    []string
+}{
+	"chrome":   {windows: []string{"chrome.exe"}, unix: []string{"Google Chrome", "chrome"}},
+	"edge":     {windows: []string{"msedge.exe"}, unix: []string{"Microsoft Edge", "msedge"}},
+	"brave":    {windows: []string{"brave.exe"}, unix: []string{"Brave Browser", "brave"}},
+	"vivaldi":  {windows: []string{"vivaldi.exe"}, unix: []string{"Vivaldi", "vivaldi"}},
+	"opera":    {windows: []string{"opera.exe"}, unix: []string{"Opera", "opera"}},
+	"chromium": {windows: []string{"chrome.exe", "chromium.exe"}, unix: []string{"Chromium", "chromium"}},
+	"whale":    {windows: []string{"whale.exe"}, unix: []string{"Whale", "whale"}},
+	"firefox":  {windows: []string{"firefox.exe"}, unix: []string{"firefox", "Firefox"}},
+	"safari":   {windows: []string{}, unix: []string{"Safari"}},
 }
 
 // ---------- History ----------
@@ -1294,7 +1363,10 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	if !isAllowedDownloadURL(url) {
 		return nil, fmt.Errorf("url must use http or https")
 	}
-	args := []string{"--no-check-formats", "--no-warnings", "--dump-json", "--skip-download", "--flat-playlist", "--", url}
+	args := []string{"--no-check-formats", "--no-warnings", "--dump-json", "--skip-download", "--flat-playlist"}
+	settings := a.GetSettings()
+	args = append(args, a.getCookieArgs(settings)...)
+	args = append(args, "--", url)
 	ctx, cancel, seq := a.newMetadataContext()
 	defer a.clearMetadataContext(cancel, seq)
 	stdout, err := commandOutput(ctx, a.ytdlpPath(), args...)
@@ -1408,6 +1480,8 @@ func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subti
 		"--newline",
 		"-o", template,
 	}
+	settings := a.GetSettings()
+	args = append(args, a.getCookieArgs(settings)...)
 	args = append(args, downloadPostProcessingArgs(preset, container, subtitle)...)
 	args = append(args, "--", url)
 

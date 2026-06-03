@@ -6,6 +6,7 @@ import {
   GetAppVersion, GetVersionInfo, GetHistory,
   ClearHistory, DeleteHistoryEntry,
   UpdateDependencies, OpenOutputDir, CheckForUpdates, OpenExternalLink,
+  SelectCookieFile, IsBrowserRunning, KillBrowser,
 } from "../wailsjs/go/main/App"
 import { EventsOn, ClipboardGetText } from "../wailsjs/runtime/runtime"
 import type { main } from "../wailsjs/go/models"
@@ -50,6 +51,9 @@ interface AppSettings {
   customFormatId: string
   customContainer: string
   customSubtitle: string
+  cookieSource: 'none' | 'browser' | 'file'
+  cookieBrowser: string
+  cookieFilePath: string
 }
 interface VersionInfo { ytdlp: string; ffmpeg: string; app: string }
 interface SupportedSite {
@@ -423,6 +427,11 @@ function App() {
   const [maxConcurrency, setMaxConcurrency] = useState(3)
   const [autoPasteEnabled, setAutoPasteEnabled] = useState(false)
   const [language, setLanguage] = useState<LanguageCode>('en')
+  const [cookieSource, setCookieSource] = useState<'none' | 'browser' | 'file'>('none')
+  const [cookieBrowser, setCookieBrowser] = useState<string>('chrome')
+  const [cookieFilePath, setCookieFilePath] = useState<string>('')
+  const [browserRunning, setBrowserRunning] = useState<boolean>(false)
+  const [isCheckingBrowser, setIsCheckingBrowser] = useState<boolean>(false)
 
   const [history, setHistory] = useState<main.HistoryEntry[]>([])
   const [historySearch, setHistorySearch] = useState('')
@@ -445,9 +454,10 @@ function App() {
     defaultOutputDir: '', theme: 'dark', maxConcurrency: 3, autoPasteURL: false,
     language: 'en', downloadPreset: defaultDownloadPreset,
     customFormatId: defaultCustomFormatId, customContainer: defaultCustomContainer, customSubtitle: defaultCustomSubtitle,
+    cookieSource: 'none', cookieBrowser: 'chrome', cookieFilePath: '',
   })
   useEffect(() => {
-    settingsRef.current = { defaultOutputDir, theme, maxConcurrency, autoPasteURL: autoPasteEnabled, language, downloadPreset: selectedPreset, customFormatId: selectedFormat, customContainer: selectedContainer, customSubtitle: selectedSubs }
+    settingsRef.current = { defaultOutputDir, theme, maxConcurrency, autoPasteURL: autoPasteEnabled, language, downloadPreset: selectedPreset, customFormatId: selectedFormat, customContainer: selectedContainer, customSubtitle: selectedSubs, cookieSource, cookieBrowser, cookieFilePath }
   })
 
   const activeCount = queue.filter((i) => ['queued', 'starting', 'downloading'].includes(i.status)).length
@@ -493,6 +503,9 @@ function App() {
         setSelectedFormat(s.customFormatId || defaultCustomFormatId)
         setSelectedContainer(s.customContainer || defaultCustomContainer)
         setSelectedSubs(s.customSubtitle || defaultCustomSubtitle)
+        setCookieSource(s.cookieSource as 'none' | 'browser' | 'file' || 'none')
+        setCookieBrowser(s.cookieBrowser || 'chrome')
+        setCookieFilePath(s.cookieFilePath || '')
       })
       .catch((err) => { console.warn('GetSettings failed:', err) })
   }, [])
@@ -656,8 +669,86 @@ function App() {
     return () => { offDownloadProgress() }
   }, [t])
 
+  const isChromiumBrowser = useCallback((b: string) => {
+    const low = b.toLowerCase()
+    return ['chrome', 'edge', 'brave', 'vivaldi', 'opera', 'chromium', 'whale'].includes(low)
+  }, [])
+
+  const checkBrowserClosedForCookies = async (): Promise<boolean> => {
+    if (cookieSource !== 'browser') return true
+    if (!isChromiumBrowser(cookieBrowser)) return true
+    try {
+      const isRunning = await IsBrowserRunning(cookieBrowser)
+      if (!isRunning) return true
+      
+      let confirmMsg = ""
+      if (language === 'de') {
+        confirmMsg = t('settings.cookiesBrowserRunningWarning') + "\n\n" +
+          "Möchtest du, dass KoalaPull " + cookieBrowser + " jetzt automatisch schließt? Klicke auf OK, um den Browser zu schließen, oder auf Abbrechen, um es trotzdem zu versuchen (kann fehlschlagen)."
+      } else if (language === 'fr') {
+        confirmMsg = t('settings.cookiesBrowserRunningWarning') + "\n\n" +
+          "Voulez-vous que KoalaPull ferme " + cookieBrowser + " automatiquement maintenant ? Cliquez sur OK pour le fermer, ou sur Annuler pour continuer quand même (ce qui peut échouer)."
+      } else {
+        confirmMsg = t('settings.cookiesBrowserRunningWarning') + "\n\n" +
+          "Do you want KoalaPull to close " + cookieBrowser + " automatically now? Click OK to close it, or Cancel to continue anyway (which may fail)."
+      }
+
+      if (window.confirm(confirmMsg)) {
+        await KillBrowser(cookieBrowser)
+        await new Promise((resolve) => setTimeout(resolve, 1000))
+        const stillRunning = await IsBrowserRunning(cookieBrowser)
+        if (stillRunning) {
+          alert(language === 'de' ? "Der Browser konnte nicht geschlossen werden. Bitte schließe ihn manuell." :
+                language === 'fr' ? "Impossible de fermer le navigateur. Veuillez le fermer manuellement." :
+                "Could not close the browser automatically. Please close it manually.")
+          return false
+        }
+      }
+    } catch (err) {
+      console.warn("checkBrowserClosedForCookies error:", err)
+    }
+    return true
+  }
+
+  const handleKillBrowser = async () => {
+    setIsCheckingBrowser(true)
+    try {
+      await KillBrowser(cookieBrowser)
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const isRunning = await IsBrowserRunning(cookieBrowser)
+      setBrowserRunning(isRunning)
+    } catch (err) {
+      console.warn("KillBrowser failed:", err)
+    } finally {
+      setIsCheckingBrowser(false)
+    }
+  }
+
+  useEffect(() => {
+    let timer: any
+    if (activeTab === 'settings' && cookieSource === 'browser' && isChromiumBrowser(cookieBrowser)) {
+      const check = async () => {
+        try {
+          const isRunning = await IsBrowserRunning(cookieBrowser)
+          setBrowserRunning(isRunning)
+        } catch (err) {
+          console.warn("IsBrowserRunning check error:", err)
+        }
+      }
+      void check()
+      timer = setInterval(() => { void check() }, 3000)
+    } else {
+      setBrowserRunning(false)
+    }
+    return () => {
+      if (timer) clearInterval(timer)
+    }
+  }, [activeTab, cookieSource, cookieBrowser, isChromiumBrowser])
+
   const handleFetch = async () => {
     if (!url.trim()) return
+    const proceed = await checkBrowserClosedForCookies()
+    if (!proceed) return
     const requestId = ++fetchRequestIdRef.current
     setFetching(true)
     setFetchError('')
@@ -679,6 +770,8 @@ function App() {
 
   const handleAddToQueue = async () => {
     if (!metadata || addingToQueue) return
+    const proceed = await checkBrowserClosedForCookies()
+    if (!proceed) return
     setAddingToQueue(true)
     setAddQueueError('')
     try {
@@ -1261,6 +1354,126 @@ const fmtTime = useCallback((t: string): string => {
                     />
                   </button>
                 </div>
+              </section>
+
+              {/* YouTube Cookies & Private Videos */}
+              <section className="rounded-xl p-4 border md:col-span-2 xl:col-span-3" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+                <h3 className="text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }} title={tt('cookiesTitle')}>{t('settings.cookiesTitle')}</h3>
+                <p className="text-xs mb-4" style={{ color: 'var(--text-muted)' }}>{t('settings.cookiesDescription')}</p>
+                
+                <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
+                  <div>
+                    <label htmlFor="cookieSourceSelect" className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }} title={tt('cookiesSource')}>{t('settings.cookiesSource')}</label>
+                    <select
+                      id="cookieSourceSelect"
+                      value={cookieSource}
+                      onChange={async (e) => {
+                        const val = e.target.value as 'none' | 'browser' | 'file'
+                        setCookieSource(val)
+                        try { await saveSettings({ cookieSource: val }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                      }}
+                      className="select-dark text-xs w-full"
+                      title={tt('cookiesSource')}
+                      aria-label={tt('cookiesSource')}
+                    >
+                      <option value="none">{t('settings.cookiesSourceNone')}</option>
+                      <option value="browser">{t('settings.cookiesSourceBrowser')}</option>
+                      <option value="file">{t('settings.cookiesSourceFile')}</option>
+                    </select>
+                  </div>
+
+                  {cookieSource === 'browser' && (
+                    <div>
+                      <label htmlFor="cookieBrowserSelect" className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }} title={tt('cookiesBrowserLabel')}>{t('settings.cookiesBrowserLabel')}</label>
+                      <select
+                        id="cookieBrowserSelect"
+                        value={cookieBrowser}
+                        onChange={async (e) => {
+                          const val = e.target.value
+                          setCookieBrowser(val)
+                          try { await saveSettings({ cookieBrowser: val }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                        }}
+                        className="select-dark text-xs w-full"
+                        title={tt('cookiesBrowserLabel')}
+                        aria-label={tt('cookiesBrowserLabel')}
+                      >
+                        <option value="chrome">Chrome</option>
+                        <option value="firefox">Firefox</option>
+                        <option value="safari">Safari</option>
+                        <option value="edge">Edge</option>
+                        <option value="brave">Brave</option>
+                        <option value="vivaldi">Vivaldi</option>
+                        <option value="opera">Opera</option>
+                        <option value="chromium">Chromium</option>
+                        <option value="whale">Whale</option>
+                      </select>
+                    </div>
+                  )}
+
+                  {cookieSource === 'file' && (
+                    <div>
+                      <label htmlFor="cookieFilePathInput" className="block text-xs font-medium mb-1.5" style={{ color: 'var(--text-secondary)' }} title={tt('cookiesFileLabel')}>{t('settings.cookiesFileLabel')}</label>
+                      <div className="flex gap-2">
+                        <input
+                          id="cookieFilePathInput"
+                          type="text"
+                          readOnly
+                          value={cookieFilePath}
+                          placeholder={t('settings.cookiesFilePlaceholder')}
+                          className="input-dark text-xs flex-1 truncate"
+                          title={tt('cookiesFileLabel')}
+                          aria-label={tt('cookiesFileLabel')}
+                        />
+                        <button
+                          onClick={async () => {
+                            try {
+                              const file = await SelectCookieFile()
+                              if (file) {
+                                setCookieFilePath(file)
+                                await saveSettings({ cookieFilePath: file })
+                              }
+                            } catch (err) {
+                              console.warn('SelectCookieFile failed:', err)
+                            }
+                          }}
+                          className="btn-primary text-xs px-3 py-1.5 shrink-0"
+                          title={tt('cookiesFileLabel')}
+                          aria-label={tt('cookiesFileLabel')}
+                        >
+                          {t('actions.change')}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {cookieSource === 'browser' && isChromiumBrowser(cookieBrowser) && (
+                  <div className="mt-4 p-3 rounded-lg border text-xs" style={{ background: 'color-mix(in srgb, var(--color-accent) 5%, transparent)', borderColor: 'var(--color-surface-border)' }}>
+                    <div className="flex items-start gap-2.5">
+                      <span className="text-base leading-none shrink-0" style={{ color: '#fbbf24' }}>⚠️</span>
+                      <div className="flex-1 space-y-2">
+                        <p style={{ color: 'var(--text-secondary)' }}>{t('settings.cookiesBrowserRunningWarning')}</p>
+                        {browserRunning ? (
+                          <div className="flex items-center gap-2">
+                            <span className="font-semibold text-red-500">{cookieBrowser} is running</span>
+                            <button
+                              onClick={handleKillBrowser}
+                              disabled={isCheckingBrowser}
+                              className="btn-primary text-xs px-2.5 py-1"
+                              title={tt('cookiesCloseBrowser')}
+                              aria-label={tt('cookiesCloseBrowser')}
+                              style={{ background: '#ef4444', borderColor: '#ef4444' }}
+                            >
+                              {isCheckingBrowser ? t('common.loading') : t('settings.cookiesCloseBrowser')}
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="text-green-500 font-semibold">{cookieBrowser} is closed</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
               </section>
 
               {/* Version Info */}

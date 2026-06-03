@@ -12,3 +12,11 @@ popd >/dev/null
 
 go test -count=1 ./...
 go vet ./...
+
+if command -v ruby >/dev/null 2>&1; then
+    ruby -ryaml -e "YAML.load_file('.github/workflows/release.yml')" >/dev/null
+    echo "Workflow YAML syntax verified."
+else
+    echo "Warning: ruby not found, skipping workflow YAML verification."
+fi
+
