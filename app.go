@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"runtime"
+	"runtime/debug"
 	"strconv"
 	"strings"
 	"sync"
@@ -954,19 +955,20 @@ func extractFFmpegFromZip(archivePath, destDir string) error {
 			return err
 		}
 		binName := ffmpegZipDestName(base, runtime.GOOS)
-		dst, err := os.Create(filepath.Join(destDir, binName))
+		dstPath := filepath.Join(destDir, binName)
+		dst, err := os.Create(dstPath)
 		if err != nil {
 			rc.Close()
 			return err
 		}
-		_, err = io.Copy(dst, rc)
-		cerr := dst.Close()
-		rcerr := rc.Close()
-		if cerr != nil || rcerr != nil {
-			return errors.Join(err, cerr, rcerr)
-		}
-		if err != nil {
-			return err
+		_, copyErr := io.Copy(dst, rc)
+		closeErr := dst.Close()
+		rcErr := rc.Close()
+		if copyErr != nil || closeErr != nil || rcErr != nil {
+			if copyErr != nil {
+				os.Remove(dstPath)
+			}
+			return errors.Join(copyErr, closeErr, rcErr)
 		}
 	}
 	return nil
@@ -1297,6 +1299,7 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 		cancel()
 		if r := recover(); r != nil {
 			println("runDownload panic:", fmt.Sprint(r))
+			debug.PrintStack()
 		}
 		a.adMu.Lock()
 		delete(a.activeDownloads, downloadID)
@@ -1349,6 +1352,11 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 	var readWG sync.WaitGroup
 	scanPipe := func(source string, r io.Reader) {
 		defer readWG.Done()
+		defer func() {
+			if r := recover(); r != nil {
+				println("scanPipe panic:", fmt.Sprint(r))
+			}
+		}()
 		scanner := bufio.NewScanner(r)
 		scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
 		for scanner.Scan() {
