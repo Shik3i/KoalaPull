@@ -10,7 +10,7 @@ import {
 } from "../wailsjs/go/main/App"
 import { EventsOn, ClipboardGetText } from "../wailsjs/runtime/runtime"
 import type { main } from "../wailsjs/go/models"
-import { formatTotalEta, parseBytes, parseSpeed } from "./lib/downloadMetrics"
+import { formatTotalEta, parseBytes, parseSpeed, parseEta, formatSpeed, formatEta } from "./lib/downloadMetrics"
 import { createTranslator, getLanguageLocale, isSupportedLanguage, type LanguageCode } from "./lib/i18n"
 import appIcon from './assets/images/app-icon.png'
 import './style.css'
@@ -427,6 +427,7 @@ function App() {
 
   const [queue, setQueue] = useState<QueueItem[]>([])
   const pendingProgressRef = useRef<Record<string, DownloadProgress>>({})
+  const progressHistoryRef = useRef<Record<string, Array<{ timestamp: number; speed: number; eta: number }>>>({})
 
   const [defaultOutputDir, setDefaultOutputDir] = useState('')
   const [theme, setTheme] = useState('dark')
@@ -651,18 +652,61 @@ function App() {
         const item = prev[idx]
         let nextItem: QueueItem
         if (data.status === 'completed') {
+          delete progressHistoryRef.current[data.downloadId]
           nextItem = { ...item, status: 'completed', progress: 100, playlistStatus: '' }
         } else if (data.status === 'error') {
+          delete progressHistoryRef.current[data.downloadId]
           const msg = data.error || t('errors.downloadFailed')
           nextItem = { ...item, status: 'error', progress: 0, speed: '', eta: '', fileSize: '', errorMsg: msg, playlistStatus: '' }
         } else if (data.status === 'cancelled') {
+          delete progressHistoryRef.current[data.downloadId]
           nextItem = { ...item, status: 'cancelled', progress: 0, speed: '', eta: '', fileSize: '', playlistStatus: '' }
         } else if (data.status === 'starting') {
           nextItem = { ...item, status: 'starting', progress: 0, playlistStatus: data.playlistStatus || '' }
         } else {
+          let speedStr = data.speed
+          let etaStr = data.eta
+          const now = Date.now()
+          const currentSpeed = parseSpeed(data.speed)
+          const currentEta = parseEta(data.eta)
+
+          if (!progressHistoryRef.current[data.downloadId]) {
+            progressHistoryRef.current[data.downloadId] = []
+          }
+          const history = progressHistoryRef.current[data.downloadId]
+          history.push({ timestamp: now, speed: currentSpeed, eta: currentEta })
+
+          const cutoff = now - 10000
+          while (history.length > 0 && history[0].timestamp < cutoff) {
+            history.shift()
+          }
+
+          if (history.length > 0) {
+            let speedSum = 0
+            let speedCount = 0
+            let etaSum = 0
+            let etaCount = 0
+            for (const entry of history) {
+              if (entry.speed > 0) {
+                speedSum += entry.speed
+                speedCount++
+              }
+              if (entry.eta > 0) {
+                etaSum += entry.eta
+                etaCount++
+              }
+            }
+            if (speedCount > 0) {
+              speedStr = formatSpeed(speedSum / speedCount)
+            }
+            if (etaCount > 0) {
+              etaStr = formatEta(etaSum / etaCount)
+            }
+          }
+
           nextItem = {
             ...item, status: data.status,
-            progress: Math.round(data.percent), speed: data.speed, eta: data.eta, fileSize: data.fileSize || item.fileSize,
+            progress: Math.round(data.percent), speed: speedStr, eta: etaStr, fileSize: data.fileSize || item.fileSize,
             playlistStatus: data.playlistStatus || '',
           }
         }
@@ -1088,8 +1132,15 @@ const fmtTime = useCallback((t: string): string => {
                               ))}
                             </select>
                           </div>
-                          <div className="flex-1 min-w-[220px] rounded-md px-3 py-2 text-xs leading-5" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)', color: 'var(--text-secondary)' }}>
-                            {getPresetDescription(selectedPreset)}
+                          <div className="flex-1 min-w-[220px]">
+                            {selectedPreset !== 'custom' && (
+                              <>
+                                <div className="text-xs mb-1 select-none opacity-0" aria-hidden="true">&nbsp;</div>
+                                <div className="rounded-md px-3 py-2 text-xs leading-5" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)', color: 'var(--text-secondary)' }}>
+                                  {getPresetDescription(selectedPreset)}
+                                </div>
+                              </>
+                            )}
                           </div>
                         </div>
 

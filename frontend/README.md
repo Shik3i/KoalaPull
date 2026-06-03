@@ -1,61 +1,78 @@
-# Frontend
+# KoalaPull Frontend App
 
-This folder holds the KoalaPull UI.
+This folder holds the UI codebase for KoalaPull, implemented as a Single Page Application (SPA) using React, TypeScript, and Tailwind CSS.
 
-## Shape
+---
 
-The frontend is a single-page React app built with Vite.
-It talks to the Go backend through Wails bindings and Wails events.
+## 🔗 Desktop Integration Architecture
 
-### Wails bindings
+The frontend interfaces with the Go application through the Wails framework.
 
-Generated files live in `wailsjs/go/main/`.
-They expose the Go app methods used by the UI for metadata, downloads, settings, and version data.
+### 1. Wails Bindings
+Wails automatically translates Go methods on the App struct into client-side JavaScript promises. During builds or development runs, these bindings are written to `wailsjs/go/main/App.js` and can be imported directly into React:
+```typescript
+import { FetchMetadata, AddDownload } from '../wailsjs/go/main/App';
+```
 
-### Wails events
+### 2. Wails Events
+Real-time progress updates are pushed asynchronously from Go. The frontend subscribes to these event channels:
+-   `download-progress`: Emits active download status, current transfer speed, and completed percentages.
+-   `dependency-progress`: Emits updates during setup/installation of the `yt-dlp` or `ffmpeg` binaries.
 
-Live backend updates stream into React through named events such as:
+---
 
-- `download-progress`
-- `dependency-progress`
+## 🎨 Theme & Visual Layout
 
-## Theme
+Theme styles are declared in `src/style.css` and referenced in `tailwind.config.js`.
 
-Theme tokens live in `src/style.css` and `tailwind.config.js`.
+-   **Color Palette:** The dominant theme uses a custom dark slate appearance accented with a teal hue (not purple).
+-   **Typography:** System fonts are bundled locally (`public/fonts/`) to respect user privacy and avoid third-party resource loading:
+    -   `Inter`: Applied for user interface copy and tables.
+    -   `JetBrains Mono`: Applied for download metrics, command values, and technical stats.
+-   **Tailwind Utilities:** Reusable elements like forms and buttons are declared using `@apply` utility definitions inside `src/style.css` (e.g. `.btn-primary`, `.input-dark`).
 
-- Surfaces and text colors use CSS variables.
-- Accent color is teal, not purple.
-- Fonts are bundled locally: Inter and JetBrains Mono.
+---
 
-Shared classes such as `btn-primary`, `select-dark`, and `input-dark` are built with `@apply`.
+## 📁 Key File Structure
 
-## Key Files
+| Path | Purpose |
+|---|---|
+| `src/main.tsx` | React SPA mounting point. |
+| `src/App.tsx` | Main application component containing all tabs, sidebar navigation, download state, and layout wrappers. |
+| `src/style.css` | Application styles, theme variables, and custom Tailwind utility structures. |
+| `src/lib/` | Frontend utility library (including i18n detection and download metric calculations). |
+| `src/locales/` | Language files (`en.json`, `de.json`, `fr.json`). |
+| `index.html` | Entry point defining strict Content Security Policies (CSP). |
 
-| File | Purpose |
-|------|---------|
-| `src/App.tsx` | Main app UI, state, and view logic |
-| `src/style.css` | Global styles, theme vars, shared classes |
-| `src/main.tsx` | React mount point |
-| `tailwind.config.js` | Tailwind theme config |
-| `vite.config.ts` | Vite config |
-| `index.html` | App shell and CSP |
+---
 
-## Dev
+## ⚙️ Development Commands
 
+Before running commands, change directory to the frontend folder:
 ```bash
 cd frontend
+```
+
+### 1. Install Dependencies
+```bash
 npm install
+```
+
+### 2. Development Dev Server
+```bash
 npm run dev
 ```
+> [!NOTE]
+> Running `npm run dev` only starts the Vite frontend dev server in a web browser. Wails-specific backend bindings will not resolve. To run the full application with the desktop shell and the Go backend, run `wails dev` from the repository root instead.
 
-That starts Vite only.
-For the full app, run `wails dev` from repo root.
-
-## Test and Build
-
+### 3. Run Tests
 ```bash
 npm run test
+```
+Executes the Vitest suite validating formatting utilities, progress converters, and translation keys.
+
+### 4. Build Production Bundle
+```bash
 npm run build
 ```
-
-`npm run build` emits `frontend/dist/`, which Wails embeds in the desktop build.
+Compiles and bundles the application into `dist/`. Wails embeds this directory when packaging the final desktop binaries.

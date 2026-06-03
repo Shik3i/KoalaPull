@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { formatTotalEta, parseBytes, parseSpeed } from "../src/lib/downloadMetrics"
+import { formatTotalEta, parseBytes, parseSpeed, parseEta, formatSpeed, formatEta } from "../src/lib/downloadMetrics"
 
 describe("downloadMetrics", () => {
   it("parses binary and decimal byte strings", () => {
@@ -19,5 +19,25 @@ describe("downloadMetrics", () => {
     expect(formatTotalEta(42)).toBe("<42s")
     expect(formatTotalEta(125)).toBe("~2:05")
     expect(formatTotalEta(3723)).toBe("~1:02:03")
+  })
+
+  it("parses ETA strings", () => {
+    expect(parseEta("00:34")).toBe(34)
+    expect(parseEta("01:02:03")).toBe(3723)
+    expect(parseEta("5")).toBe(5)
+    expect(parseEta("")).toBe(0)
+  })
+
+  it("formats speed values", () => {
+    expect(formatSpeed(2097152)).toBe("2.00MiB/s")
+    expect(formatSpeed(512)).toBe("512.00B/s")
+    expect(formatSpeed(1536)).toBe("1.50KiB/s")
+    expect(formatSpeed(0)).toBe("0.00B/s")
+  })
+
+  it("formats ETA values", () => {
+    expect(formatEta(34)).toBe("00:34")
+    expect(formatEta(3723)).toBe("01:02:03")
+    expect(formatEta(0)).toBe("00:00")
   })
 })

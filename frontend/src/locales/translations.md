@@ -1,34 +1,41 @@
-# Translation Status
+# Translation Status & Contribution Guide
 
-`en.json` is the source locale. Every other language file must keep the exact same keys.
+KoalaPull supports multiple interface languages. The primary locale dictionary is `en.json`, which serves as the source of truth for all translation keys.
 
-| Language | File | Coverage | Source | Verification |
-| --- | --- | --- | --- | --- |
-| English | `en.json` | 100% | source | verified |
-| German | `de.json` | 100% | translated | needs verification |
-| French | `fr.json` | 100% | machine-assisted | needs verification |
+---
 
-# Contribution Guide
+## 📊 Translation Status
 
-Add new languages in `frontend/src/locales/` as `<lang>.json`.
+| Language | Locale File | Coverage | Status | Validation |
+|---|---|---|---|---|
+| **English** | `en.json` | 100% | Source | Verified |
+| **German** | `de.json` | 100% | Translated | Verified |
+| **French** | `fr.json` | 100% | Translated | Needs Native Verification |
 
-Keep every key exactly the same as `en.json`.
+---
 
-Translate values only. Do not rename, remove, or reorder keys just to make review easier.
+## ✍️ How to Add a New Translation
 
-Test the new language in the app by switching it in Settings and checking at least:
+1.  **Create the Locale File:**
+    Navigate to `frontend/src/locales/` and create `<locale_code>.json` (for example, `es.json` for Spanish).
 
-- Downloads
-- Settings
-- One secondary screen such as History or Help
+2.  **Translate Content:**
+    Copy the structure of `en.json` and translate the values only.
+    > [!IMPORTANT]
+    > Do not delete, rename, or reorder JSON keys. The keys must match `en.json` exactly to prevent application layout breaking or missing translation errors.
 
-Update the table above with the new language, current coverage, and verification state.
+3.  **Register the Translation:**
+    Register the locale inside `frontend/src/lib/i18n.ts` so the system detects and loads it.
 
-Open a pull request that includes:
+4.  **Test Locally:**
+    Launch the application using `wails dev`, open **Settings**, change the language drop-down menu, and verify the text changes correctly on:
+    -   Active downloads queue and format dropdowns.
+    -   Download settings and folders.
+    -   History logs and the Help section.
 
-- the new locale file
-- the updated `translations.md`
-- screenshots of the Settings screen and at least one other localized screen
-- a short note saying whether the translation is native-reviewed or machine-assisted
-
-If a string is unclear, keep the English meaning consistent instead of inventing a new one.
+5.  **Submit a Pull Request:**
+    Open a pull request containing:
+    -   The new `<locale_code>.json` translation dictionary.
+    -   The registration edits in `i18n.ts`.
+    -   An updated status table in this document.
+    -   A brief comment stating whether the translation was written by a native speaker or generated/assisted by machine translators.

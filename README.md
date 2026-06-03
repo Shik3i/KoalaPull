@@ -13,231 +13,157 @@
 ![Wails](https://img.shields.io/badge/Wails-v2.12.0-blue)
 ![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)
 
-A clean, native desktop download manager for [**yt-dlp**](https://github.com/yt-dlp/yt-dlp).
-Download videos, audio, playlists, subtitles, and metadata from hundreds of supported sites with a simple GUI.
+**A clean, native desktop download manager for [yt-dlp](https://github.com/yt-dlp/yt-dlp).**  
+Download videos, audio, playlists, subtitles, and metadata from hundreds of sites with a modern desktop UI.
 
 </div>
 
 ---
 
-## Overview
+## 🌟 Key Features
 
-KoalaPull wraps [`yt-dlp`](https://github.com/yt-dlp/yt-dlp) in a native desktop app built with Go and Wails.
-It is made for people who want the power of `yt-dlp` without living in the terminal.
+*   **📦 Zero-Config Auto Setup:** Automatically downloads and configures the latest `yt-dlp` and `ffmpeg` binaries in your application data folder on first run.
+*   **⚙️ Direct Engines Update:** Re-download, verify, or update dependencies directly from the **Settings** tab.
+*   **🖥️ Cross-Platform Desktop UI:** Built using Go, React, and Wails. Feels like a native app on macOS, Windows, and Linux.
+*   **🔍 Rich Metadata Preview:** Inspect thumbnails, uploader details, exact duration, and all available stream qualities before downloading.
+*   **⚡ Advanced Queue & Speed:** Queue multiple downloads, configure up to 10 parallel downloads, and see detailed metrics (current speed, queue status, active ETA, and overall ETA).
+*   **🎼 Flexible Presets & Subtitles:** Pick Best Quality, Compatible (MP4), Audio Only (MP3), or supply custom options. Bundle or burn subtitles with ease.
+*   **📂 Download History & Folder Jump:** Easily search, filter, and track previous downloads, and open the destination folder directly.
+*   **🌍 Multi-lingual UI:** English, German, and French translations with automatic locale detection.
+*   **🔒 Privacy-First:** Direct backend connections, bundled local fonts, strict Content Security Policy, no cookies, no tracking, and no external CDNs.
 
-## Features
+---
 
-- **Dependency auto-setup** - `yt-dlp` and [`ffmpeg`](https://ffmpeg.org) are downloaded into your app data directory on first launch.
-- **Dependency updates** - re-download or update `yt-dlp` / `ffmpeg` from the Settings tab anytime.
-- **Cross-platform native UI** - runs on macOS, Windows, and Linux.
-- **Metadata preview** - fetch title, uploader, thumbnail, duration, and formats before downloading.
-- **Download presets** - Best Quality, Compatible, Audio Only, or Custom with full control.
-- **Format selection** - pick resolution, container (MP4/MKV/MP3), and subtitle mode.
-- **Playlist support** - download full playlists with one flow.
-- **Concurrent downloads** - queue multiple jobs and run up to 10 in parallel.
-- **Download queue** - add, cancel, clear completed, and clear all with live progress, speed, ETA, and total ETA.
-- **Download history** - keep track of past downloads with search/filter by title or URL.
-- **Open output folder** - jump to the file location straight from a completed download.
-- **Theme support** - dark and light themes with saved preference.
-- **Auto-paste URLs** - optional clipboard detection for supported video links.
-- **Internationalization** - English, German, and French UI with automatic language detection.
-- **Error boundary** - graceful crash recovery with a Retry button.
-- **Update notifications** - check for new `yt-dlp` releases from the Settings tab.
-- **Version info** - view installed KoalaPull, yt-dlp, and ffmpeg versions in Settings.
-- **Help tab** - quick app guide, 24 curated supported sites, and a link to the full `yt-dlp` list.
-- **Privacy-first** - bundled fonts, strict CSP, no telemetry, no analytics, no external CDNs.
-- **Keyboard shortcuts** - quick focus on the URL input with `Cmd/Ctrl+K` or `Cmd/Ctrl+L`.
+## 🚀 Installation & Setup
 
-## Quick Start
+### Download Precompiled Release
 
-### Download
+Get the latest build for your desktop operating system from the [GitHub Releases Page](https://github.com/Shik3i/KoalaPull/releases).
 
-Get the latest release for your platform from the [GitHub Releases page](https://github.com/Shik3i/KoalaPull/releases).
+| Operating System | Package/Binary | Architecture |
+|---|---|---|
+| 🍎 **macOS** | `koalapull-darwin-arm64.dmg` | Apple Silicon (M1/M2/M3/M4) |
+| 🍎 **macOS** | `koalapull-darwin-amd64.dmg` | Intel-based Macs |
+| 🪟 **Windows** | `koalapull-windows-amd64.exe` | Standard 64-bit Windows |
+| 🐧 **Linux** | `koalapull-linux-amd64.AppImage` | Standard 64-bit Linux distributions |
 
-| Platform | File |
-|----------|------|
-| **macOS** (Intel) | `koalapull-darwin-amd64.dmg` |
-| **macOS** (Apple Silicon) | `koalapull-darwin-arm64.dmg` |
-| **Windows** | `koalapull-windows-amd64.exe` |
-| **Linux** | `koalapull-linux-amd64.AppImage` |
+> [!IMPORTANT]
+> **Important Note for macOS Users (Unidentified Developer)**
+> 
+> Because KoalaPull is unsigned, macOS Gatekeeper may block it on the first launch.
+> 
+> *   **Method 1 (Recommended):** Right-click (or `Ctrl`+click) the KoalaPull application icon, select **Open** from the context menu, and click the **Open** confirmation button.
+> *   **Method 2:** Double-click the application icon, dismiss the alert, navigate to **System Settings** > **Privacy & Security** > **Security**, and click **Open Anyway**.
 
-### Note for macOS Users (Unidentified Developer)
+---
 
-KoalaPull is unsigned. macOS Gatekeeper may block it on first launch.
+## 🔨 Building from Source
 
-**Method 1: The Right-Click Shortcut (Recommended)**
-
-1. Do not double-click the app.
-2. Right-click, or `Control`-click, the KoalaPull app.
-3. Choose **Open** from the menu.
-4. You will see a warning dialog, but this time it includes an **Open** button. Click it.
-5. KoalaPull will open normally from then on.
-
-**Method 2: System Settings**
-
-1. If you already double-clicked the app and saw the "cannot be opened" message, click **OK**.
-2. Open **System Settings** > **Privacy & Security**.
-3. Scroll down to the **Security** section.
-4. Find the message that says KoalaPull was blocked.
-5. Click **Open Anyway** and confirm with your Mac password.
-
-On first launch, KoalaPull will show a setup screen.
-Click **Download & Install** to fetch `yt-dlp` and `ffmpeg`.
-
-### Build from Source
+To build KoalaPull yourself, ensure you have the following prerequisites installed:
+*   [Go](https://go.dev/) 1.23 or newer
+*   [Node.js](https://nodejs.org/) 18 or newer
+*   [Wails CLI](https://wails.io/docs/gettingstarted/installation) (`v2.12.0` or newer)
+*   *Linux only:* Dev library packages (`libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `pkg-config`)
 
 ```bash
-# Prerequisites: Go 1.23+, Node.js 18+, Wails CLI v2.12+
+# Install Wails CLI globally if not already present
 go install github.com/wailsapp/wails/v2/cmd/wails@latest
 
+# Clone and navigate to repository
 git clone https://github.com/Shik3i/KoalaPull.git
 cd KoalaPull
-cd frontend && npm install && cd ..
+
+# Build and run with hot-reload enabled for developer environments
 wails dev
 ```
 
-## Usage
+To compile production-optimized standalone binaries:
+```bash
+wails build -clean -ldflags "-X main.AppVersion=$(git describe --tags --always --dirty)"
+```
+Output binaries will be generated inside the `build/bin/` folder.
 
-1. Paste a URL from YouTube, Vimeo, Twitch, or any other supported site.
-2. Fetch metadata to inspect title, thumbnail, duration, and available formats.
-3. Choose your format, container, and subtitle options.
-4. Add the job to the queue.
-5. Watch progress, speed, ETA, and playlist status in real time.
-6. Open the Help tab for a quick guide and supported sites overview.
+---
 
-## Settings
+## 🛠️ Configuration Settings
 
-| Setting | Range | Default | Description |
-|---------|-------|---------|-------------|
-| Output directory | any folder | `~/Downloads/KoalaPull` | Where completed files are saved |
-| Theme | dark / light | dark | App color scheme |
-| Language | auto / en / de / fr | auto | UI language |
-| Max parallel downloads | 1 - 10 | 3 | How many downloads run at once |
-| Auto-paste URL | on / off | off | Detect supported URLs from your clipboard |
+Customize settings from the UI interface. These configuration values are stored locally in a `settings.json` file.
 
-All settings are stored in `settings.json` inside the app config directory.
+| Configuration | Options | Default Value | Description |
+|---|---|---|---|
+| **Output Directory** | Any writeable path | `~/Downloads/KoalaPull` | Location for storing all downloaded assets. |
+| **Theme Mode** | `dark` / `light` | `dark` | Visual theme interface. |
+| **Interface Language** | `auto` / `en` / `de` / `fr` | `auto` | Preferred language of the interface elements. |
+| **Parallel Downloads** | `1` to `10` | `3` | Maximum concurrent active download workers. |
+| **Auto-paste Clipboard** | `on` / `off` | `off` | Autodetect and fetch supported media URLs from local clipboard. |
 
-## Dependencies
+---
 
-### Runtime
+## 📦 Runtime Dependencies
 
-| Dependency | Purpose | Source |
+KoalaPull executes self-contained binary wrappers. The local executables are downloaded and saved to:
+*   **Linux:** `~/.config/KoalaPull/bin/`
+*   **macOS:** `~/Library/Application Support/KoalaPull/bin/`
+*   **Windows:** `%APPDATA%/KoalaPull/bin/`
+
+| Dependency | Purpose | Resource Origin |
 |---|---|---|
-| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Download engine | Downloaded on first launch |
-| [ffmpeg](https://ffmpeg.org) | Audio and video processing | Downloaded on first launch |
+| [yt-dlp](https://github.com/yt-dlp/yt-dlp) | Media extraction engine | Downloaded on first setup or Settings page updates |
+| [ffmpeg](https://ffmpeg.org) | Video and audio transcoding | Downloaded on first setup or Settings page updates |
 
-Both binaries are stored in the app data directory:
+---
 
-- Linux: `~/.config/KoalaPull/bin/`
-- macOS: `~/Library/Application Support/KoalaPull/bin/`
-- Windows: `%APPDATA%/KoalaPull/bin/`
+## 💻 Tech Stack
 
-### Go backend
+- **Backend:** Go 1.23, [Wails v2](https://wails.io/) desktop bindings
+- **Frontend UI:** React 18, TypeScript, Vite
+- **Styling:** Tailwind CSS 3, custom CSS theme variables
+- **Localization:** Custom JSON dictionary system (`en`, `de`, `fr`)
+- **Download Engines:** Wrapper layer for `yt-dlp` and `ffmpeg`
 
-| Module | Version | Purpose |
-|---|---|---|
-| `github.com/wailsapp/wails/v2` | `v2.12.0` | Desktop app framework |
+---
 
-### Frontend
-
-| Package | Version | Type |
-|---|---|---|
-| `react` | `^18.2.0` | Runtime dependency |
-| `react-dom` | `^18.2.0` | Runtime dependency |
-| `vite` | `^3.0.7` | Build tool |
-| `tailwindcss` | `^3.4.19` | Styling |
-| `typescript` | `^4.6.4` | Type safety |
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|------------|
-| Backend | Go 1.23, Wails v2.12 |
-| Frontend | React 18, TypeScript, Vite 3 |
-| Styling | Tailwind CSS 3, CSS custom properties |
-| i18n | Custom locale system (en, de, fr) |
-| Download engine | `yt-dlp` + `ffmpeg` |
-
-## Project Structure
+## 📂 Project Architecture
 
 ```text
 KoalaPull/
-├── app.go                 # Go backend: metadata, downloads, settings, history
-├── app_test.go            # Backend tests
-├── main.go                # Wails app entry point
-├── process_other.go       # Platform-specific helpers (Linux/macOS)
-├── process_windows.go     # Platform-specific helpers (Windows)
-├── frontend/
-│   ├── src/
-│   │   ├── App.tsx        # Main React component
-│   │   ├── main.tsx       # React mount point
-│   │   ├── style.css      # Tailwind directives + theme variables
-│   │   ├── vite-env.d.ts  # Vite type declarations
-│   │   ├── assets/        # Local images and fonts
-│   │   │   ├── images/
-│   │   │   └── fonts/
-│   │   ├── lib/           # Utility modules
-│   │   │   ├── downloadMetrics.ts
-│   │   │   └── i18n.ts
-│   │   └── locales/       # Translation files (en, de, fr)
-│   ├── public/fonts/      # Bundled local fonts
-│   ├── index.html         # Entry point with Content Security Policy
-│   └── package.json       # Frontend dependencies
-├── assets/                # App icon sources
-│   ├── Icon.png
-│   └── Icon.af
-├── build/                 # Build assets and platform packages
-│   ├── appicon.png
-│   ├── darwin/
-│   ├── windows/
-│   └── bin/
-├── scripts/
-│   └── verify.sh          # Pre-push quality gate
-├── test/
-│   └── quality_gates_test.go
-├── docs/
-│   └── superpowers/       # Design docs and plans
-├── trayicons/             # System tray icon
-├── website/               # Project website
-├── wails.json             # Wails project configuration
-├── .github/workflows/     # CI/CD pipelines
-├── Makefile               # Dev convenience targets
+├── app.go                 # App controllers (metadata fetching, settings, history)
+├── app_test.go            # Go tests
+├── main.go                # Wails framework entrypoint
+├── process_other.go       # Non-Windows platform helper integrations
+├── process_windows.go     # Windows platform helper integrations
 ├── go.mod                 # Go module definition
-└── frontend/package.json  # Frontend dependencies
+├── wails.json             # Wails layout properties
+├── Makefile               # Shortcuts for common tasks
+├── assets/                # App artwork assets
+├── trayicons/             # System tray icon assets
+├── scripts/               # Quality validation pipelines
+│   └── verify.sh          # CI and commit gate verifications
+├── docs/                  # Technical documentation and specs
+├── website/               # Static landing website code
+├── build/                 # Bundled files & distribution platform assets
+└── frontend/              # Frontend application project folder
+    ├── index.html         # Main HTML framework and security policy
+    ├── package.json       # Node package structure
+    └── src/
+        ├── main.tsx       # React initialization
+        ├── App.tsx        # Core UI views
+        ├── style.css      # Core style templates and theme definitions
+        ├── locales/       # JSON localization dictionaries
+        └── lib/           # UI helpers (i18n, download calculation metrics)
 ```
 
-## Development
+---
 
-### Prerequisites
+## 🤝 Contributing
 
-- [Go](https://go.dev/dl/) 1.23+
-- [Node.js](https://nodejs.org/) 18+
-- [Wails CLI](https://wails.io/docs/gettingstarted/installation) v2.12+
-- Linux only: `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `pkg-config`
+Contributions are highly encouraged. Please refer to [CONTRIBUTING.md](CONTRIBUTING.md) to learn how to set up the development environment, execute tests, and follow quality validation requirements.
 
-### Commands
+---
 
-```bash
-# Development with hot reload
-wails dev
+## ⚖️ License & Disclaimers
 
-# Production build
-wails build -clean -ldflags "-X main.AppVersion=$(git describe --tags --always --dirty)"
-```
+This project is licensed under the [MIT License](LICENSE).
 
-The compiled binary is written to `build/bin/`.
-
-## Contributing
-
-Contributions are welcome.
-See [CONTRIBUTING.md](CONTRIBUTING.md) for setup instructions and coding guidelines.
-
-## License
-
-[MIT](LICENSE) © 2026 Timo
-
-## Responsible Use
-
-KoalaPull is provided under the MIT License and comes with no warranty.
-Use it only in ways that follow your local laws and the terms of the sites you access.
-The maintainers are not responsible for misuse of the software.
+> [!WARNING]
+> KoalaPull is designed to run as a wrapper layer around `yt-dlp`. It is provided "as is" without warranty of any kind. You are responsible for ensuring that your usage complies with local regulations, copyrights, and the terms of service of the websites from which you download content.
