@@ -64,6 +64,7 @@
     "loading": "Verlauf wird geladen...",
     "empty": "Noch kein Download-Verlauf",
     "noResults": "Keine Ergebnisse für \"{query}\"",
+    "showingLimited": "{shown} von {total} Einträgen werden angezeigt. Suche, um die Liste einzugrenzen.",
     "started": "Gestartet: {time}",
     "ended": "Beendet: {time}",
     "size": "Größe: {size}",
@@ -159,6 +160,7 @@
     "checkDependenciesFailed": "Abhängigkeiten konnten nicht geprüft werden.",
     "dependencyInstallFailed": "Installation der Abhängigkeiten fehlgeschlagen",
     "downloadFailed": "Download fehlgeschlagen",
+    "startDownloadFailed": "Download konnte nicht gestartet werden",
     "updateFailed": "Update fehlgeschlagen"
   },
   "tooltips": {

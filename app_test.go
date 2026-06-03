@@ -139,6 +139,21 @@ func TestIncreasingConcurrencyWakesWaitingDownload(t *testing.T) {
 	}
 }
 
+func TestDownloadRetryDecisionRequiresIdleTimeout(t *testing.T) {
+	if shouldRetryDownloadAttempt(0, false, nil) {
+		t.Fatal("successful attempt requested retry")
+	}
+	if shouldRetryDownloadAttempt(0, false, context.Canceled) {
+		t.Fatal("successful attempt with cleaned-up context requested retry")
+	}
+	if !shouldRetryDownloadAttempt(0, true, nil) {
+		t.Fatal("idle-cancelled first attempt did not request retry")
+	}
+	if shouldRetryDownloadAttempt(1, true, nil) {
+		t.Fatal("second idle-cancelled attempt requested another retry")
+	}
+}
+
 func TestAllowedDownloadURLRejectsNonHTTPProtocols(t *testing.T) {
 	if !isAllowedDownloadURL("https://example.com/video") {
 		t.Fatal("https URL was rejected")

@@ -61,6 +61,7 @@ interface SupportedSite {
 type Tab = 'downloads' | 'history' | 'settings' | 'help'
 
 let historyRequestId = 0
+const maxVisibleHistoryEntries = 500
 
 const supportedSites: SupportedSite[] = [
   { name: 'YouTube', blurbKey: 'supportedSites.youtube', href: 'https://www.youtube.com' },
@@ -202,12 +203,12 @@ function buildFormatOptions(formats: FormatInfo[], t: (key: string, params?: Rec
 }
 
 function HistoryEntries({ entries, search, onDelete, fmtTime, t }: { entries: main.HistoryEntry[]; search: string; onDelete: (id: string) => void; fmtTime: (t: string) => string; t: (key: string, params?: Record<string, string | number>) => string }) {
-  const filtered = search
-    ? entries.filter((e) => {
-        const q = search.toLowerCase()
-        return (e.title || '').toLowerCase().includes(q) || e.url.toLowerCase().includes(q)
-      })
-    : entries
+  const filtered = useMemo(() => {
+    if (!search) return entries
+    const q = search.toLowerCase()
+    return entries.filter((e) => (e.title || '').toLowerCase().includes(q) || e.url.toLowerCase().includes(q))
+  }, [entries, search])
+  const visible = filtered.slice(0, maxVisibleHistoryEntries)
   if (filtered.length === 0 && search) {
     return (
       <div className="flex flex-col items-center justify-center py-12" style={{ color: 'var(--text-muted)' }}>
@@ -217,7 +218,12 @@ function HistoryEntries({ entries, search, onDelete, fmtTime, t }: { entries: ma
   }
   return (
     <div className="space-y-2">
-      {filtered.map((entry) => (
+      {filtered.length > visible.length && (
+        <div className="rounded-lg px-3 py-2 text-xs" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)', color: 'var(--text-muted)' }}>
+          {t('history.showingLimited', { shown: visible.length, total: filtered.length })}
+        </div>
+      )}
+      {visible.map((entry) => (
         <HistoryRow key={entry.downloadId} entry={entry} onDelete={onDelete} fmtTime={fmtTime} t={t} />
       ))}
     </div>
@@ -312,6 +318,7 @@ function App() {
   const [toolVersions, setToolVersions] = useState<VersionInfo | null>(null)
   const [toolVersionsLoading, setToolVersionsLoading] = useState(true)
   const [addingToQueue, setAddingToQueue] = useState(false)
+  const [addQueueError, setAddQueueError] = useState('')
   const [updatingDeps, setUpdatingDeps] = useState(false)
   const [updatesError, setUpdatesError] = useState('')
   const [updateInfo, setUpdateInfo] = useState<main.UpdateInfo | null>(null)
@@ -557,6 +564,7 @@ function App() {
   const handleAddToQueue = async () => {
     if (!metadata || addingToQueue) return
     setAddingToQueue(true)
+    setAddQueueError('')
     try {
       const choice = resolveDownloadChoice(selectedPreset, selectedFormat, selectedContainer, selectedSubs)
       const downloadId = await StartDownloadWithPreset(url, choice.formatId, defaultOutputDir, choice.container, choice.subtitle, metadata.title, selectedPreset)
@@ -566,6 +574,7 @@ function App() {
       ])
     } catch (err: any) {
       console.error('Failed to start download:', err)
+      setAddQueueError(err?.message || t('errors.startDownloadFailed'))
     } finally {
       setAddingToQueue(false)
     }
@@ -905,6 +914,9 @@ function fmtTime(t: string): string {
                         )}
                         {addingToQueue ? '...' : t('actions.addToQueue')}
                       </button>
+                      {addQueueError && (
+                        <p className="mt-2 text-xs" style={{ color: '#f87171' }}>{addQueueError}</p>
+                      )}
                     </div>
                   </div>
                 </div>

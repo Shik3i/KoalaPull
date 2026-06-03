@@ -77,6 +77,36 @@ func TestReleaseWorkflowRunsVerificationBeforeBuild(t *testing.T) {
 	}
 }
 
+func TestCIWorkflowInstallsLinuxSystemDepsBeforeVerify(t *testing.T) {
+	data := mustReadRepoFile(t, ".github", "workflows", "ci.yml")
+	deps := strings.Index(data, "Install Linux system deps")
+	verify := strings.Index(data, "run: ./scripts/verify.sh")
+	if deps == -1 {
+		t.Fatal(".github/workflows/ci.yml missing Linux system dependency install step")
+	}
+	if verify == -1 {
+		t.Fatal(".github/workflows/ci.yml missing verify step")
+	}
+	if deps > verify {
+		t.Fatal(".github/workflows/ci.yml must install Linux system dependencies before verify")
+	}
+}
+
+func TestReleaseWorkflowInstallsLinuxSystemDepsBeforeVerify(t *testing.T) {
+	data := mustReadRepoFile(t, ".github", "workflows", "release.yml")
+	deps := strings.Index(data, "Install Linux system deps")
+	verify := strings.Index(data, "run: ./scripts/verify.sh")
+	if deps == -1 {
+		t.Fatal(".github/workflows/release.yml missing Linux system dependency install step")
+	}
+	if verify == -1 {
+		t.Fatal(".github/workflows/release.yml missing verify step")
+	}
+	if deps > verify {
+		t.Fatal(".github/workflows/release.yml must install Linux system dependencies before verify")
+	}
+}
+
 func TestReleaseWorkflowPackagesArtifactsBeforeUpload(t *testing.T) {
 	data := mustReadRepoFile(t, ".github", "workflows", "release.yml")
 	for _, want := range []string{
@@ -124,6 +154,32 @@ func TestFrontendPackageHasAutomatedTestScript(t *testing.T) {
 	data := mustReadRepoFile(t, "frontend", "package.json")
 	if !strings.Contains(data, "\"test\"") {
 		t.Fatal("frontend/package.json missing test script")
+	}
+}
+
+func TestFrontendCapsHistoryRowsRenderedAtOnce(t *testing.T) {
+	data := mustReadRepoFile(t, "frontend", "src", "App.tsx")
+	for _, want := range []string{
+		"maxVisibleHistoryEntries",
+		"filtered.slice(0, maxVisibleHistoryEntries)",
+		"history.showingLimited",
+	} {
+		if !strings.Contains(data, want) {
+			t.Fatalf("frontend/src/App.tsx missing %q", want)
+		}
+	}
+}
+
+func TestFrontendShowsStartDownloadErrors(t *testing.T) {
+	data := mustReadRepoFile(t, "frontend", "src", "App.tsx")
+	for _, want := range []string{
+		"addQueueError",
+		"setAddQueueError",
+		"errors.startDownloadFailed",
+	} {
+		if !strings.Contains(data, want) {
+			t.Fatalf("frontend/src/App.tsx missing %q", want)
+		}
 	}
 }
 

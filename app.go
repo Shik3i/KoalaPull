@@ -1488,6 +1488,7 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 		}
 
 		attemptCtx, attemptCancel := context.WithCancel(ctx)
+		var idleTimedOut atomic.Bool
 
 		go func() {
 			ticker := time.NewTicker(30 * time.Second)
@@ -1496,6 +1497,7 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 				select {
 				case <-ticker.C:
 					if time.Since(lastProgress.Load().(time.Time)) > 5*time.Minute {
+						idleTimedOut.Store(true)
 						attemptCancel()
 						return
 					}
@@ -1627,11 +1629,15 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 		attemptCancel()
 
 		// Only retry if attempt was cancelled by idle timeout (not user cancel)
-		if attempt == 0 && errors.Is(attemptCtx.Err(), context.Canceled) && ctx.Err() == nil {
+		if shouldRetryDownloadAttempt(attempt, idleTimedOut.Load(), ctx.Err()) {
 			continue
 		}
 		return
 	}
+}
+
+func shouldRetryDownloadAttempt(attempt int, idleTimedOut bool, parentErr error) bool {
+	return attempt == 0 && idleTimedOut && parentErr == nil
 }
 
 func parseProgressLine(line string) (percent float64, fileSize, speed, eta string, ok bool) {

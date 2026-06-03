@@ -64,6 +64,7 @@
     "loading": "Loading history...",
     "empty": "No download history yet",
     "noResults": "No results for \"{query}\"",
+    "showingLimited": "Showing {shown} of {total} entries. Search to narrow the list.",
     "started": "Started: {time}",
     "ended": "Ended: {time}",
     "size": "Size: {size}",
@@ -159,6 +160,7 @@
     "checkDependenciesFailed": "Failed to check dependencies.",
     "dependencyInstallFailed": "Dependency installation failed",
     "downloadFailed": "Download failed",
+    "startDownloadFailed": "Failed to start download",
     "updateFailed": "Update failed"
   },
   "tooltips": {

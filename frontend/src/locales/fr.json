@@ -64,6 +64,7 @@
     "loading": "Chargement de l'historique...",
     "empty": "Aucun historique de téléchargement pour le moment",
     "noResults": "Aucun résultat pour \"{query}\"",
+    "showingLimited": "{shown} entrées sur {total} sont affichées. Recherchez pour réduire la liste.",
     "started": "Début : {time}",
     "ended": "Fin : {time}",
     "size": "Taille : {size}",
@@ -159,6 +160,7 @@
     "checkDependenciesFailed": "Échec de la vérification des dépendances.",
     "dependencyInstallFailed": "Échec de l'installation des dépendances",
     "downloadFailed": "Échec du téléchargement",
+    "startDownloadFailed": "Impossible de démarrer le téléchargement",
     "updateFailed": "Échec de la mise à jour"
   },
   "tooltips": {
