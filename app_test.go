@@ -219,7 +219,7 @@ func TestResolveSettingsPathUsesPortableWhenWritable(t *testing.T) {
 		t.Fatalf("mkdir app dir: %v", err)
 	}
 	want := filepath.Join(appDir, "settings.json")
-	if got := resolveSettingsPathFor(filepath.Join(root, "config"), want); got != want {
+	if got := resolveSettingsPathFor(filepath.Join(root, "config"), want, "settings.json"); got != want {
 		t.Fatalf("resolveSettingsPathFor() = %q, want %q", got, want)
 	}
 }
@@ -231,7 +231,7 @@ func TestResolveSettingsPathFallsBackWhenPortableUnavailable(t *testing.T) {
 		t.Fatalf("mkdir config dir: %v", err)
 	}
 	want := filepath.Join(configDir, "settings.json")
-	if got := resolveSettingsPathFor(configDir, ""); got != want {
+	if got := resolveSettingsPathFor(configDir, "", "settings.json"); got != want {
 		t.Fatalf("resolveSettingsPathFor() = %q, want %q", got, want)
 	}
 }

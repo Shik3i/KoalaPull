@@ -1,6 +1,6 @@
 module koalapull
 
-go 1.23.0
+go 1.23
 
 require github.com/wailsapp/wails/v2 v2.12.0
 
@@ -34,5 +34,3 @@ require (
 	golang.org/x/sys v0.30.0 // indirect
 	golang.org/x/text v0.22.0 // indirect
 )
-
-// replace github.com/wailsapp/wails/v2 v2.12.0 => C:\Users\s3ish\go\pkg\mod

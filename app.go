@@ -42,8 +42,6 @@ type App struct {
 	dlCounter        int
 	activeDownloads  map[string]context.CancelFunc
 	adMu             sync.Mutex
-	lastFileSize     map[string]string
-	lastSpeed        map[string]string
 	semCount         atomic.Int32
 	semLimit         atomic.Int32
 	semWake          chan struct{}
@@ -157,8 +155,6 @@ const (
 func NewApp() *App {
 	a := &App{
 		activeDownloads: make(map[string]context.CancelFunc),
-		lastFileSize:    make(map[string]string),
-		lastSpeed:       make(map[string]string),
 		semWake:         make(chan struct{}, maxMaxConcurrency),
 	}
 	a.semLimit.Store(defaultMaxConcurrency)
@@ -226,7 +222,9 @@ func (a *App) startup(ctx context.Context) {
 	a.activeDownloads = make(map[string]context.CancelFunc)
 	a.initSemaphore()
 	a.loadSettings()
-	a.migrateHistoryIfNeeded()
+	if err := a.migrateHistoryIfNeeded(); err != nil {
+		a.startupErr = errors.Join(a.startupErr, fmt.Errorf("migrate history: %w", err))
+	}
 	a.cleanupStaleTempFiles()
 }
 
@@ -306,11 +304,11 @@ func isWritableDir(dir string) bool {
 
 func (a *App) resolveSettingsPath() string {
 	portable := a.portableSettingsPath()
-	return resolveSettingsPathFor(a.configDir, portable)
+	return resolveSettingsPathFor(a.configDir, portable, "settings.json")
 }
 
-func resolveSettingsPathFor(configDir, portablePath string) string {
-	fallback := filepath.Join(configDir, "settings.json")
+func resolveSettingsPathFor(configDir, portablePath, fallbackName string) string {
+	fallback := filepath.Join(configDir, fallbackName)
 	if portablePath == "" {
 		return fallback
 	}
@@ -494,34 +492,40 @@ func (a *App) portableHistoryPath() string {
 
 func (a *App) historyPath() string {
 	portable := a.portableHistoryPath()
-	return resolveSettingsPathFor(a.configDir, portable)
+	return resolveSettingsPathFor(a.configDir, portable, "history.json")
 }
 
-func (a *App) migrateHistoryIfNeeded() {
+func (a *App) migrateHistoryIfNeeded() error {
 	path := a.historyPath()
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
 	}
 	if len(data) == 0 {
-		return
+		return nil
 	}
 	if data[0] != '[' {
-		return
+		return nil
 	}
 	var entries []HistoryEntry
 	if err := json.Unmarshal(data, &entries); err != nil {
-		return
+		return nil
 	}
 	f, err := os.Create(path)
 	if err != nil {
-		return
+		return err
 	}
 	defer f.Close()
 	enc := json.NewEncoder(f)
 	for _, e := range entries {
-		_ = enc.Encode(e)
+		if err := enc.Encode(e); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 func readHistoryFromFile(path string) []HistoryEntry {
@@ -1314,6 +1318,9 @@ func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subti
 		settings := a.GetSettings()
 		outputDir = settings.DefaultOutputDir
 	}
+	if len(title) > 1024 {
+		title = truncateToValidUTF8Prefix(title, 1024)
+	}
 	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return "", fmt.Errorf("output dir: %w", err)
 	}
@@ -1389,8 +1396,6 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 		}
 		a.adMu.Lock()
 		delete(a.activeDownloads, downloadID)
-		delete(a.lastFileSize, downloadID)
-		delete(a.lastSpeed, downloadID)
 		a.adMu.Unlock()
 	}()
 
@@ -1513,20 +1518,13 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 						errLines = append(errLines, line)
 					}
 				}
-				if matches := sizeLineRegex.FindStringSubmatch(line); matches != nil {
-					lastFileSz = matches[1]
-					lastProgress.Store(time.Now())
-					a.adMu.Lock()
-					a.lastFileSize[downloadID] = matches[1]
-					a.adMu.Unlock()
-				}
-				if pct, fileSz, speed, eta, ok := parseProgressLine(line); ok {
-					lastPct, lastSpeed, lastETA, lastFileSz = pct, speed, eta, fileSz
-					lastProgress.Store(time.Now())
-					a.adMu.Lock()
-					a.lastSpeed[downloadID] = speed
-					a.lastFileSize[downloadID] = fileSz
-					a.adMu.Unlock()
+			if matches := sizeLineRegex.FindStringSubmatch(line); matches != nil {
+				lastFileSz = matches[1]
+				lastProgress.Store(time.Now())
+			}
+			if pct, fileSz, speed, eta, ok := parseProgressLine(line); ok {
+				lastPct, lastSpeed, lastETA, lastFileSz = pct, speed, eta, fileSz
+				lastProgress.Store(time.Now())
 					a.emitDownloadProgress(downloadID, pct, speed, eta, fileSz, "downloading", "", currentPS)
 				} else if ps := parsePlaylistStatus(line); ps != "" {
 					currentPS = ps

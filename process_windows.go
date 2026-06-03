@@ -19,6 +19,25 @@ func commandContext(ctx context.Context, name string, arg ...string) *exec.Cmd {
 	return cmd
 }
 
+func startCommand(ctx context.Context, cmd *exec.Cmd) error {
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() {
+		<-ctx.Done()
+		if cmd.Process != nil {
+			_ = syscall.TerminateProcess(syscall.Handle(cmd.Process.Pid), 1)
+		}
+	}()
+	return nil
+}
+
+func commandOutput(ctx context.Context, name string, arg ...string) ([]byte, error) {
+	cmd := exec.Command(name, arg...)
+	cmd.SysProcAttr = hiddenProcAttr()
+	return cmd.Output()
+}
+
 func command(name string, arg ...string) *exec.Cmd {
 	cmd := exec.Command(name, arg...)
 	cmd.SysProcAttr = hiddenProcAttr()
