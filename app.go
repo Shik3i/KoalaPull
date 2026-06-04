@@ -825,7 +825,11 @@ func (a *App) GetYtdlpVersion() string {
 			} else {
 				fmt.Fprintf(os.Stderr, "yt-dlp version attempt %d: %v\n", i, err)
 			}
-			time.Sleep(2 * time.Second)
+			select {
+			case <-time.After(2 * time.Second):
+			case <-a.appContext().Done():
+				return ""
+			}
 		}
 	}
 	return ""
@@ -848,13 +852,24 @@ func (a *App) GetFfmpegVersion() string {
 			} else {
 				fmt.Fprintf(os.Stderr, "ffmpeg version attempt %d: %v\n", i, err)
 			}
-			time.Sleep(2 * time.Second)
+			select {
+			case <-time.After(2 * time.Second):
+			case <-a.appContext().Done():
+				return ""
+			}
 		}
 	}
 	return ""
 }
 
 func (a *App) UpdateDependencies() error {
+	a.adMu.Lock()
+	hasActive := len(a.activeDownloads) > 0
+	a.adMu.Unlock()
+	if hasActive {
+		return errors.New("cannot update dependencies while downloads are in progress")
+	}
+
 	a.dependencyMu.Lock()
 	defer a.dependencyMu.Unlock()
 	if err := a.downloadYtdlp(true); err != nil {
@@ -992,6 +1007,7 @@ func fetchLatestYtdlpVersion(ctx context.Context) (string, error) {
 		return "", err
 	}
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "KoalaPull/"+AppVersion)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err
@@ -1017,6 +1033,7 @@ func fetchLatestKoalaPullVersion(ctx context.Context) (string, error) {
 		return "", err
 	}
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "KoalaPull/"+AppVersion)
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return "", err
@@ -1145,7 +1162,7 @@ func (a *App) downloadFfmpeg(force bool) error {
 		return nil
 	}
 	artifact := ffmpegArtifactFor(runtime.GOOS)
-	tmpDir, err := os.MkdirTemp("", "koalapull-ffmpeg")
+	tmpDir, err := os.MkdirTemp(a.binDir, ".koalapull-ffmpeg-*")
 	if err != nil {
 		return fmt.Errorf("temp dir failed: %w", err)
 	}
@@ -1454,6 +1471,7 @@ func (a *App) clearMetadataContext(cancel context.CancelFunc, seq uint64) {
 // ---------- Download Execution ----------
 
 const maxErrLines = 20
+const maxQueueLimit = 100
 
 func (a *App) StartDownload(url, formatID, outputDir, container, subtitle, title string) (string, error) {
 	return a.StartDownloadWithPreset(url, formatID, outputDir, container, subtitle, title, defaultDownloadPreset)
@@ -1497,6 +1515,11 @@ func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subti
 
 	ctx, cancel := context.WithCancel(a.appContext())
 	a.adMu.Lock()
+	if len(a.activeDownloads) >= maxQueueLimit {
+		a.adMu.Unlock()
+		cancel()
+		return "", fmt.Errorf("download queue limit reached (%d)", maxQueueLimit)
+	}
 	a.activeDownloads[downloadID] = cancel
 	a.adMu.Unlock()
 
@@ -1660,6 +1683,7 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 					lineCh <- downloadLine{source: source, line: scanner.Text()}
 				}
 				if scanErr := scanner.Err(); scanErr != nil {
+					attemptCancel()
 					lineCh <- downloadLine{source: source, err: scanErr}
 				}
 			}

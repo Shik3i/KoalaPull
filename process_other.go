@@ -25,16 +25,21 @@ func startCommand(ctx context.Context, cmd *exec.Cmd) (func(), error) {
 	}
 	done := make(chan struct{})
 	var doneOnce sync.Once
+	cleanupDone := make(chan struct{})
 	go func() {
 		select {
 		case <-ctx.Done():
 			if cmd.Process != nil {
-				syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 			}
 		case <-done:
 		}
+		close(cleanupDone)
 	}()
-	return func() { doneOnce.Do(func() { close(done) }) }, nil
+	return func() {
+		doneOnce.Do(func() { close(done) })
+		<-cleanupDone
+	}, nil
 }
 
 func commandOutput(ctx context.Context, name string, arg ...string) ([]byte, error) {
@@ -55,17 +60,20 @@ func commandOutputLimited(ctx context.Context, maxBytes int64, name string, arg 
 		return nil, err
 	}
 	done := make(chan struct{})
+	cleanupDone := make(chan struct{})
 	go func() {
 		select {
 		case <-ctx.Done():
 			if cmd.Process != nil {
-				syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
+				_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL)
 			}
 		case <-done:
 		}
+		close(cleanupDone)
 	}()
 	err := cmd.Wait()
 	close(done)
+	<-cleanupDone
 	if stdout.Exceeded() || stderr.Exceeded() {
 		err = errors.Join(err, errCommandOutputTooLarge)
 	}

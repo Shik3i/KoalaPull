@@ -75,26 +75,31 @@ jobs:
 
       - name: Inject version into wails.json
         shell: bash
+        env:
+          VER: ${{ github.ref_name }}
         run: |
-          VER="${{ github.ref_name }}"
           jq --arg v "$VER" '.info.productVersion = $v' wails.json > wails.json.tmp && mv wails.json.tmp wails.json
 
       - name: Build
         shell: bash
+        env:
+          VER: ${{ github.ref_name }}
         run: |
           build_tags=""
           if [ "${{ matrix.goos }}" = "linux" ]; then
             build_tags="webkit2_41"
           fi
-          wails build -clean -tags "$build_tags" -platform ${{ matrix.goos }}/${{ matrix.goarch }} -ldflags "-X main.AppVersion=${{ github.ref_name }}"
+          wails build -clean -tags "$build_tags" -platform ${{ matrix.goos }}/${{ matrix.goarch }} -ldflags "-X main.AppVersion=$VER"
 
       - name: Package artifact
         id: package
         shell: bash
+        env:
+          VER: ${{ github.ref_name }}
         run: |
           set -euo pipefail
           mkdir -p release-assets
-          asset_name="koalapull-${{ github.ref_name }}-${{ matrix.goos }}-${{ matrix.goarch }}.${{ matrix.asset_ext }}"
+          asset_name="koalapull-${VER}-${{ matrix.goos }}-${{ matrix.goarch }}.${{ matrix.asset_ext }}"
 
           mkdir -p build/bin/KoalaPull
           cp README_PORTABLE.txt build/bin/KoalaPull/README.txt

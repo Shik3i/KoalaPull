@@ -178,7 +178,7 @@ func TestReleaseWorkflowUsesBashForInjectVersionStep(t *testing.T) {
 	for _, want := range []string{
 		"name: Inject version into wails.json",
 		"shell: bash",
-		"VER=\"${{ github.ref_name }}\"",
+		"VER: ${{ github.ref_name }}",
 	} {
 		if !strings.Contains(data, want) {
 			t.Fatalf("release workflow missing %q", want)

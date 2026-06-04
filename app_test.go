@@ -1046,3 +1046,46 @@ func TestSaveHistoryEntryReturnsErrorOnWriteFailure(t *testing.T) {
 		t.Fatal("expected saveHistoryEntry to return error on write failure, got nil")
 	}
 }
+
+func TestStartDownloadQueueLimit(t *testing.T) {
+	app := NewApp()
+	app.ctx = context.Background()
+	app.configDir = t.TempDir()
+
+	for i := 0; i < maxQueueLimit; i++ {
+		app.activeDownloads[fmt.Sprintf("dl-%d", i)] = func() {}
+	}
+
+	_, err := app.StartDownloadWithPreset("https://example.com/video", "best", t.TempDir(), "mp4", "none", "title", "best")
+	if err == nil || !strings.Contains(err.Error(), "queue limit reached") {
+		t.Fatalf("expected queue limit error, got: %v", err)
+	}
+}
+
+func TestUpdateDependenciesFailsWhenActive(t *testing.T) {
+	app := NewApp()
+	app.ctx = context.Background()
+	app.configDir = t.TempDir()
+
+	app.activeDownloads["dl-active"] = func() {}
+
+	err := app.UpdateDependencies()
+	if err == nil || !strings.Contains(err.Error(), "downloads are in progress") {
+		t.Fatalf("expected active downloads error, got: %v", err)
+	}
+}
+
+func TestVersionCheckSleepContextAware(t *testing.T) {
+	app := NewApp()
+	ctx, cancel := context.WithCancel(context.Background())
+	app.ctx = ctx
+	cancel()
+
+	start := time.Now()
+	_ = app.GetYtdlpVersion()
+	elapsed := time.Since(start)
+
+	if elapsed >= 1*time.Second {
+		t.Fatalf("GetYtdlpVersion did not abort immediately on context cancellation, elapsed: %v", elapsed)
+	}
+}
