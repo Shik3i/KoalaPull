@@ -103,7 +103,8 @@ When precision, safety, debugging, or user comprehension genuinely requires more
 
 Before ANY push:
 - MUST run `./scripts/verify.sh`
-- MUST pass: `go test -count=1 ./...`, `go vet ./...`, `npm run test`, `npm run build`
+- On Windows, equivalent launcher: `.\scripts\verify.bat`
+- MUST pass: frontend/root `npm ci --include=optional`, `go test -count=1 ./...`, `go vet ./...`, `npm run test`, `npm run build`
 
 Before ANY release tag push (HARD VIOLATION):
 - MUST run ALL quality gate checks above FIRST

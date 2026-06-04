@@ -8,6 +8,7 @@ If the folder is read-only (such as standard system application directories or p
 To use KoalaPull in portable mode:
 1. Keep KoalaPull inside this folder or any writable directory (such as a USB drive or your user home directory).
 2. Run KoalaPull. It will automatically download/configure its dependencies inside a 'bin' subdirectory here.
+3. Dependency updates are verified before install and swapped in atomically, so failed updates should not leave half-written engine binaries behind.
 
 --------------------------------------------------------------------------------
 Note for macOS Users (Unidentified Developer Gatekeeper Warning)
