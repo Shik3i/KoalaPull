@@ -1581,24 +1581,25 @@ const fmtTime = useCallback((t: string): string => {
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="px-4 lg:px-8 py-4 lg:py-5 shrink-0 flex items-center justify-between gap-4">
               <h2 className="text-base lg:text-lg font-semibold" title={tt('languageSelect')}>{t('settings.title')}</h2>
-              <button
-                onClick={() => setShowAdvanced(!showAdvanced)}
-                className="btn-primary text-xs px-3 py-1.5 shrink-0 flex items-center gap-1.5"
-                title={showAdvanced ? tt('settingsHideAdvanced') : tt('settingsShowAdvanced')}
-                aria-label={showAdvanced ? tt('settingsHideAdvanced') : tt('settingsShowAdvanced')}
-                aria-pressed={showAdvanced}
-                style={{
-                  background: showAdvanced ? 'var(--color-accent)' : 'var(--color-surface-lighter)',
-                  border: showAdvanced ? '1px solid var(--color-accent)' : '1px solid var(--color-surface-border)',
-                  color: showAdvanced ? '#fff' : 'var(--text-secondary)',
-                }}
-              >
-                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                </svg>
-                {showAdvanced ? t('settings.hideAdvanced') : t('settings.showAdvanced')}
-              </button>
+              <div className="flex items-center gap-2 shrink-0">
+                <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('settings.advanced')}</span>
+                <button
+                  role="switch"
+                  aria-checked={showAdvanced}
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="relative w-10 h-5 rounded-full transition-colors shrink-0"
+                  style={{
+                    background: showAdvanced ? 'var(--color-accent)' : 'var(--color-surface-border)',
+                  }}
+                  title={showAdvanced ? tt('settingsHideAdvanced') : tt('settingsShowAdvanced')}
+                  aria-label={showAdvanced ? tt('settingsHideAdvanced') : tt('settingsShowAdvanced')}
+                >
+                  <span
+                    className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform"
+                    style={{ left: '2px', transform: showAdvanced ? 'translateX(20px)' : 'translateX(0)' }}
+                  />
+                </button>
+              </div>
             </div>
             <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-5 lg:py-6">
               {settingsError && (
