@@ -12,9 +12,9 @@
     <meta name="referrer" content="strict-origin-when-cross-origin">
     <script type="application/ld+json">{"@context":"https://schema.org","@type":"FAQPage","mainEntity":[{"@type":"Question","name":"Is KoalaPull free and open source?","acceptedAnswer":{"@type":"Answer","text":"Yes. KoalaPull is open source under the MIT License and free to use."}},{"@type":"Question","name":"Do I need yt-dlp or ffmpeg installed first?","acceptedAnswer":{"@type":"Answer","text":"No. KoalaPull downloads the required tools into your app data folder on first launch."}},{"@type":"Question","name":"What sites does it support?","acceptedAnswer":{"@type":"Answer","text":"KoalaPull uses yt-dlp, so it can work with hundreds of supported sites, including YouTube, Vimeo, Twitch, SoundCloud, and more."}},{"@type":"Question","name":"Can it handle playlists and subtitles?","acceptedAnswer":{"@type":"Answer","text":"Yes. Playlist downloads, subtitle options, and metadata previews are built into the app."}},{"@type":"Question","name":"How private is it?","acceptedAnswer":{"@type":"Answer","text":"Local-first and privacy-friendly. No telemetry, no account, and no extra hosted script dependencies on the site."}},{"@type":"Question","name":"Why use KoalaPull instead of the terminal?","acceptedAnswer":{"@type":"Answer","text":"It keeps the power of yt-dlp, but adds buttons, previews, history, presets, and queue control in a native desktop flow."}}]}</script>
 
-    <link rel="preload" href="style.4dad7261.min.css" as="style">
+    <link rel="preload" href="style.ad49ef91.min.css" as="style">
     <link rel="preload" href="assets/NewLogoIcon.webp" as="image" fetchpriority="high">
-    <link rel="stylesheet" href="style.4dad7261.min.css">
+    <link rel="stylesheet" href="style.ad49ef91.min.css">
     <link rel="icon" type="image/png" sizes="16x16" href="assets/favicon-16x16.png">
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
@@ -110,13 +110,6 @@
                 </div>
                 <article class="hero-panel hero-panel-primary">
                     <div class="hero-panel-top">
-                        <p>Queue flow</p>
-                        <strong>10 jobs</strong>
-                    </div>
-                    <p>Run one link or a full playlist with live status, clean presets, and visible history.</p>
-                </article>
-                <article class="hero-panel">
-                    <div class="hero-panel-top">
                         <p>First launch</p>
                         <strong>1 click</strong>
                     </div>
@@ -128,6 +121,13 @@
                         <strong>real use</strong>
                     </div>
                     <p>Preview metadata, choose the right output, and keep control over where files go.</p>
+                </article>
+                <article class="hero-panel">
+                    <div class="hero-panel-top">
+                        <p>Queue flow</p>
+                        <strong>10 jobs</strong>
+                    </div>
+                    <p>Run one link or a full playlist with live status, clean presets, and visible history.</p>
                 </article>
             </div>
         </div>
@@ -498,31 +498,35 @@
                     <h2>Short answers to the first questions people usually have.</h2>
                 </div>
 
-                <div class="faq-grid">
-                    <details class="faq-item" data-reveal>
-                        <summary>Is KoalaPull free and open source?</summary>
-                        <p>Yes. KoalaPull is open source under the MIT License and free to use.</p>
-                    </details>
-                    <details class="faq-item" data-reveal>
-                        <summary>Do I need yt-dlp or ffmpeg installed first?</summary>
-                        <p>No. KoalaPull downloads the required tools into your app data folder on first launch.</p>
-                    </details>
-                    <details class="faq-item" data-reveal>
-                        <summary>What sites does it support?</summary>
-                        <p>KoalaPull uses yt-dlp, so it can work with hundreds of supported sites, including YouTube, Vimeo, Twitch, SoundCloud, and more.</p>
-                    </details>
-                    <details class="faq-item" data-reveal>
-                        <summary>Can it handle playlists and subtitles?</summary>
-                        <p>Yes. Playlist downloads, subtitle options, and metadata previews are built into the app.</p>
-                    </details>
-                    <details class="faq-item" data-reveal>
-                        <summary>How private is it?</summary>
-                        <p>Local-first and privacy-friendly. No telemetry, no account, and no extra hosted script dependencies on the site.</p>
-                    </details>
-                    <details class="faq-item" data-reveal>
-                        <summary>Why use KoalaPull instead of the terminal?</summary>
-                        <p>It keeps the power of yt-dlp, but adds buttons, previews, history, presets, and queue control in a native desktop flow.</p>
-                    </details>
+                <div class="faq-columns">
+                    <div class="faq-col">
+                        <details class="faq-item" data-reveal>
+                            <summary>Is KoalaPull free and open source?</summary>
+                            <p>Yes. KoalaPull is open source under the MIT License and free to use.</p>
+                        </details>
+                        <details class="faq-item" data-reveal>
+                            <summary>What sites does it support?</summary>
+                            <p>KoalaPull uses yt-dlp, so it can work with hundreds of supported sites, including YouTube, Vimeo, Twitch, SoundCloud, and more.</p>
+                        </details>
+                        <details class="faq-item" data-reveal>
+                            <summary>How private is it?</summary>
+                            <p>Local-first and privacy-friendly. No telemetry, no account, and no extra hosted script dependencies on the site.</p>
+                        </details>
+                    </div>
+                    <div class="faq-col">
+                        <details class="faq-item" data-reveal>
+                            <summary>Do I need yt-dlp or ffmpeg installed first?</summary>
+                            <p>No. KoalaPull downloads the required tools into your app data folder on first launch.</p>
+                        </details>
+                        <details class="faq-item" data-reveal>
+                            <summary>Can it handle playlists and subtitles?</summary>
+                            <p>Yes. Playlist downloads, subtitle options, and metadata previews are built into the app.</p>
+                        </details>
+                        <details class="faq-item" data-reveal>
+                            <summary>Why use KoalaPull instead of the terminal?</summary>
+                            <p>It keeps the power of yt-dlp, but adds buttons, previews, history, presets, and queue control in a native desktop flow.</p>
+                        </details>
+                    </div>
                 </div>
             </div>
         </section>

@@ -1076,8 +1076,7 @@ body.is-scrolled .site-nav {
 }
 
 .features-grid,
-.steps-grid,
-.faq-grid {
+.steps-grid {
   display: grid;
   gap: 1rem;
 }
@@ -1127,8 +1126,16 @@ body.is-scrolled .site-nav {
   padding: 1.2rem;
 }
 
-.faq-grid {
+.faq-columns {
+  display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.faq-col {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 }
 
 .faq-item {
@@ -1339,7 +1346,7 @@ body.is-scrolled .site-nav {
     display: inline-flex;
   }
 
-  .faq-grid {
+  .faq-columns {
     grid-template-columns: 1fr;
   }
 
@@ -1354,6 +1361,10 @@ body.is-scrolled .site-nav {
 }
 
 @media (max-width: 680px) {
+  .experience-section {
+    display: none;
+  }
+
   .container {
     width: min(1180px, calc(100% - 1rem));
   }
