@@ -2,6 +2,7 @@
   font-family: 'Inter';
   font-style: normal;
   font-weight: 300;
+  font-display: swap;
   src: url('fonts/Inter-300.ttf') format('truetype');
 }
 
@@ -9,6 +10,7 @@
   font-family: 'Inter';
   font-style: normal;
   font-weight: 400;
+  font-display: swap;
   src: url('fonts/Inter-400.ttf') format('truetype');
 }
 
@@ -16,6 +18,7 @@
   font-family: 'Inter';
   font-style: normal;
   font-weight: 500;
+  font-display: swap;
   src: url('fonts/Inter-500.ttf') format('truetype');
 }
 
@@ -23,6 +26,7 @@
   font-family: 'Inter';
   font-style: normal;
   font-weight: 600;
+  font-display: swap;
   src: url('fonts/Inter-600.ttf') format('truetype');
 }
 
@@ -30,6 +34,7 @@
   font-family: 'Inter';
   font-style: normal;
   font-weight: 700;
+  font-display: swap;
   src: url('fonts/Inter-700.ttf') format('truetype');
 }
 
@@ -37,6 +42,7 @@
   font-family: 'JetBrains Mono';
   font-style: normal;
   font-weight: 400;
+  font-display: swap;
   src: url('fonts/JetBrainsMono-400.ttf') format('truetype');
 }
 
@@ -44,6 +50,7 @@
   font-family: 'JetBrains Mono';
   font-style: normal;
   font-weight: 500;
+  font-display: swap;
   src: url('fonts/JetBrainsMono-500.ttf') format('truetype');
 }
 
@@ -1281,10 +1288,16 @@ body.is-scrolled .site-nav {
 }
 
 @media (max-width: 1040px) {
-  .hero-grid,
-  .features-grid,
-  .steps-grid {
+  .hero-grid {
     grid-template-columns: 1fr;
+  }
+
+  .features-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .steps-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 
   .experience-sidebar {
@@ -1347,6 +1360,11 @@ body.is-scrolled .site-nav {
   }
 
   .faq-columns {
+    grid-template-columns: 1fr;
+  }
+
+  .features-grid,
+  .steps-grid {
     grid-template-columns: 1fr;
   }
 

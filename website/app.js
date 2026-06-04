@@ -104,6 +104,12 @@
     window.addEventListener('resize', function () {
       if (window.innerWidth > 900) setOpen(false);
     });
+
+    window.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && menus[0].classList.contains('is-open')) {
+        setOpen(false);
+      }
+    });
   }
 
   function setupLanguageSelect() {
