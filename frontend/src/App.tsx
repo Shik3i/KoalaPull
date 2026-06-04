@@ -1162,7 +1162,7 @@ const fmtTime = useCallback((t: string): string => {
   if (checkingDeps) {
     return (
       <div className="h-screen flex flex-col items-center justify-center" style={{ background: 'var(--color-surface)', color: 'var(--text-primary)' }}>
-        <AppLogo sizeClass="w-16 h-16 mb-4" />
+        <AppLogo sizeClass="w-28 h-28 mb-4" />
         <h1 className="text-lg font-semibold tracking-tight mb-1">{t('app.name')}</h1>
         <p style={{ color: 'var(--text-muted)', fontSize: '0.875rem' }}>{t('setup.checkingDependencies')}</p>
         <div className="mt-4 w-6 h-6 border-2 rounded-full animate-spin" style={{ borderColor: 'var(--color-accent)', borderTopColor: 'transparent' }} />
@@ -1174,7 +1174,7 @@ const fmtTime = useCallback((t: string): string => {
   if (!depsReady) {
     return (
       <div className="h-screen flex flex-col items-center justify-center px-6" style={{ background: 'var(--color-surface)', color: 'var(--text-primary)' }}>
-        <AppLogo sizeClass="w-24 h-24 mb-5" />
+        <AppLogo sizeClass="w-48 h-48 mb-6" />
         <h1 className="text-xl font-semibold tracking-tight mb-1">{t('setup.title')}</h1>
         <p className="text-sm mb-6 text-center max-w-sm" style={{ color: 'var(--text-secondary)' }}>
           {t('setup.description')}
