@@ -7,51 +7,67 @@ import (
 	"testing"
 )
 
-func TestVerifyScriptExistsAndRunsRequiredChecks(t *testing.T) {
-	data := mustReadRepoFile(t, "scripts", "verify.sh")
+func TestCanonicalVerifierRunsRequiredChecks(t *testing.T) {
+	data := mustReadRepoFile(t, "scripts", "verify.mjs")
 	for _, want := range []string{
-		"npm run test",
-		"npm run build",
-		"go test -count=1 ./...",
-		"go vet ./...",
+		`run("npm", ["run", "test"]`,
+		`run("npx", ["tsc", "--noEmit"]`,
+		`run("npm", ["run", "build"]`,
+		`run("npm", ["audit", "--audit-level=moderate"]`,
+		`run("node", ["--test"]`,
+		`run("go", ["test", "-count=1", "./..."]`,
+		`run("go", ["test", "-race", "-count=1", "./..."]`,
+		`run("go", ["vet", "./..."]`,
+		`govulncheck@v1.3.0`,
 	} {
 		if !strings.Contains(data, want) {
-			t.Fatalf("scripts/verify.sh missing %q", want)
+			t.Fatalf("scripts/verify.mjs missing %q", want)
 		}
 	}
-	if strings.Index(data, "npm run build") > strings.Index(data, "go test -count=1 ./...") {
-		t.Fatal("scripts/verify.sh must build frontend before go test so embedded frontend/dist exists")
+	if strings.Index(data, `run("npm", ["run", "build"]`) > strings.Index(data, `run("go", ["test", "-count=1", "./..."]`) {
+		t.Fatal("scripts/verify.mjs must build frontend before go test so embedded frontend/dist exists")
 	}
 }
 
-func TestMakefileUsesSharedVerifyScript(t *testing.T) {
+func TestVerifyLaunchersUseCanonicalVerifier(t *testing.T) {
+	for _, launcher := range []string{"verify.sh", "verify.bat"} {
+		data := mustReadRepoFile(t, "scripts", launcher)
+		if !strings.Contains(data, "verify.mjs") {
+			t.Fatalf("scripts/%s must use scripts/verify.mjs", launcher)
+		}
+		for _, duplicated := range []string{"go test", "npm run", "govulncheck"} {
+			if strings.Contains(data, duplicated) {
+				t.Fatalf("scripts/%s duplicates verifier command %q", launcher, duplicated)
+			}
+		}
+	}
+}
+
+func TestMakefileUsesCanonicalVerifier(t *testing.T) {
 	data := mustReadRepoFile(t, "Makefile")
 	if !strings.Contains(data, "verify:") {
 		t.Fatal("Makefile missing verify target")
 	}
-	if !strings.Contains(data, "./scripts/verify.sh") {
-		t.Fatal("Makefile verify target must use scripts/verify.sh")
+	if !strings.Contains(data, "node scripts/verify.mjs") {
+		t.Fatal("Makefile verify target must use scripts/verify.mjs")
 	}
 }
 
-func TestCIWorkflowIsManualOnly(t *testing.T) {
+func TestCIWorkflowRunsForPullRequestsAndMainPushes(t *testing.T) {
 	data := mustReadRepoFile(t, ".github", "workflows", "ci.yml")
 	for _, want := range []string{
 		"workflow_dispatch:",
-		"./scripts/verify.sh",
+		"pull_request:",
+		"push:",
+		"- main",
+		"node scripts/verify.mjs",
 	} {
 		if !strings.Contains(data, want) {
 			t.Fatalf(".github/workflows/ci.yml missing %q", want)
 		}
 	}
-	for _, forbidden := range []string{
-		"pull_request:",
-		"push:",
-		"tags:",
-	} {
-		if strings.Contains(data, forbidden) {
-			t.Fatalf(".github/workflows/ci.yml must not contain %q", forbidden)
-		}
+	if strings.Contains(data, "tags:") {
+		t.Fatal(".github/workflows/ci.yml must not run for version tags")
 	}
 }
 
@@ -72,15 +88,17 @@ func TestReleaseWorkflowOnlyRunsOnVersionTags(t *testing.T) {
 
 func TestReleaseWorkflowRunsVerificationBeforeBuild(t *testing.T) {
 	data := mustReadRepoFile(t, ".github", "workflows", "release.yml")
-	if !strings.Contains(data, "./scripts/verify.sh") {
-		t.Fatal("release workflow must run scripts/verify.sh before release build")
+	for _, want := range []string{"name: Verify", "node scripts/verify.mjs"} {
+		if !strings.Contains(data, want) {
+			t.Fatalf("release workflow verification missing %q", want)
+		}
 	}
 }
 
 func TestCIWorkflowInstallsLinuxSystemDepsBeforeVerify(t *testing.T) {
 	data := mustReadRepoFile(t, ".github", "workflows", "ci.yml")
 	deps := strings.Index(data, "Install Linux system deps")
-	verify := strings.Index(data, "run: ./scripts/verify.sh")
+	verify := strings.Index(data, "run: node scripts/verify.mjs")
 	if deps == -1 {
 		t.Fatal(".github/workflows/ci.yml missing Linux system dependency install step")
 	}
@@ -95,7 +113,7 @@ func TestCIWorkflowInstallsLinuxSystemDepsBeforeVerify(t *testing.T) {
 func TestReleaseWorkflowInstallsLinuxSystemDepsBeforeVerify(t *testing.T) {
 	data := mustReadRepoFile(t, ".github", "workflows", "release.yml")
 	deps := strings.Index(data, "Install Linux system deps")
-	verify := strings.Index(data, "run: ./scripts/verify.sh")
+	verify := strings.Index(data, "run: node scripts/verify.mjs")
 	if deps == -1 {
 		t.Fatal(".github/workflows/release.yml missing Linux system dependency install step")
 	}
@@ -113,6 +131,8 @@ func TestReleaseWorkflowPackagesArtifactsBeforeUpload(t *testing.T) {
 		"name: Package artifact",
 		"asset_name=",
 		"artifact_path=",
+		"sha256sum \"$asset_name\"",
+		"shasum -a 256 \"$asset_name\"",
 		"files: release-assets/*",
 	} {
 		if !strings.Contains(data, want) {
@@ -147,6 +167,37 @@ func TestReleaseWorkflowUsesBashForInjectVersionStep(t *testing.T) {
 		if !strings.Contains(data, want) {
 			t.Fatalf("release workflow missing %q", want)
 		}
+	}
+}
+
+func TestWorkflowsUsePatchedToolchains(t *testing.T) {
+	for _, wf := range []string{"release.yml", "ci.yml"} {
+		data := mustReadRepoFile(t, ".github", "workflows", wf)
+		for _, want := range []string{
+			"go-version: \"1.26.4\"",
+			"node-version: \"22\"",
+		} {
+			if !strings.Contains(data, want) {
+				t.Fatalf("%s missing %q", wf, want)
+			}
+		}
+	}
+}
+
+func TestGoModuleRequiresPatchedToolchain(t *testing.T) {
+	data := mustReadRepoFile(t, "go.mod")
+	if !strings.Contains(data, "go 1.26.4") {
+		t.Fatal("go.mod must require patched Go 1.26.4 or newer")
+	}
+}
+
+func TestReleaseWorkflowUsesLeastPrivilege(t *testing.T) {
+	data := mustReadRepoFile(t, ".github", "workflows", "release.yml")
+	read := strings.Index(data, "permissions:\n  contents: read")
+	release := strings.Index(data, "release:\n")
+	write := strings.LastIndex(data, "permissions:\n      contents: write")
+	if read == -1 || release == -1 || write < release {
+		t.Fatal("release workflow must default to contents: read and grant contents: write only to release job")
 	}
 }
 
@@ -207,7 +258,7 @@ func mustReadRepoFile(t *testing.T, parts ...string) string {
 	return string(data)
 }
 
-func TestWorkflowActionsUseVersionTagsNotRawSHAs(t *testing.T) {
+func TestWorkflowActionsUseImmutableSHAs(t *testing.T) {
 	for _, wf := range []string{"release.yml", "ci.yml"} {
 		data := mustReadRepoFile(t, ".github", "workflows", wf)
 		for i, line := range strings.Split(data, "\n") {
@@ -225,9 +276,9 @@ func TestWorkflowActionsUseVersionTagsNotRawSHAs(t *testing.T) {
 			if commentIdx := strings.Index(ref, "#"); commentIdx != -1 {
 				ref = strings.TrimSpace(ref[:commentIdx])
 			}
-			// Reject 40-char hex strings — these are almost always hallucinated by AI
-			if len(ref) == 40 && isAllHex(ref) {
-				t.Fatalf("%s line %d: action pinned to raw 40-char SHA %q — use a version tag (@v4) instead. Raw SHAs are frequently hallucinated by AI and unverifiable without network access.", wf, i+1, ref)
+			// Immutable action refs prevent mutable-tag supply-chain changes.
+			if len(ref) != 40 || !isAllHex(ref) {
+				t.Fatalf("%s line %d: action ref %q must be an immutable 40-character SHA", wf, i+1, ref)
 			}
 		}
 	}

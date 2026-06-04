@@ -1,28 +1,196 @@
 package main
 
 import (
+	"archive/zip"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"net/http"
+	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 	"unicode/utf8"
 )
 
-func TestFFmpegZipDestNamePreservesWindowsExecutableSuffix(t *testing.T) {
-	if got := ffmpegZipDestName("ffmpeg.exe", "windows"); got != "ffmpeg.exe" {
-		t.Fatalf("ffmpeg.exe destination = %q, want ffmpeg.exe", got)
+func TestDependencyArtifactsRequireIntegrityVerification(t *testing.T) {
+	for _, goos := range []string{"windows", "darwin", "linux"} {
+		artifact := ffmpegArtifactFor(goos)
+		if artifact.URL == "" || artifact.MaxBytes <= 0 {
+			t.Fatalf("%s artifact missing URL or size limit: %#v", goos, artifact)
+		}
+		if artifact.ChecksumURL == "" && artifact.SignatureURL == "" {
+			t.Fatalf("%s artifact has no integrity verification", goos)
+		}
 	}
-	if got := ffmpegZipDestName("ffprobe.exe", "windows"); got != "ffprobe.exe" {
-		t.Fatalf("ffprobe.exe destination = %q, want ffprobe.exe", got)
+}
+
+func TestDownloadFileRejectsOversizedContentLengthAndRemovesPartialFile(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Length", "100")
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+
+	dest := filepath.Join(t.TempDir(), "download")
+	app := NewApp()
+	err := app.downloadFile(context.Background(), server.URL, dest, "test", 10)
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("downloadFile error = %v, want size-limit error", err)
 	}
-	if got := ffmpegZipDestName("ffmpeg.exe", "darwin"); got != "ffmpeg" {
-		t.Fatalf("darwin ffmpeg.exe destination = %q, want ffmpeg", got)
+	if fileExists(dest) {
+		t.Fatal("oversized partial download was not removed")
+	}
+}
+
+func TestDownloadFileRejectsOversizedChunkedResponseAndRemovesPartialFile(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		_, _ = io.WriteString(w, strings.Repeat("x", 32))
+	}))
+	defer server.Close()
+
+	dest := filepath.Join(t.TempDir(), "download")
+	app := NewApp()
+	err := app.downloadFile(context.Background(), server.URL, dest, "test", 10)
+	if err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("downloadFile error = %v, want size-limit error", err)
+	}
+	if fileExists(dest) {
+		t.Fatal("oversized partial download was not removed")
+	}
+}
+
+func TestVerifyFileChecksumRejectsMismatch(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "asset")
+	if err := os.WriteFile(path, []byte("trusted"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	sum := sha256.Sum256([]byte("trusted"))
+	if err := verifyFileChecksum(path, fmt.Sprintf("%x", sum), "asset"); err != nil {
+		t.Fatalf("verifyFileChecksum valid digest: %v", err)
+	}
+	if err := verifyFileChecksum(path, strings.Repeat("0", sha256.Size*2), "asset"); err == nil {
+		t.Fatal("verifyFileChecksum accepted mismatched digest")
+	}
+}
+
+func TestExtractFFmpegZipBoundedExtractsOnlyFFmpeg(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "ffmpeg.zip")
+	archive, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(archive)
+	other, err := zw.Create("../../not-ffmpeg")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = other.Write([]byte("ignore"))
+	ffmpeg, err := zw.Create("bundle/bin/ffmpeg.exe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = ffmpeg.Write([]byte("binary"))
+	ffprobe, err := zw.Create("bundle/bin/ffprobe.exe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = ffprobe.Write([]byte("probe"))
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	dest := filepath.Join(root, "extracted")
+	if err := extractFFmpegFromZipBounded(context.Background(), archivePath, dest); err != nil {
+		t.Fatalf("extractFFmpegFromZipBounded: %v", err)
+	}
+	data, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "binary" {
+		t.Fatalf("extracted data = %q, want binary", data)
+	}
+	probeDest := filepath.Join(root, "ffprobe-extracted.exe")
+	if err := extractZipBinaryBounded(context.Background(), archivePath, probeDest, "ffprobe.exe"); err != nil {
+		t.Fatalf("extractZipBinaryBounded ffprobe: %v", err)
+	}
+	probeData, err := os.ReadFile(probeDest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(probeData) != "probe" {
+		t.Fatalf("extracted ffprobe data = %q, want probe", probeData)
+	}
+	if fileExists(filepath.Join(root, "not-ffmpeg")) {
+		t.Fatal("archive traversal member was extracted")
+	}
+}
+
+func TestExtractFFmpegZipBoundedHonorsCancellation(t *testing.T) {
+	root := t.TempDir()
+	archivePath := filepath.Join(root, "ffmpeg.zip")
+	archive, err := os.Create(archivePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	zw := zip.NewWriter(archive)
+	ffmpeg, err := zw.Create("bundle/bin/ffmpeg.exe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = ffmpeg.Write([]byte("binary"))
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := archive.Close(); err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	dest := filepath.Join(root, "extracted")
+	if err := extractFFmpegFromZipBounded(ctx, archivePath, dest); !errors.Is(err, context.Canceled) {
+		t.Fatalf("extractFFmpegFromZipBounded error = %v, want context.Canceled", err)
+	}
+	if fileExists(dest) {
+		t.Fatal("cancelled extraction created destination")
+	}
+}
+
+func TestReplaceFilePreservingOldReplacesContents(t *testing.T) {
+	root := t.TempDir()
+	src := filepath.Join(root, "new")
+	dest := filepath.Join(root, "installed")
+	if err := os.WriteFile(src, []byte("new"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(dest, []byte("old"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := replaceFilePreservingOld(src, dest); err != nil {
+		t.Fatalf("replaceFilePreservingOld: %v", err)
+	}
+	data, err := os.ReadFile(dest)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "new" {
+		t.Fatalf("installed data = %q, want new", data)
 	}
 }
 
@@ -95,9 +263,90 @@ func TestHelperProcess(_ *testing.T) {
 			Formats: []rawFormat{},
 		})
 		os.Exit(0)
+	case "spawn-child":
+		cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcess")
+		cmd.Env = append(os.Environ(), "KOALAPULL_HELPER_MODE=delayed-file")
+		if err := cmd.Start(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		if err := os.WriteFile(os.Getenv("KOALAPULL_HELPER_READY"), []byte("ready"), 0600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		time.Sleep(5 * time.Second)
+		os.Exit(0)
+	case "delayed-file":
+		time.Sleep(500 * time.Millisecond)
+		if err := os.WriteFile(os.Getenv("KOALAPULL_HELPER_SENTINEL"), []byte("child survived"), 0600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		os.Exit(0)
+	case "large-output":
+		fmt.Print(strings.Repeat("x", 64*1024))
+		os.Exit(0)
 	default:
 		fmt.Fprintln(os.Stderr, "unknown helper mode")
 		os.Exit(2)
+	}
+}
+
+func TestCommandOutputCancellationKillsProcessTree(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	root := t.TempDir()
+	ready := filepath.Join(root, "ready")
+	sentinel := filepath.Join(root, "sentinel")
+	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
+	t.Setenv("KOALAPULL_HELPER_MODE", "spawn-child")
+	t.Setenv("KOALAPULL_HELPER_READY", ready)
+	t.Setenv("KOALAPULL_HELPER_SENTINEL", sentinel)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		_, err := commandOutput(ctx, exe, "-test.run=TestHelperProcess")
+		done <- err
+	}()
+	deadline := time.Now().Add(3 * time.Second)
+	for !fileExists(ready) && time.Now().Before(deadline) {
+		time.Sleep(10 * time.Millisecond)
+	}
+	if !fileExists(ready) {
+		cancel()
+		t.Fatal("helper parent did not start child")
+	}
+	cancel()
+	select {
+	case err := <-done:
+		if !errors.Is(err, context.Canceled) {
+			t.Fatalf("commandOutput error = %v, want context.Canceled", err)
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("commandOutput did not return after cancellation")
+	}
+	time.Sleep(700 * time.Millisecond)
+	if fileExists(sentinel) {
+		t.Fatal("child process survived parent cancellation")
+	}
+}
+
+func TestCommandOutputLimitedRejectsOversizedOutput(t *testing.T) {
+	exe, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
+	t.Setenv("KOALAPULL_HELPER_MODE", "large-output")
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+	defer cancel()
+
+	out, err := commandOutputLimited(ctx, 1024, exe, "-test.run=TestHelperProcess")
+	if !errors.Is(err, errCommandOutputTooLarge) {
+		t.Fatalf("commandOutputLimited returned %d bytes and error %v, want output limit error", len(out), err)
 	}
 }
 
@@ -154,6 +403,53 @@ func TestDownloadRetryDecisionRequiresIdleTimeout(t *testing.T) {
 	}
 }
 
+func TestNormalizeDownloadAttemptErrorSuppressesOnlyFirstIdleTimeout(t *testing.T) {
+	base := errors.New("killed")
+	suppress, got := normalizeDownloadAttemptError(0, true, base)
+	if !suppress || !errors.Is(got, base) {
+		t.Fatalf("first idle timeout = (%v, %v), want suppressed base error", suppress, got)
+	}
+	suppress, got = normalizeDownloadAttemptError(1, true, base)
+	if suppress || !strings.Contains(got.Error(), "stalled") || !errors.Is(got, base) {
+		t.Fatalf("second idle timeout = (%v, %v), want visible stalled error", suppress, got)
+	}
+	suppress, got = normalizeDownloadAttemptError(0, false, base)
+	if suppress || got != base {
+		t.Fatalf("ordinary error = (%v, %v), want unchanged", suppress, got)
+	}
+}
+
+func TestVersionComparisonOnlyReportsNewerVersions(t *testing.T) {
+	tests := []struct {
+		latest  string
+		current string
+		want    bool
+	}{
+		{latest: "v1.2.4", current: "v1.2.3", want: true},
+		{latest: "1.2", current: "1.2.0", want: false},
+		{latest: "2026.05.01", current: "2026.04.30", want: true},
+		{latest: "2026.04.30", current: "2026.05.01", want: false},
+		{latest: "v1.2.3", current: "v1.2.3", want: false},
+		{latest: "malformed", current: "v1.2.3", want: false},
+		{latest: "v1.2.4", current: "", want: false},
+	}
+	for _, tt := range tests {
+		if got := isVersionNewer(tt.latest, tt.current); got != tt.want {
+			t.Errorf("isVersionNewer(%q, %q) = %v, want %v", tt.latest, tt.current, got, tt.want)
+		}
+	}
+}
+
+func TestBrowserOperationsRejectUnknownBrowser(t *testing.T) {
+	app := NewApp()
+	if _, err := app.IsBrowserRunning("unknown"); err == nil {
+		t.Fatal("IsBrowserRunning accepted unknown browser")
+	}
+	if err := app.KillBrowser("unknown"); err == nil {
+		t.Fatal("KillBrowser accepted unknown browser")
+	}
+}
+
 func TestAllowedDownloadURLRejectsNonHTTPProtocols(t *testing.T) {
 	if !isAllowedDownloadURL("https://example.com/video") {
 		t.Fatal("https URL was rejected")
@@ -165,6 +461,9 @@ func TestAllowedDownloadURLRejectsNonHTTPProtocols(t *testing.T) {
 		if isAllowedDownloadURL(raw) {
 			t.Fatalf("%q was allowed, want rejected", raw)
 		}
+	}
+	if err := NewApp().OpenExternalLink("file:///etc/passwd"); err == nil {
+		t.Fatal("OpenExternalLink accepted file URL")
 	}
 }
 
@@ -282,7 +581,6 @@ func TestDownloadPostProcessingArgsByPreset(t *testing.T) {
 	}
 }
 
-
 func TestHistoryHelpersPreserveFileOrder(t *testing.T) {
 	entries := []HistoryEntry{
 		{DownloadID: "old", Title: "first"},
@@ -294,7 +592,10 @@ func TestHistoryHelpersPreserveFileOrder(t *testing.T) {
 		t.Fatalf("writeHistoryEntriesToFile: %v", err)
 	}
 
-	got := readHistoryEntriesFromFile(path)
+	got, err := readHistoryEntriesFromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if len(got) != len(entries) {
 		t.Fatalf("history length = %d, want %d", len(got), len(entries))
 	}
@@ -310,6 +611,185 @@ func TestHistoryHelpersPreserveFileOrder(t *testing.T) {
 	}
 	if reversed[0].DownloadID != "new" || reversed[1].DownloadID != "old" {
 		t.Fatalf("reverseHistoryEntries returned %#v", reversed)
+	}
+}
+
+func TestUpdateSettingsFailurePreservesCacheAndSemaphore(t *testing.T) {
+	app := NewApp()
+	old := validateSettings(Settings{Theme: "dark", MaxConcurrency: 2})
+	app.cachedSettings = old
+	app.semLimit.Store(int32(old.MaxConcurrency))
+	app.settingsFilePath = filepath.Join(t.TempDir(), "missing", "settings.json")
+
+	err := app.UpdateSettings(Settings{Theme: "light", MaxConcurrency: 8})
+	if err == nil {
+		t.Fatal("UpdateSettings succeeded with unavailable settings directory")
+	}
+	got := app.GetSettings()
+	if got.Theme != old.Theme || got.MaxConcurrency != old.MaxConcurrency {
+		t.Fatalf("cached settings changed after failed write: %#v", got)
+	}
+	if got := app.semLimit.Load(); got != int32(old.MaxConcurrency) {
+		t.Fatalf("semaphore limit = %d, want %d", got, old.MaxConcurrency)
+	}
+}
+
+func TestConcurrentSettingsUpdatesKeepSemaphoreInSync(t *testing.T) {
+	app := NewApp()
+	app.settingsFilePath = filepath.Join(t.TempDir(), "settings.json")
+	app.cachedSettings = validateSettings(Settings{Theme: "dark", MaxConcurrency: 3})
+	app.semLimit.Store(3)
+
+	var wg sync.WaitGroup
+	for i := 0; i < 50; i++ {
+		wg.Add(1)
+		go func(limit int) {
+			defer wg.Done()
+			if err := app.UpdateSettings(Settings{Theme: "dark", MaxConcurrency: limit}); err != nil {
+				t.Errorf("UpdateSettings: %v", err)
+			}
+		}(i%maxMaxConcurrency + 1)
+	}
+	wg.Wait()
+
+	settings := app.GetSettings()
+	if got := int(app.semLimit.Load()); got != settings.MaxConcurrency {
+		t.Fatalf("semaphore limit = %d, cached settings = %d", got, settings.MaxConcurrency)
+	}
+}
+
+func TestHistoryMutationsPreserveCacheWhenPersistenceFails(t *testing.T) {
+	entry := HistoryEntry{DownloadID: "keep", Title: "keep"}
+	app := NewApp()
+	app.historyFilePath = filepath.Join(t.TempDir(), "missing", "history.json")
+	app.historyCache = []HistoryEntry{entry}
+	app.historyLoaded = true
+
+	if err := app.ClearHistory(); err == nil {
+		t.Fatal("ClearHistory succeeded with unavailable history directory")
+	}
+	if len(app.historyCache) != 1 || app.historyCache[0].DownloadID != entry.DownloadID {
+		t.Fatalf("ClearHistory changed cache after failed write: %#v", app.historyCache)
+	}
+
+	if err := app.DeleteHistoryEntry(entry.DownloadID); err == nil {
+		t.Fatal("DeleteHistoryEntry succeeded with unavailable history directory")
+	}
+	if len(app.historyCache) != 1 || app.historyCache[0].DownloadID != entry.DownloadID {
+		t.Fatalf("DeleteHistoryEntry changed cache after failed write: %#v", app.historyCache)
+	}
+}
+
+func TestHistoryFileRetainsNewestEntries(t *testing.T) {
+	entries := make([]HistoryEntry, maxHistoryEntries+5)
+	for i := range entries {
+		entries[i].DownloadID = fmt.Sprintf("%d", i)
+	}
+	path := filepath.Join(t.TempDir(), "history.json")
+	if err := writeHistoryEntriesToFile(path, entries); err != nil {
+		t.Fatalf("writeHistoryEntriesToFile: %v", err)
+	}
+
+	got, err := readHistoryEntriesFromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != maxHistoryEntries {
+		t.Fatalf("history length = %d, want %d", len(got), maxHistoryEntries)
+	}
+	if got[0].DownloadID != "5" || got[len(got)-1].DownloadID != fmt.Sprintf("%d", len(entries)-1) {
+		t.Fatalf("retained history range = %q..%q", got[0].DownloadID, got[len(got)-1].DownloadID)
+	}
+}
+
+func TestReadFileBoundedRejectsOversizedFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "large")
+	if err := os.WriteFile(path, []byte("12345"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readFileBounded(path, 4); err == nil {
+		t.Fatal("readFileBounded accepted oversized file")
+	}
+}
+
+func TestReadHistoryRejectsOversizedFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.json")
+	file, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := file.Truncate(maxHistoryFileBytes + 1); err != nil {
+		_ = file.Close()
+		t.Fatal(err)
+	}
+	if err := file.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readHistoryEntriesFromFile(path); err == nil || !strings.Contains(err.Error(), "exceeds") {
+		t.Fatalf("readHistoryEntriesFromFile error = %v, want size-limit error", err)
+	}
+}
+
+func TestSaveHistoryEntryCompactsBeforeReplacingCache(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.json")
+	entries := make([]HistoryEntry, maxHistoryEntries)
+	for i := range entries {
+		entries[i].DownloadID = fmt.Sprintf("%d", i)
+	}
+	if err := writeHistoryEntriesToFile(path, entries); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp()
+	app.historyFilePath = path
+	app.historyCache = append([]HistoryEntry(nil), entries...)
+	app.historyLoaded = true
+
+	app.saveHistoryEntry(HistoryEntry{DownloadID: "new"})
+
+	got, err := readHistoryEntriesFromFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != maxHistoryEntries || got[0].DownloadID != "1" || got[len(got)-1].DownloadID != "new" {
+		t.Fatalf("compacted history range = %d entries, %q..%q", len(got), got[0].DownloadID, got[len(got)-1].DownloadID)
+	}
+	if len(app.historyCache) != maxHistoryEntries || app.historyCache[len(app.historyCache)-1].DownloadID != "new" {
+		t.Fatalf("history cache not compacted: %d entries", len(app.historyCache))
+	}
+}
+
+func TestCorruptHistoryIsReportedAndPreserved(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "history.json")
+	original := "{\"downloadId\":\"old\"}\n{\"downloadId\":"
+	if err := os.WriteFile(path, []byte(original), 0600); err != nil {
+		t.Fatal(err)
+	}
+	app := NewApp()
+	app.historyFilePath = path
+	if _, err := app.GetHistory(); err == nil {
+		t.Fatal("expected corrupt history error")
+	}
+
+	app.saveHistoryEntry(HistoryEntry{DownloadID: "new"})
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(got) != original {
+		t.Fatalf("corrupt history was overwritten: %q", got)
+	}
+}
+
+func TestSaveHistoryEntryPreservesCacheWhenPersistenceFails(t *testing.T) {
+	app := NewApp()
+	app.historyFilePath = filepath.Join(t.TempDir(), "missing", "history.json")
+	app.historyCache = []HistoryEntry{{DownloadID: "old"}}
+	app.historyLoaded = true
+
+	app.saveHistoryEntry(HistoryEntry{DownloadID: "new"})
+
+	if len(app.historyCache) != 1 || app.historyCache[0].DownloadID != "old" {
+		t.Fatalf("history cache changed after failed write: %#v", app.historyCache)
 	}
 }
 

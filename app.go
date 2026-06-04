@@ -1,7 +1,6 @@
 package main
 
 import (
-	"archive/zip"
 	"bufio"
 	"bytes"
 	"context"
@@ -41,6 +40,7 @@ type App struct {
 	configDir        string
 	binDir           string
 	settingsFilePath string
+	historyFilePath  string
 	startupErr       error
 	settingsMu       sync.Mutex
 	dependencyMu     sync.Mutex
@@ -157,6 +157,9 @@ const (
 	maxMaxConcurrency      = 10
 	maxInputLength         = 2048
 	maxPathLength          = 4096
+	maxHistoryEntries      = 2000
+	maxHistoryFileBytes    = 64 << 20
+	maxMetadataOutputBytes = 16 << 20
 	defaultDownloadPreset  = "compatible"
 	defaultCustomFormatID  = "bestvideo+bestaudio/best"
 	defaultCustomContainer = "mp4"
@@ -232,6 +235,7 @@ func (a *App) startup(ctx context.Context) {
 		}
 	}
 	a.settingsFilePath = a.resolveSettingsPath()
+	a.historyFilePath = a.resolveHistoryPath()
 	if err := os.MkdirAll(a.binDir, 0755); err != nil {
 		a.startupErr = fmt.Errorf("create bin directory: %w", err)
 		log.Printf("create bin directory: %v", err)
@@ -242,7 +246,9 @@ func (a *App) startup(ctx context.Context) {
 	if err := a.migrateHistoryIfNeeded(); err != nil {
 		a.startupErr = errors.Join(a.startupErr, fmt.Errorf("migrate history: %w", err))
 	}
-	a.loadHistoryCache()
+	if err := a.loadHistoryCache(); err != nil {
+		log.Printf("load history: %v", err)
+	}
 	a.cleanupStaleTempFiles()
 }
 
@@ -270,6 +276,14 @@ func (a *App) ytdlpPath() string {
 
 func (a *App) ffmpegPath() string {
 	name := "ffmpeg"
+	if runtime.GOOS == "windows" {
+		name += ".exe"
+	}
+	return filepath.Join(a.binDir, name)
+}
+
+func (a *App) ffprobePath() string {
+	name := "ffprobe"
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
@@ -401,26 +415,25 @@ func (a *App) writeSettings(s Settings) error {
 
 func (a *App) writeSettingsLocked(s Settings) error {
 	s = validateSettings(s)
-	a.cachedSettings = s
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal settings: %w", err)
 	}
-	if err := os.WriteFile(a.settingsPath(), data, 0644); err != nil {
+	if err := writeFileAtomically(a.settingsPath(), data, 0644); err != nil {
 		return fmt.Errorf("write settings file: %w", err)
 	}
+	a.cachedSettings = s
 	return nil
 }
 
 func (a *App) UpdateSettings(s Settings) error {
 	s = validateSettings(s)
 	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
 	old := a.getSettingsLocked()
 	if err := a.writeSettingsLocked(s); err != nil {
-		a.settingsMu.Unlock()
 		return err
 	}
-	a.settingsMu.Unlock()
 	if s.MaxConcurrency != old.MaxConcurrency && s.MaxConcurrency > 0 {
 		oldLimit := int(a.semLimit.Load())
 		a.semLimit.Store(int32(s.MaxConcurrency))
@@ -577,13 +590,20 @@ func (a *App) portableHistoryPath() string {
 }
 
 func (a *App) historyPath() string {
+	if a.historyFilePath != "" {
+		return a.historyFilePath
+	}
+	return a.resolveHistoryPath()
+}
+
+func (a *App) resolveHistoryPath() string {
 	portable := a.portableHistoryPath()
 	return resolveSettingsPathFor(a.configDir, portable, "history.json")
 }
 
 func (a *App) migrateHistoryIfNeeded() error {
 	path := a.historyPath()
-	data, err := os.ReadFile(path)
+	data, err := readFileBounded(path, maxHistoryFileBytes)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return nil
@@ -603,12 +623,33 @@ func (a *App) migrateHistoryIfNeeded() error {
 	return writeHistoryEntriesToFile(path, entries)
 }
 
-func readHistoryEntriesFromFile(path string) []HistoryEntry {
-	data, err := os.ReadFile(path)
+func readFileBounded(path string, maxBytes int64) ([]byte, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	entries := make([]HistoryEntry, 0, 64)
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if int64(len(data)) > maxBytes {
+		return nil, fmt.Errorf("%s exceeds %d bytes", filepath.Base(path), maxBytes)
+	}
+	return data, nil
+}
+
+func readHistoryEntriesFromFile(path string) ([]HistoryEntry, error) {
+	data, err := readFileBounded(path, maxHistoryFileBytes)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	entries := make([]HistoryEntry, 0, maxHistoryEntries)
+	next := 0
+	wrapped := false
 	dec := json.NewDecoder(bytes.NewReader(data))
 	for {
 		var e HistoryEntry
@@ -616,14 +657,29 @@ func readHistoryEntriesFromFile(path string) []HistoryEntry {
 			if errors.Is(err, io.EOF) {
 				break
 			}
-			break
+			return nil, fmt.Errorf("decode history: %w", err)
 		}
-		entries = append(entries, e)
+		if len(entries) < maxHistoryEntries {
+			entries = append(entries, e)
+			continue
+		}
+		entries[next] = e
+		next = (next + 1) % maxHistoryEntries
+		wrapped = true
 	}
-	return entries
+	if wrapped {
+		ordered := make([]HistoryEntry, 0, maxHistoryEntries)
+		ordered = append(ordered, entries[next:]...)
+		ordered = append(ordered, entries[:next]...)
+		return ordered, nil
+	}
+	return entries, nil
 }
 
 func writeHistoryEntriesToFile(path string, entries []HistoryEntry) error {
+	if len(entries) > maxHistoryEntries {
+		entries = entries[len(entries)-maxHistoryEntries:]
+	}
 	dir := filepath.Dir(path)
 	tmp, err := os.CreateTemp(dir, ".history-*.tmp")
 	if err != nil {
@@ -638,36 +694,39 @@ func writeHistoryEntriesToFile(path string, entries []HistoryEntry) error {
 			return err
 		}
 	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		_ = os.Remove(tmpPath)
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmpPath)
 		return err
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		if removeErr := os.Remove(path); removeErr != nil && !os.IsNotExist(removeErr) {
-			_ = os.Remove(tmpPath)
-			return err
-		}
-		if retryErr := os.Rename(tmpPath, path); retryErr != nil {
-			_ = os.Remove(tmpPath)
-			return errors.Join(err, retryErr)
-		}
+	if err := replaceFilePreservingOld(tmpPath, path); err != nil {
+		_ = os.Remove(tmpPath)
+		return err
 	}
 	return nil
 }
 
-func (a *App) loadHistoryCache() {
+func (a *App) loadHistoryCache() error {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
-	a.ensureHistoryLoadedLocked()
+	return a.ensureHistoryLoadedLocked()
 }
 
-
-func (a *App) ensureHistoryLoadedLocked() {
+func (a *App) ensureHistoryLoadedLocked() error {
 	if a.historyLoaded {
-		return
+		return nil
 	}
-	a.historyCache = readHistoryEntriesFromFile(a.historyPath())
+	entries, err := readHistoryEntriesFromFile(a.historyPath())
+	if err != nil {
+		return err
+	}
+	a.historyCache = entries
 	a.historyLoaded = true
+	return nil
 }
 
 func reverseHistoryEntries(entries []HistoryEntry) []HistoryEntry {
@@ -678,50 +737,50 @@ func reverseHistoryEntries(entries []HistoryEntry) []HistoryEntry {
 	return out
 }
 
-func (a *App) GetHistory() []HistoryEntry {
+func (a *App) GetHistory() ([]HistoryEntry, error) {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
-	a.ensureHistoryLoadedLocked()
-	return reverseHistoryEntries(a.historyCache)
+	if err := a.ensureHistoryLoadedLocked(); err != nil {
+		return nil, fmt.Errorf("load history: %w", err)
+	}
+	return reverseHistoryEntries(a.historyCache), nil
 }
 
 func (a *App) saveHistoryEntry(entry HistoryEntry) {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
-	a.ensureHistoryLoadedLocked()
-	f, err := os.OpenFile(a.historyPath(), os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Printf("saveHistoryEntry open: %v", err)
+	if err := a.ensureHistoryLoadedLocked(); err != nil {
+		log.Printf("saveHistoryEntry load: %v", err)
 		return
 	}
-	enc := json.NewEncoder(f)
-	if err := enc.Encode(entry); err != nil {
-		_ = f.Close()
-		log.Printf("saveHistoryEntry encode: %v", err)
+	next := append(append([]HistoryEntry(nil), a.historyCache...), entry)
+	if len(next) > maxHistoryEntries {
+		next = next[len(next)-maxHistoryEntries:]
+	}
+	if err := writeHistoryEntriesToFile(a.historyPath(), next); err != nil {
+		log.Printf("saveHistoryEntry: %v", err)
 		return
 	}
-	if err := f.Close(); err != nil {
-		log.Printf("saveHistoryEntry close: %v", err)
-		return
-	}
-	a.historyCache = append(a.historyCache, entry)
+	a.historyCache = next
 }
 
-func (a *App) ClearHistory() {
+func (a *App) ClearHistory() error {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
 	if err := writeHistoryEntriesToFile(a.historyPath(), nil); err != nil {
-		log.Printf("ClearHistory write: %v", err)
-		return
+		return fmt.Errorf("clear history: %w", err)
 	}
 	a.historyCache = nil
 	a.historyLoaded = true
+	return nil
 }
 
-func (a *App) DeleteHistoryEntry(downloadID string) {
+func (a *App) DeleteHistoryEntry(downloadID string) error {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
-	a.ensureHistoryLoadedLocked()
+	if err := a.ensureHistoryLoadedLocked(); err != nil {
+		return fmt.Errorf("load history: %w", err)
+	}
 	path := a.historyPath()
 	filtered := make([]HistoryEntry, 0, len(a.historyCache))
 	for _, e := range a.historyCache {
@@ -730,10 +789,10 @@ func (a *App) DeleteHistoryEntry(downloadID string) {
 		}
 	}
 	if err := writeHistoryEntriesToFile(path, filtered); err != nil {
-		log.Printf("DeleteHistoryEntry write: %v", err)
-		return
+		return fmt.Errorf("delete history entry: %w", err)
 	}
 	a.historyCache = filtered
+	return nil
 }
 
 // ---------- Dependency Management ----------
@@ -741,8 +800,12 @@ func (a *App) DeleteHistoryEntry(downloadID string) {
 func (a *App) CheckDependencies() DependencyStatus {
 	return DependencyStatus{
 		YtDlpInstalled:  fileExists(a.ytdlpPath()),
-		FfmpegInstalled: fileExists(a.ffmpegPath()),
+		FfmpegInstalled: a.ffmpegToolsInstalled(),
 	}
+}
+
+func (a *App) ffmpegToolsInstalled() bool {
+	return fileExists(a.ffmpegPath()) && (runtime.GOOS != "windows" || fileExists(a.ffprobePath()))
 }
 
 func (a *App) GetYtdlpVersion() string {
@@ -847,21 +910,76 @@ func (a *App) CheckForUpdates() UpdateInfo {
 	info := UpdateInfo{}
 	if latest, err := fetchLatestYtdlpVersion(a.appContext()); err == nil && latest != "" {
 		info.LatestYtdlpVersion = latest
-		current := strings.TrimPrefix(a.GetYtdlpVersion(), "v")
-		latestStr := strings.TrimPrefix(latest, "v")
-		if current != "" && latestStr != current {
+		if isVersionNewer(latest, a.GetYtdlpVersion()) {
 			info.YtdlpUpdateAvailable = true
 		}
 	}
 	if AppVersion != "" && AppVersion != "dev" && !strings.Contains(AppVersion, "-") {
 		if latest, err := fetchLatestKoalaPullVersion(a.appContext()); err == nil && latest != "" {
 			info.LatestKoalaPullVersion = latest
-			if latest != AppVersion {
+			if isVersionNewer(latest, AppVersion) {
 				info.KoalaPullUpdateAvailable = true
 			}
 		}
 	}
 	return info
+}
+
+func isVersionNewer(latest, current string) bool {
+	cmp, ok := compareNumericVersions(latest, current)
+	return ok && cmp > 0
+}
+
+func compareNumericVersions(left, right string) (int, bool) {
+	parse := func(raw string) ([]int, bool) {
+		raw = strings.TrimPrefix(strings.TrimSpace(raw), "v")
+		if suffix := strings.IndexAny(raw, "-+"); suffix >= 0 {
+			raw = raw[:suffix]
+		}
+		if raw == "" {
+			return nil, false
+		}
+		parts := strings.Split(raw, ".")
+		values := make([]int, len(parts))
+		for i, part := range parts {
+			if part == "" {
+				return nil, false
+			}
+			value, err := strconv.Atoi(part)
+			if err != nil || value < 0 {
+				return nil, false
+			}
+			values[i] = value
+		}
+		return values, true
+	}
+
+	leftParts, leftOK := parse(left)
+	rightParts, rightOK := parse(right)
+	if !leftOK || !rightOK {
+		return 0, false
+	}
+	length := len(leftParts)
+	if len(rightParts) > length {
+		length = len(rightParts)
+	}
+	for i := 0; i < length; i++ {
+		leftValue := 0
+		if i < len(leftParts) {
+			leftValue = leftParts[i]
+		}
+		rightValue := 0
+		if i < len(rightParts) {
+			rightValue = rightParts[i]
+		}
+		if leftValue < rightValue {
+			return -1, true
+		}
+		if leftValue > rightValue {
+			return 1, true
+		}
+	}
+	return 0, true
 }
 
 func fetchLatestYtdlpVersion(ctx context.Context) (string, error) {
@@ -914,8 +1032,12 @@ func fetchLatestKoalaPullVersion(ctx context.Context) (string, error) {
 	return result.TagName, nil
 }
 
-func (a *App) OpenExternalLink(url string) {
+func (a *App) OpenExternalLink(url string) error {
+	if !isAllowedDownloadURL(url) {
+		return errors.New("external link must use http or https")
+	}
 	wailsRuntime.BrowserOpenURL(a.appContext(), url)
+	return nil
 }
 
 func (a *App) emitProgress(dep string, pct int, status, errMsg string) {
@@ -966,7 +1088,7 @@ func (a *App) DownloadDependencies() error {
 func (a *App) downloadYtdlp(force bool) error {
 	a.emitProgress("yt-dlp", 0, "downloading", "")
 	destPath := a.ytdlpPath()
-	if !force && fileExists(destPath) {
+	if !force && a.ffmpegToolsInstalled() {
 		a.emitProgress("yt-dlp", 100, "completed", "")
 		return nil
 	}
@@ -974,7 +1096,7 @@ func (a *App) downloadYtdlp(force bool) error {
 	tmpPath := destPath + ".tmp"
 	dlCtx, cancel := context.WithTimeout(a.appContext(), 10*time.Minute)
 	defer cancel()
-	if err := a.downloadFile(dlCtx, url, tmpPath, "yt-dlp"); err != nil {
+	if err := a.downloadFile(dlCtx, url, tmpPath, "yt-dlp", maxYtdlpDownloadBytes); err != nil {
 		os.Remove(tmpPath)
 		return err
 	}
@@ -982,14 +1104,15 @@ func (a *App) downloadYtdlp(force bool) error {
 		os.Remove(tmpPath)
 		return err
 	}
-	if err := os.Rename(tmpPath, destPath); err != nil {
-		os.Remove(tmpPath)
-		return fmt.Errorf("rename failed: %w", err)
-	}
 	if runtime.GOOS != "windows" {
-		if err := os.Chmod(destPath, 0755); err != nil {
+		if err := os.Chmod(tmpPath, 0755); err != nil {
+			os.Remove(tmpPath)
 			return fmt.Errorf("chmod failed: %w", err)
 		}
+	}
+	if err := replaceFilePreservingOld(tmpPath, destPath); err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("replace failed: %w", err)
 	}
 	if runtime.GOOS == "darwin" {
 		if err := command("xattr", "-d", "com.apple.quarantine", destPath).Run(); err != nil {
@@ -1007,48 +1130,59 @@ func (a *App) downloadFfmpeg(force bool) error {
 		a.emitProgress("ffmpeg", 100, "completed", "")
 		return nil
 	}
-	url := ffmpegDownloadURL()
+	artifact := ffmpegArtifactFor(runtime.GOOS)
 	tmpDir, err := os.MkdirTemp("", "koalapull-ffmpeg")
 	if err != nil {
 		return fmt.Errorf("temp dir failed: %w", err)
 	}
 	defer os.RemoveAll(tmpDir)
 	archivePath := filepath.Join(tmpDir, "ffmpeg-archive")
+	extractedPath := filepath.Join(tmpDir, "ffmpeg-extracted")
 	dlCtx, cancel := context.WithTimeout(a.appContext(), 10*time.Minute)
 	defer cancel()
-	if err := a.downloadFile(dlCtx, url, archivePath, "ffmpeg"); err != nil {
+	if err := a.downloadFile(dlCtx, artifact.URL, archivePath, "ffmpeg", artifact.MaxBytes); err != nil {
 		return err
 	}
-	destDir := filepath.Dir(destPath)
-	if runtime.GOOS == "darwin" || runtime.GOOS == "windows" {
-		if err := extractFFmpegFromZip(archivePath, destDir); err != nil {
-			return fmt.Errorf("zip extraction failed: %w", err)
-		}
-	} else {
-		if err := extractFFmpegFromTarXz(archivePath, destDir); err != nil {
-			return fmt.Errorf("tar extraction failed: %w", err)
-		}
+	if err := verifyFFmpegArchive(dlCtx, archivePath, artifact); err != nil {
+		return err
 	}
-	if !fileExists(destPath) {
+	if err := extractFFmpegArchive(dlCtx, archivePath, extractedPath); err != nil {
+		return fmt.Errorf("ffmpeg extraction failed: %w", err)
+	}
+	if !fileExists(extractedPath) {
 		return fmt.Errorf("ffmpeg binary not found after extraction")
 	}
 	if runtime.GOOS != "windows" {
-		if err := os.Chmod(destPath, 0755); err != nil {
+		if err := os.Chmod(extractedPath, 0755); err != nil {
 			return fmt.Errorf("chmod failed: %w", err)
 		}
+	} else {
+		ffprobePath := filepath.Join(tmpDir, "ffprobe-extracted.exe")
+		if err := extractZipBinaryBounded(dlCtx, archivePath, ffprobePath, "ffprobe.exe"); err != nil {
+			return fmt.Errorf("ffprobe extraction failed: %w", err)
+		}
+		if err := replaceFilePreservingOld(ffprobePath, a.ffprobePath()); err != nil {
+			return fmt.Errorf("replace ffprobe: %w", err)
+		}
+	}
+	if err := replaceFilePreservingOld(extractedPath, destPath); err != nil {
+		return fmt.Errorf("replace ffmpeg: %w", err)
 	}
 	a.emitProgress("ffmpeg", 100, "completed", "")
 	return nil
 }
 
-func (a *App) downloadFile(ctx context.Context, url, destPath, depName string) error {
+func (a *App) downloadFile(ctx context.Context, url, destPath, depName string, maxBytes int64) (retErr error) {
 	out, err := os.Create(destPath)
 	if err != nil {
 		return fmt.Errorf("create file failed: %w", err)
 	}
 	defer func() {
 		if out != nil {
-			_ = out.Close()
+			retErr = errors.Join(retErr, out.Close())
+		}
+		if retErr != nil {
+			_ = os.Remove(destPath)
 		}
 	}()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
@@ -1064,12 +1198,18 @@ func (a *App) downloadFile(ctx context.Context, url, destPath, depName string) e
 		return fmt.Errorf("bad status: %s", resp.Status)
 	}
 	total := resp.ContentLength
+	if total > maxBytes {
+		return fmt.Errorf("download exceeds %d bytes", maxBytes)
+	}
 	lastPct := -1
 	buf := make([]byte, 32*1024)
 	var written int64
 	for {
 		n, readErr := resp.Body.Read(buf)
 		if n > 0 {
+			if written+int64(n) > maxBytes {
+				return fmt.Errorf("download exceeds %d bytes", maxBytes)
+			}
 			if _, writeErr := out.Write(buf[:n]); writeErr != nil {
 				return fmt.Errorf("write failed: %w", writeErr)
 			}
@@ -1101,14 +1241,7 @@ func verifyYtdlpChecksum(ctx context.Context, filePath, assetName string) error 
 	if err != nil {
 		return fmt.Errorf("fetch yt-dlp checksum: %w", err)
 	}
-	actual, err := sha256File(filePath)
-	if err != nil {
-		return fmt.Errorf("hash yt-dlp: %w", err)
-	}
-	if actual != expected {
-		return fmt.Errorf("yt-dlp checksum mismatch")
-	}
-	return nil
+	return verifyFileChecksum(filePath, expected, "yt-dlp")
 }
 
 func fetchChecksumForAsset(ctx context.Context, checksumURL, assetName string) (string, error) {
@@ -1124,8 +1257,11 @@ func fetchChecksumForAsset(ctx context.Context, checksumURL, assetName string) (
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("bad checksum status: %s", resp.Status)
 	}
-	scanner := bufio.NewScanner(resp.Body)
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+	if resp.ContentLength > maxChecksumDownloadBytes {
+		return "", fmt.Errorf("checksum response exceeds %d bytes", maxChecksumDownloadBytes)
+	}
+	scanner := bufio.NewScanner(io.LimitReader(resp.Body, maxChecksumDownloadBytes+1))
+	scanner.Buffer(make([]byte, 0, 64*1024), int(maxChecksumDownloadBytes))
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
 		if len(fields) < 2 {
@@ -1162,132 +1298,10 @@ func sha256File(path string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func extractFFmpegFromZip(archivePath, destDir string) error {
-	r, err := zip.OpenReader(archivePath)
-	if err != nil {
-		return err
-	}
-	defer r.Close()
-	for _, f := range r.File {
-		if f.FileInfo().IsDir() {
-			continue
-		}
-		base := filepath.Base(f.Name)
-		if base != "ffmpeg" && base != "ffmpeg.exe" && base != "ffprobe" && base != "ffprobe.exe" {
-			continue
-		}
-		rc, err := f.Open()
-		if err != nil {
-			return err
-		}
-		binName := ffmpegZipDestName(base, runtime.GOOS)
-		dstPath := filepath.Join(destDir, binName)
-		dst, err := os.Create(dstPath)
-		if err != nil {
-			rc.Close()
-			return err
-		}
-		_, copyErr := io.Copy(dst, rc)
-		closeErr := dst.Close()
-		rcErr := rc.Close()
-		if copyErr != nil || closeErr != nil || rcErr != nil {
-			os.Remove(dstPath)
-			return errors.Join(copyErr, closeErr, rcErr)
-		}
-	}
-	return nil
-}
-
-func validateTarXzArchive(archivePath string) error {
-	cmd := command("tar", "-tJf", archivePath)
-	out, err := cmd.Output()
-	if err != nil {
-		return fmt.Errorf("tar list failed: %w", err)
-	}
-	scanner := bufio.NewScanner(strings.NewReader(string(out)))
-	scanner.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for scanner.Scan() {
-		if err := validateArchiveMemberName(scanner.Text()); err != nil {
-			return err
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return err
-	}
-	return nil
-}
-
 func validateArchiveMemberName(name string) error {
 	cleaned := filepath.Clean(name)
 	if name == "" || filepath.IsAbs(name) || strings.HasPrefix(cleaned, "..") || filepath.VolumeName(name) != "" {
 		return fmt.Errorf("unsafe archive path: %q", name)
-	}
-	return nil
-}
-
-func ffmpegZipDestName(base, goos string) string {
-	if goos == "windows" {
-		return base
-	}
-	return strings.TrimSuffix(base, ".exe")
-}
-
-func extractFFmpegFromTarXz(archivePath, destDir string) error {
-	tmpDir, err := os.MkdirTemp("", "koalapull-ffmpeg-extract")
-	if err != nil {
-		return fmt.Errorf("temp dir failed: %w", err)
-	}
-	defer os.RemoveAll(tmpDir)
-
-	if err := validateTarXzArchive(archivePath); err != nil {
-		return err
-	}
-
-	cmd := command("tar", "-xJf", archivePath, "-C", tmpDir)
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		return fmt.Errorf("tar failed: %s: %w", string(output), err)
-	}
-
-	var found bool
-	var walkErr error
-	walkErr = filepath.Walk(tmpDir, func(path string, info os.FileInfo, err error) error {
-		if err != nil {
-			return err
-		}
-		if found {
-			return nil
-		}
-		if !info.IsDir() && info.Mode().IsRegular() && filepath.Base(path) == "ffmpeg" {
-			src, openErr := os.Open(path)
-			if openErr != nil {
-				return openErr
-			}
-			defer src.Close()
-			dst, createErr := os.Create(filepath.Join(destDir, "ffmpeg"))
-			if createErr != nil {
-				return createErr
-			}
-			_, copyErr := io.Copy(dst, src)
-			closeErr := dst.Close()
-			if copyErr != nil {
-				os.Remove(filepath.Join(destDir, "ffmpeg"))
-				return copyErr
-			}
-			if closeErr != nil {
-				os.Remove(filepath.Join(destDir, "ffmpeg"))
-				return closeErr
-			}
-			found = true
-		}
-		return nil
-	})
-
-	if walkErr != nil {
-		return fmt.Errorf("walk temp dir: %w", walkErr)
-	}
-	if !found {
-		return fmt.Errorf("ffmpeg binary not found in archive")
 	}
 	return nil
 }
@@ -1306,17 +1320,6 @@ func ytdlpDownloadURL() string {
 
 func ytdlpChecksumsURL() string {
 	return "https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS"
-}
-
-func ffmpegDownloadURL() string {
-	switch runtime.GOOS {
-	case "windows":
-		return "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
-	case "darwin":
-		return "https://evermeet.cx/ffmpeg/get/zip"
-	default:
-		return "https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-linux64-gpl.tar.xz"
-	}
 }
 
 // ---------- Metadata Fetching ----------
@@ -1362,7 +1365,7 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	args = append(args, "--", url)
 	ctx, cancel, seq := a.newMetadataContext()
 	defer a.clearMetadataContext(cancel, seq)
-	stdout, err := commandOutput(ctx, a.ytdlpPath(), args...)
+	stdout, err := commandOutputLimited(ctx, maxMetadataOutputBytes, a.ytdlpPath(), args...)
 	if err != nil {
 		if ctx.Err() != nil {
 			return nil, fmt.Errorf("yt-dlp metadata timed out: %w", ctx.Err())
@@ -1557,7 +1560,11 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 				return
 			}
 			a.emitDownloadProgress(downloadID, 0, "", "", "", "retrying", "", "")
-			time.Sleep(2 * time.Second)
+			select {
+			case <-time.After(2 * time.Second):
+			case <-ctx.Done():
+				return
+			}
 			lastProgress.Store(time.Now())
 		}
 
@@ -1665,6 +1672,7 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 					continue
 				}
 				line := item.line
+				lastProgress.Store(time.Now())
 				if item.source == "stderr" {
 					if len(errLines) >= maxErrLines {
 						errLines = append(errLines[1:], line)
@@ -1675,11 +1683,9 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 				now := time.Now()
 				if matches := sizeLineRegex.FindStringSubmatch(line); matches != nil {
 					lastFileSz = matches[1]
-					lastProgress.Store(now)
 				}
 				if pct, fileSz, speed, eta, ok := parseProgressLine(line); ok {
 					lastPct, lastSpeed, lastETA, lastFileSz = pct, speed, eta, fileSz
-					lastProgress.Store(now)
 					if now.Sub(lastEmitTime) > 150*time.Millisecond || pct == 100 {
 						lastEmitTime = now
 						a.emitDownloadProgress(downloadID, pct, speed, eta, fileSz, "downloading", "", currentPS)
@@ -1706,9 +1712,13 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 					a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
 					return
 				}
+				suppress, normalizedErr := normalizeDownloadAttemptError(attempt, idleTimedOut.Load(), err)
+				if suppress {
+					return
+				}
 				errMsg := strings.Join(errLines, "\n")
-				if errMsg == "" {
-					errMsg = err.Error()
+				if errMsg == "" || idleTimedOut.Load() {
+					errMsg = normalizedErr.Error()
 				}
 				a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: errMsg, StartTime: startTime, EndTime: endTime})
 				a.emitDownloadProgress(downloadID, 0, "", "", "", "error", errMsg, "")
@@ -1733,6 +1743,16 @@ func shouldRetryDownloadAttempt(attempt int, idleTimedOut bool, parentErr error)
 	return attempt == 0 && idleTimedOut && parentErr == nil
 }
 
+func normalizeDownloadAttemptError(attempt int, idleTimedOut bool, err error) (suppress bool, normalized error) {
+	if !idleTimedOut {
+		return false, err
+	}
+	if attempt == 0 {
+		return true, err
+	}
+	return false, fmt.Errorf("download stalled for more than 5 minutes: %w", err)
+}
+
 func parseProgressLine(line string) (percent float64, fileSize, speed, eta string, ok bool) {
 	matches := progressRegex.FindStringSubmatch(line)
 	if matches == nil {
@@ -1752,5 +1772,3 @@ func parsePlaylistStatus(line string) string {
 	}
 	return fmt.Sprintf("%s %s of %s", matches[1], matches[2], matches[3])
 }
-
-

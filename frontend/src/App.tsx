@@ -10,6 +10,7 @@ import {
 } from "../wailsjs/go/main/App"
 import { EventsOn, ClipboardGetText } from "../wailsjs/runtime/runtime"
 import type { main } from "../wailsjs/go/models"
+import { createLatestSerializedWriter, startSerialPoll, type LatestSerializedWriter } from "./lib/asyncControl"
 import { formatTotalEta, parseBytes, parseSpeed, parseEta, formatSpeed, formatEta } from "./lib/downloadMetrics"
 import { createTranslator, getLanguageLocale, isSupportedLanguage, type LanguageCode } from "./lib/i18n"
 import appIcon from './assets/images/app-icon.png'
@@ -64,7 +65,6 @@ interface SupportedSite {
 
 type Tab = 'downloads' | 'history' | 'settings' | 'help'
 
-let historyRequestId = 0
 const maxVisibleHistoryEntries = 500
 
 const supportedSites: SupportedSite[] = [
@@ -98,6 +98,20 @@ const defaultCustomFormatId = 'bestvideo+bestaudio/best'
 const defaultCustomContainer = 'mp4'
 const defaultCustomSubtitle = 'none'
 const defaultDownloadPreset: DownloadPreset = 'compatible'
+const defaultAppSettings: AppSettings = {
+  defaultOutputDir: '',
+  theme: 'dark',
+  maxConcurrency: 3,
+  autoPasteURL: false,
+  language: 'en',
+  downloadPreset: defaultDownloadPreset,
+  customFormatId: defaultCustomFormatId,
+  customContainer: defaultCustomContainer,
+  customSubtitle: defaultCustomSubtitle,
+  cookieSource: 'none',
+  cookieBrowser: 'chrome',
+  cookieFilePath: '',
+}
 
 const downloadPresetOptions: Array<{ value: DownloadPreset; label: string; description: string }> = [
   { value: 'best', label: 'Best quality', description: 'Highest quality. Good for power users.' },
@@ -108,6 +122,31 @@ const downloadPresetOptions: Array<{ value: DownloadPreset; label: string; descr
 
 function isDownloadPreset(value: string): value is DownloadPreset {
   return value === 'best' || value === 'compatible' || value === 'audio' || value === 'custom'
+}
+
+function isCookieSource(value: string): value is AppSettings['cookieSource'] {
+  return value === 'none' || value === 'browser' || value === 'file'
+}
+
+function normalizeAppSettings(settings: main.Settings): AppSettings {
+  return {
+    defaultOutputDir: settings.defaultOutputDir || '',
+    theme: settings.theme || 'dark',
+    maxConcurrency: settings.maxConcurrency || 3,
+    autoPasteURL: !!settings.autoPasteURL,
+    language: isSupportedLanguage(settings.language) ? settings.language : 'en',
+    downloadPreset: isDownloadPreset(settings.downloadPreset) ? settings.downloadPreset : defaultDownloadPreset,
+    customFormatId: settings.customFormatId || defaultCustomFormatId,
+    customContainer: settings.customContainer || defaultCustomContainer,
+    customSubtitle: settings.customSubtitle || defaultCustomSubtitle,
+    cookieSource: isCookieSource(settings.cookieSource) ? settings.cookieSource : 'none',
+    cookieBrowser: settings.cookieBrowser || 'chrome',
+    cookieFilePath: settings.cookieFilePath || '',
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function resolveDownloadChoice(
@@ -407,6 +446,7 @@ const statusColors: Record<string, string> = {
 function App() {
   const urlInputRef = useRef<HTMLInputElement>(null)
   const fetchRequestIdRef = useRef(0)
+  const historyRequestIdRef = useRef(0)
   const [activeTab, setActiveTab] = useState<Tab>('downloads')
   const [url, setUrl] = useState('')
   const [fetched, setFetched] = useState(false)
@@ -429,20 +469,23 @@ function App() {
   const pendingProgressRef = useRef<Record<string, DownloadProgress>>({})
   const progressHistoryRef = useRef<Record<string, Array<{ timestamp: number; speed: number; eta: number }>>>({})
 
-  const [defaultOutputDir, setDefaultOutputDir] = useState('')
-  const [theme, setTheme] = useState('dark')
-  const [maxConcurrency, setMaxConcurrency] = useState(3)
-  const [autoPasteEnabled, setAutoPasteEnabled] = useState(false)
+  const [defaultOutputDir, setDefaultOutputDir] = useState(defaultAppSettings.defaultOutputDir)
+  const [theme, setTheme] = useState(defaultAppSettings.theme)
+  const [maxConcurrency, setMaxConcurrency] = useState(defaultAppSettings.maxConcurrency)
+  const [autoPasteEnabled, setAutoPasteEnabled] = useState(defaultAppSettings.autoPasteURL)
   const [language, setLanguage] = useState<LanguageCode>('en')
   const [cookieSource, setCookieSource] = useState<'none' | 'browser' | 'file'>('none')
   const [cookieBrowser, setCookieBrowser] = useState<string>('chrome')
   const [cookieFilePath, setCookieFilePath] = useState<string>('')
   const [browserRunning, setBrowserRunning] = useState<boolean>(false)
   const [isCheckingBrowser, setIsCheckingBrowser] = useState<boolean>(false)
+  const [browserError, setBrowserError] = useState('')
+  const [settingsError, setSettingsError] = useState('')
 
   const [history, setHistory] = useState<main.HistoryEntry[]>([])
   const [historySearch, setHistorySearch] = useState('')
   const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState('')
   const [appVersion, setAppVersion] = useState('')
   const [toolVersions, setToolVersions] = useState<VersionInfo | null>(null)
   const [toolVersionsLoading, setToolVersionsLoading] = useState(true)
@@ -457,15 +500,31 @@ function App() {
   tRef.current = t
   const tt = useCallback((key: string, params?: Record<string, string | number>) => t(`tooltips.${key}`, params), [t])
 
-  const settingsRef = useRef<AppSettings>({
-    defaultOutputDir: '', theme: 'dark', maxConcurrency: 3, autoPasteURL: false,
-    language: 'en', downloadPreset: defaultDownloadPreset,
-    customFormatId: defaultCustomFormatId, customContainer: defaultCustomContainer, customSubtitle: defaultCustomSubtitle,
-    cookieSource: 'none', cookieBrowser: 'chrome', cookieFilePath: '',
-  })
-  useEffect(() => {
-    settingsRef.current = { defaultOutputDir, theme, maxConcurrency, autoPasteURL: autoPasteEnabled, language, downloadPreset: selectedPreset, customFormatId: selectedFormat, customContainer: selectedContainer, customSubtitle: selectedSubs, cookieSource, cookieBrowser, cookieFilePath }
-  })
+  const applySettings = useCallback((settings: AppSettings) => {
+    setDefaultOutputDir(settings.defaultOutputDir)
+    setTheme(settings.theme)
+    setMaxConcurrency(settings.maxConcurrency)
+    setAutoPasteEnabled(settings.autoPasteURL)
+    setLanguage(settings.language)
+    setSelectedPreset(settings.downloadPreset)
+    setSelectedFormat(settings.customFormatId)
+    setSelectedContainer(settings.customContainer)
+    setSelectedSubs(settings.customSubtitle)
+    setCookieSource(settings.cookieSource)
+    setCookieBrowser(settings.cookieBrowser)
+    setCookieFilePath(settings.cookieFilePath)
+  }, [])
+  const settingsWriterRef = useRef<LatestSerializedWriter<AppSettings> | null>(null)
+  if (!settingsWriterRef.current) {
+    settingsWriterRef.current = createLatestSerializedWriter(
+      defaultAppSettings,
+      UpdateSettings,
+      (persisted, error) => {
+        applySettings(persisted)
+        setSettingsError(errorMessage(error))
+      },
+    )
+  }
 
   const activeCount = queue.filter((i) => ['queued', 'starting', 'downloading'].includes(i.status)).length
 
@@ -499,26 +558,28 @@ function App() {
   }, [language])
 
   useEffect(() => {
+    let cancelled = false
     GetSettings()
       .then((s) => {
-        setDefaultOutputDir(s.defaultOutputDir)
-        setTheme(s.theme || 'dark')
-        setMaxConcurrency(s.maxConcurrency || 3)
-        setAutoPasteEnabled(!!s.autoPasteURL)
-        setLanguage(isSupportedLanguage(s.language) ? s.language : 'en')
-        setSelectedPreset(isDownloadPreset(s.downloadPreset) ? s.downloadPreset : defaultDownloadPreset)
-        setSelectedFormat(s.customFormatId || defaultCustomFormatId)
-        setSelectedContainer(s.customContainer || defaultCustomContainer)
-        setSelectedSubs(s.customSubtitle || defaultCustomSubtitle)
-        setCookieSource((s.cookieSource as 'none' | 'browser' | 'file') || 'none')
-        setCookieBrowser(s.cookieBrowser || 'chrome')
-        setCookieFilePath(s.cookieFilePath || '')
+        if (cancelled) return
+        const settings = normalizeAppSettings(s)
+        if (settingsWriterRef.current?.initialize(settings)) applySettings(settings)
       })
-      .catch((err) => { console.warn('GetSettings failed:', err) })
-  }, [])
+      .catch((err) => {
+        if (!cancelled) setSettingsError(errorMessage(err))
+      })
+    return () => { cancelled = true }
+  }, [applySettings])
 
   const saveSettings = async (next: Partial<AppSettings>) => {
-    await UpdateSettings({ ...settingsRef.current, ...next })
+    setSettingsError('')
+    try {
+      await settingsWriterRef.current!.update(next)
+      setSettingsError('')
+    } catch (error) {
+      setSettingsError(errorMessage(error))
+      throw error
+    }
   }
 
   const loadAppVersion = async () => {
@@ -727,6 +788,7 @@ function App() {
   const checkBrowserClosedForCookies = async (): Promise<boolean> => {
     if (cookieSource !== 'browser') return true
     if (!isChromiumBrowser(cookieBrowser)) return true
+    setBrowserError('')
     try {
       const isRunning = await IsBrowserRunning(cookieBrowser)
       if (!isRunning) return true
@@ -755,43 +817,53 @@ function App() {
         }
       }
     } catch (err) {
-      console.warn("checkBrowserClosedForCookies error:", err)
+      setBrowserError(errorMessage(err))
+      return false
     }
     return true
   }
 
   const handleKillBrowser = async () => {
     setIsCheckingBrowser(true)
+    setBrowserError('')
     try {
       await KillBrowser(cookieBrowser)
       await new Promise((resolve) => setTimeout(resolve, 1000))
       const isRunning = await IsBrowserRunning(cookieBrowser)
       setBrowserRunning(isRunning)
     } catch (err) {
-      console.warn("KillBrowser failed:", err)
+      setBrowserError(errorMessage(err))
     } finally {
       setIsCheckingBrowser(false)
     }
   }
 
   useEffect(() => {
-    let timer: any
+    let cancelled = false
     if (activeTab === 'settings' && cookieSource === 'browser' && isChromiumBrowser(cookieBrowser)) {
-      const check = async () => {
-        try {
+      setBrowserError('')
+      const stop = startSerialPoll(
+        async () => {
           const isRunning = await IsBrowserRunning(cookieBrowser)
-          setBrowserRunning(isRunning)
-        } catch (err) {
-          console.warn("IsBrowserRunning check error:", err)
-        }
+          if (!cancelled) {
+            setBrowserRunning(isRunning)
+            setBrowserError('')
+          }
+        },
+        3000,
+        (error) => {
+          if (!cancelled) setBrowserError(errorMessage(error))
+        },
+      )
+      return () => {
+        cancelled = true
+        stop()
       }
-      void check()
-      timer = setInterval(() => { void check() }, 3000)
-    } else {
-      setBrowserRunning(false)
     }
+    setBrowserRunning(false)
+    setBrowserError('')
     return () => {
-      if (timer) clearInterval(timer)
+      cancelled = true
     }
   }, [activeTab, cookieSource, cookieBrowser, isChromiumBrowser])
 
@@ -873,26 +945,44 @@ function App() {
       if (!dir) return
       setDefaultOutputDir(dir)
       await saveSettings({ defaultOutputDir: dir })
-    } catch { /* user cancelled */ }
+    } catch (error) {
+      setSettingsError(errorMessage(error))
+    }
   }
 
   const loadHistory = async () => {
-    const id = ++historyRequestId
+    const id = ++historyRequestIdRef.current
     setHistoryLoading(true)
+    setHistoryError('')
     try {
       const h = await GetHistory()
-      if (id !== historyRequestId) return
+      if (id !== historyRequestIdRef.current) return
       setHistory(h)
-    } catch (err) { console.warn('loadHistory failed:', err) }
-    if (id === historyRequestId) setHistoryLoading(false)
+    } catch (error) {
+      if (id === historyRequestIdRef.current) setHistoryError(errorMessage(error))
+    } finally {
+      if (id === historyRequestIdRef.current) setHistoryLoading(false)
+    }
   }
 
   const handleClearHistory = async () => {
-    try { await ClearHistory(); setHistory([]) } catch (err) { console.warn('ClearHistory failed:', err) }
+    setHistoryError('')
+    try {
+      await ClearHistory()
+      setHistory([])
+    } catch (error) {
+      setHistoryError(errorMessage(error))
+    }
   }
 
   const handleDeleteHistoryEntry = async (id: string) => {
-    try { await DeleteHistoryEntry(id); setHistory((prev) => prev.filter((e) => e.downloadId !== id)) } catch (err) { console.warn('DeleteHistoryEntry failed:', err) }
+    setHistoryError('')
+    try {
+      await DeleteHistoryEntry(id)
+      setHistory((prev) => prev.filter((e) => e.downloadId !== id))
+    } catch (error) {
+      setHistoryError(errorMessage(error))
+    }
   }
 
   const handleThemeChange = async (newTheme: string) => {
@@ -1273,7 +1363,7 @@ const fmtTime = useCallback((t: string): string => {
                 <h2 className="text-base font-semibold inline-block" title={tt('searchHistory')}>{t('history.title')}</h2>
               </div>
               <div className="flex items-center gap-3 w-full sm:w-auto shrink-0">
-                {history.length > 0 && (
+                {(history.length > 0 || historyError) && (
                   <>
                     <input
                       type="text" value={historySearch}
@@ -1294,6 +1384,11 @@ const fmtTime = useCallback((t: string): string => {
               </div>
             </div>
             <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 lg:py-6">
+              {historyError && (
+                <div role="alert" className="mb-4 p-3 rounded-lg border text-xs text-red-400" style={{ borderColor: '#ef4444' }}>
+                  {historyError}
+                </div>
+              )}
               {historyLoading ? (
                 <div className="flex flex-col items-center justify-center py-16" style={{ color: 'var(--text-muted)' }}>
                   <div className="w-6 h-6 border-2 rounded-full animate-spin mb-3" style={{ borderColor: 'var(--color-accent)', borderTopColor: 'transparent' }} />
@@ -1320,6 +1415,11 @@ const fmtTime = useCallback((t: string): string => {
               <h2 className="text-base lg:text-lg font-semibold" title={tt('languageSelect')}>{t('settings.title')}</h2>
             </div>
             <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-5 lg:py-6">
+              {settingsError && (
+                <div role="alert" className="max-w-4xl mb-4 p-3 rounded-lg border text-xs text-red-400" style={{ borderColor: '#ef4444' }}>
+                  {settingsError}
+                </div>
+              )}
               <div className="max-w-4xl grid gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3 items-start">
               {/* Theme */}
               <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
@@ -1512,6 +1612,7 @@ const fmtTime = useCallback((t: string): string => {
                       <span className="text-base leading-none shrink-0" style={{ color: '#fbbf24' }}>⚠️</span>
                       <div className="flex-1 space-y-2">
                         <p style={{ color: 'var(--text-secondary)' }}>{t('settings.cookiesBrowserRunningWarning')}</p>
+                        {browserError && <p role="alert" className="text-red-400">{browserError}</p>}
                         {browserRunning ? (
                           <div className="flex items-center gap-2">
                             <span className="font-semibold text-red-500">{cookieBrowser} is running</span>
