@@ -66,8 +66,8 @@ export function OpenExternalLink(arg1) {
   return window['go']['main']['App']['OpenExternalLink'](arg1);
 }
 
-export function OpenOutputDir() {
-  return window['go']['main']['App']['OpenOutputDir']();
+export function OpenOutputDir(arg1) {
+  return window['go']['main']['App']['OpenOutputDir'](arg1);
 }
 
 export function SelectCookieFile() {

@@ -56,9 +56,6 @@ type App struct {
 	historyCache     []HistoryEntry
 	historyLoaded    bool
 	cachedSettings   Settings
-	metadataMu       sync.Mutex
-	metadataCancel   context.CancelFunc
-	metadataSeq      uint64
 }
 
 type DependencyStatus struct {
@@ -878,11 +875,16 @@ func (a *App) UpdateDependencies() error {
 	return a.downloadFfmpeg(true)
 }
 
-func (a *App) OpenOutputDir() error {
-	settings := a.GetSettings()
-	dir := settings.DefaultOutputDir
+func (a *App) OpenOutputDir(dir string) error {
 	if dir == "" {
-		dir = defaultOutputDir()
+		settings := a.GetSettings()
+		dir = settings.DefaultOutputDir
+		if dir == "" {
+			dir = defaultOutputDir()
+		}
+	}
+	if len(dir) > maxPathLength {
+		return fmt.Errorf("output dir path too long")
 	}
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
@@ -1394,8 +1396,8 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	settings := a.GetSettings()
 	args = append(args, a.getCookieArgs(settings)...)
 	args = append(args, "--", url)
-	ctx, cancel, seq := a.newMetadataContext()
-	defer a.clearMetadataContext(cancel, seq)
+	ctx, cancel := context.WithTimeout(a.appContext(), 30*time.Second)
+	defer cancel()
 	stdout, err := commandOutputLimited(ctx, maxMetadataOutputBytes, a.ytdlpPath(), args...)
 	if err != nil {
 		if ctx.Err() != nil {
@@ -1445,27 +1447,6 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 		})
 	}
 	return meta, nil
-}
-
-func (a *App) newMetadataContext() (context.Context, context.CancelFunc, uint64) {
-	a.metadataMu.Lock()
-	defer a.metadataMu.Unlock()
-	if a.metadataCancel != nil {
-		a.metadataCancel()
-	}
-	ctx, cancel := context.WithTimeout(a.appContext(), 30*time.Second)
-	a.metadataCancel = cancel
-	a.metadataSeq++
-	return ctx, cancel, a.metadataSeq
-}
-
-func (a *App) clearMetadataContext(cancel context.CancelFunc, seq uint64) {
-	a.metadataMu.Lock()
-	defer a.metadataMu.Unlock()
-	if a.metadataSeq == seq {
-		a.metadataCancel = nil
-	}
-	cancel()
 }
 
 // ---------- Download Execution ----------

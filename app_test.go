@@ -23,7 +23,55 @@ import (
 
 func init() {
 	isTesting = true
+	if os.Getenv("GO_WANT_HELPER_PROCESS") == "1" {
+		runHelperProcess()
+	}
 }
+
+func runHelperProcess() {
+	switch os.Getenv("KOALAPULL_HELPER_MODE") {
+	case "sleep-json":
+		delay, err := time.ParseDuration(os.Getenv("KOALAPULL_HELPER_DELAY_MS") + "ms")
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		time.Sleep(delay)
+		_ = json.NewEncoder(os.Stdout).Encode(rawMetadata{
+			ID:      "id",
+			Title:   "title",
+			Formats: []rawFormat{},
+		})
+		os.Exit(0)
+	case "spawn-child":
+		cmd := exec.Command(os.Args[0])
+		cmd.Env = append(os.Environ(), "KOALAPULL_HELPER_MODE=delayed-file")
+		if err := cmd.Start(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		if err := os.WriteFile(os.Getenv("KOALAPULL_HELPER_READY"), []byte("ready"), 0600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		time.Sleep(5 * time.Second)
+		os.Exit(0)
+	case "delayed-file":
+		time.Sleep(500 * time.Millisecond)
+		if err := os.WriteFile(os.Getenv("KOALAPULL_HELPER_SENTINEL"), []byte("child survived"), 0600); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(2)
+		}
+		os.Exit(0)
+	case "large-output":
+		fmt.Print(strings.Repeat("x", 64*1024))
+		os.Exit(0)
+	default:
+		fmt.Fprintln(os.Stderr, "unknown helper mode")
+		os.Exit(2)
+	}
+}
+
 
 func TestDependencyArtifactsRequireIntegrityVerification(t *testing.T) {
 	for _, goos := range []string{"windows", "darwin", "linux"} {
@@ -221,80 +269,43 @@ func TestFetchMetadataRespectsAppContextCancellation(t *testing.T) {
 	}
 }
 
-func TestFetchMetadataCancelsPreviousRequest(t *testing.T) {
+func TestFetchMetadataConcurrentRequestsDoNotInterfere(t *testing.T) {
 	binDir := installFakeYtDlp(t)
 	app := NewApp()
 	app.ctx = context.Background()
 	app.binDir = binDir
 	t.Setenv("KOALAPULL_HELPER_MODE", "sleep-json")
-	t.Setenv("KOALAPULL_HELPER_DELAY_MS", "1000")
+	t.Setenv("KOALAPULL_HELPER_DELAY_MS", "200")
 
-	firstDone := make(chan error, 1)
+	var wg sync.WaitGroup
+	wg.Add(2)
+	errs := make(chan error, 2)
+
 	go func() {
+		defer wg.Done()
 		_, err := app.FetchMetadata("https://example.invalid/one")
-		firstDone <- err
-	}()
-	time.Sleep(50 * time.Millisecond)
-
-	_, _ = app.FetchMetadata("https://example.invalid/two")
-
-	select {
-	case err := <-firstDone:
-		if err == nil {
-			t.Fatal("first FetchMetadata succeeded, want cancellation")
-		}
-	case <-time.After(300 * time.Millisecond):
-		t.Fatal("first FetchMetadata was not cancelled by second request")
-	}
-}
-
-func TestHelperProcess(_ *testing.T) {
-	if os.Getenv("GO_WANT_HELPER_PROCESS") != "1" {
-		return
-	}
-
-	switch os.Getenv("KOALAPULL_HELPER_MODE") {
-	case "sleep-json":
-		delay, err := time.ParseDuration(os.Getenv("KOALAPULL_HELPER_DELAY_MS") + "ms")
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(2)
+			errs <- fmt.Errorf("first request failed: %w", err)
 		}
-		time.Sleep(delay)
-		_ = json.NewEncoder(os.Stdout).Encode(rawMetadata{
-			ID:      "id",
-			Title:   "title",
-			Formats: []rawFormat{},
-		})
-		os.Exit(0)
-	case "spawn-child":
-		cmd := exec.Command(os.Args[0], "-test.run=TestHelperProcess")
-		cmd.Env = append(os.Environ(), "KOALAPULL_HELPER_MODE=delayed-file")
-		if err := cmd.Start(); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(2)
+	}()
+
+	go func() {
+		defer wg.Done()
+		time.Sleep(50 * time.Millisecond)
+		_, err := app.FetchMetadata("https://example.invalid/two")
+		if err != nil {
+			errs <- fmt.Errorf("second request failed: %w", err)
 		}
-		if err := os.WriteFile(os.Getenv("KOALAPULL_HELPER_READY"), []byte("ready"), 0600); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(2)
-		}
-		time.Sleep(5 * time.Second)
-		os.Exit(0)
-	case "delayed-file":
-		time.Sleep(500 * time.Millisecond)
-		if err := os.WriteFile(os.Getenv("KOALAPULL_HELPER_SENTINEL"), []byte("child survived"), 0600); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(2)
-		}
-		os.Exit(0)
-	case "large-output":
-		fmt.Print(strings.Repeat("x", 64*1024))
-		os.Exit(0)
-	default:
-		fmt.Fprintln(os.Stderr, "unknown helper mode")
-		os.Exit(2)
+	}()
+
+	wg.Wait()
+	close(errs)
+
+	for err := range errs {
+		t.Error(err)
 	}
 }
+
 
 func TestCommandOutputCancellationKillsProcessTree(t *testing.T) {
 	exe, err := os.Executable()

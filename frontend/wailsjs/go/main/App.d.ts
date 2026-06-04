@@ -34,7 +34,7 @@ export function KillBrowser(arg1:string):Promise<void>;
 
 export function OpenExternalLink(arg1:string):Promise<void>;
 
-export function OpenOutputDir():Promise<void>;
+export function OpenOutputDir(arg1:string):Promise<void>;
 
 export function SelectCookieFile():Promise<string>;
 

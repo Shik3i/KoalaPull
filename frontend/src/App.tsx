@@ -28,7 +28,7 @@ interface VideoMetadata {
 
 interface QueueItem {
   id: string; title: string; thumbnail: string; status: string
-  progress: number; speed: string; eta: string; fileSize: string; errorMsg: string; playlistStatus: string
+  progress: number; speed: string; eta: string; fileSize: string; errorMsg: string; playlistStatus: string; outputDir: string
 }
 
 interface DepProgress {
@@ -245,7 +245,7 @@ function buildFormatOptions(formats: FormatInfo[], t: (key: string, params?: Rec
   return options
 }
 
-function HistoryEntries({ entries, search, onDelete, fmtTime, t }: { entries: main.HistoryEntry[]; search: string; onDelete: (id: string) => void; fmtTime: (t: string) => string; t: (key: string, params?: Record<string, string | number>) => string }) {
+function HistoryEntries({ entries, search, onDelete, onReuse, fmtTime, t }: { entries: main.HistoryEntry[]; search: string; onDelete: (id: string) => void; onReuse: (url: string) => void; fmtTime: (t: string) => string; t: (key: string, params?: Record<string, string | number>) => string }) {
   const filtered = useMemo(() => {
     if (!search) return entries
     const q = search.toLowerCase()
@@ -267,13 +267,13 @@ function HistoryEntries({ entries, search, onDelete, fmtTime, t }: { entries: ma
         </div>
       )}
       {visible.map((entry) => (
-        <HistoryRow key={entry.downloadId} entry={entry} onDelete={onDelete} fmtTime={fmtTime} t={t} />
+        <HistoryRow key={entry.downloadId} entry={entry} onDelete={onDelete} onReuse={onReuse} fmtTime={fmtTime} t={t} />
       ))}
     </div>
   )
 }
 
-const HistoryRow = memo(({ entry, onDelete, fmtTime, t }: { entry: main.HistoryEntry; onDelete: (id: string) => void; fmtTime: (t: string) => string; t: (key: string, params?: Record<string, string | number>) => string }) => {
+const HistoryRow = memo(({ entry, onDelete, onReuse, fmtTime, t }: { entry: main.HistoryEntry; onDelete: (id: string) => void; onReuse: (url: string) => void; fmtTime: (t: string) => string; t: (key: string, params?: Record<string, string | number>) => string }) => {
   const statusKey = `downloads.status.${entry.status}`
   return (
     <div className="rounded-lg p-3.5 lg:p-4 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
@@ -292,17 +292,18 @@ const HistoryRow = memo(({ entry, onDelete, fmtTime, t }: { entry: main.HistoryE
           <p className="mt-1 text-xs truncate" style={{ color: '#f87171' }}>{entry.errorMsg}</p>
         )}
       </div>
-      <button
-        onClick={() => onDelete(entry.downloadId)}
-        className="shrink-0 transition-colors p-1 rounded"
-        style={{ color: 'var(--text-muted)' }}
-        title={t('actions.deleteEntry')}
-        aria-label={t('actions.deleteEntry')}
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-        </svg>
-      </button>
+      <div className="shrink-0 flex items-center gap-1">
+        <button onClick={() => onReuse(entry.url)} className="icon-button" style={{ color: 'var(--color-accent)' }} title={t('actions.useAgain')} aria-label={t('actions.useAgain')}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v6h6M20 20v-6h-6M5.5 15a7 7 0 0011.5 2M18.5 9A7 7 0 007 7" />
+          </svg>
+        </button>
+        <button onClick={() => onDelete(entry.downloadId)} className="icon-button" style={{ color: 'var(--text-muted)' }} title={t('actions.deleteEntry')} aria-label={t('actions.deleteEntry')}>
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+          </svg>
+        </button>
+      </div>
     </div>
   )
 })
@@ -317,7 +318,7 @@ const QueueRow = memo(({
 }: {
   item: QueueItem
   onCancel: (id: string) => void
-  onOpenFolder: () => void
+  onOpenFolder: (outputDir: string) => void
   statusColors: Record<string, string>
   tt: (key: string) => string
   t: any
@@ -379,7 +380,7 @@ const QueueRow = memo(({
       </div>
       {item.status === 'completed' && (
         <div className="flex items-center gap-1.5">
-          <button onClick={onOpenFolder} className="transition-colors p-1 rounded" style={{ color: 'var(--text-muted)' }} title={tt('openOutputFolder')} aria-label={tt('openOutputFolder')}>
+          <button onClick={() => onOpenFolder(item.outputDir)} className="icon-button" style={{ color: 'var(--text-muted)' }} title={tt('openOutputFolder')} aria-label={tt('openOutputFolder')}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
             </svg>
@@ -394,7 +395,7 @@ const QueueRow = memo(({
           <svg className="w-5 h-5 animate-pulse shrink-0" style={{ color: 'var(--color-accent)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
           </svg>
-          <button onClick={() => onCancel(item.id)} className="transition-colors p-0.5" style={{ color: 'var(--text-muted)' }} title={tt('cancelDownload')} aria-label={tt('cancelDownload')}>
+          <button onClick={() => onCancel(item.id)} className="icon-button" style={{ color: 'var(--text-muted)' }} title={tt('cancelDownload')} aria-label={tt('cancelDownload')}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -402,7 +403,7 @@ const QueueRow = memo(({
         </div>
       )}
       {item.status === 'queued' && (
-        <button onClick={() => onCancel(item.id)} className="transition-colors p-0.5 shrink-0" style={{ color: 'var(--text-muted)' }} title={tt('cancelDownload')} aria-label={tt('cancelDownload')}>
+        <button onClick={() => onCancel(item.id)} className="icon-button shrink-0" style={{ color: 'var(--text-muted)' }} title={tt('cancelDownload')} aria-label={tt('cancelDownload')}>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
           </svg>
@@ -926,6 +927,7 @@ function App() {
           fileSize: pending ? pending.fileSize : '',
           errorMsg: pending ? (pending.error || '') : '',
           playlistStatus: pending ? (pending.playlistStatus || '') : '',
+          outputDir: defaultOutputDir,
         }
         delete pendingProgressRef.current[downloadId]
         return [
@@ -945,8 +947,8 @@ function App() {
     CancelDownload(id).catch((err) => { console.warn('CancelDownload failed:', err) })
   }, [])
 
-  const handleOpenFolder = useCallback(() => {
-    OpenOutputDir().catch((err) => { console.warn('OpenOutputDir failed:', err) })
+  const handleOpenFolder = useCallback((outputDir: string) => {
+    OpenOutputDir(outputDir).catch((err) => { console.warn('OpenOutputDir failed:', err) })
   }, [])
 
   const handleClearCompleted = () => {
@@ -998,6 +1000,12 @@ function App() {
       setHistoryError(errorMessage(error))
     }
   }
+
+  const handleReuseHistoryURL = useCallback((historyURL: string) => {
+    setUrl(historyURL)
+    setActiveTab('downloads')
+    window.setTimeout(() => urlInputRef.current?.focus(), 0)
+  }, [])
 
   const handleThemeChange = async (newTheme: string) => {
     setTheme(newTheme)
@@ -1091,12 +1099,12 @@ const fmtTime = useCallback((t: string): string => {
 
   // --- Main App ---
   return (
-    <div className="h-screen flex min-w-[720px]" style={{ background: 'var(--color-surface)', color: 'var(--text-primary)' }}>
+    <div className="h-screen flex" style={{ background: 'var(--color-surface)', color: 'var(--text-primary)' }}>
       {/* Sidebar */}
-      <aside className="w-52 shrink-0 flex flex-col border-r" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
-        <div className="flex items-center gap-1.5 px-5 py-4" style={{ background: 'var(--color-surface-light)', borderBottom: '1px solid var(--color-surface-border)' }}>
-          <AppLogo sizeClass="w-16 h-16" />
-          <span className="font-bold text-2xl tracking-tight">{t('app.name')}</span>
+      <aside className="w-16 md:w-52 shrink-0 flex flex-col border-r" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+        <div className="flex items-center justify-center md:justify-start gap-1.5 px-2 md:px-5 py-4" style={{ background: 'var(--color-surface-light)', borderBottom: '1px solid var(--color-surface-border)' }}>
+          <AppLogo sizeClass="w-10 h-10 md:w-16 md:h-16" />
+          <span className="hidden md:inline font-bold text-2xl tracking-tight">{t('app.name')}</span>
         </div>
         <nav className="flex-1 px-3 py-4 space-y-1" style={{ color: 'var(--text-secondary)' }}>
           {tabs.map((tab) => (
@@ -1104,20 +1112,20 @@ const fmtTime = useCallback((t: string): string => {
               key={tab.id}
               type="button"
               onClick={() => handleTabSwitch(tab.id)}
-              className={`sidebar-tab w-full text-left ${activeTab === tab.id ? 'active' : ''}`}
+              className={`sidebar-tab w-full justify-center md:justify-start px-2 md:px-4 text-left ${activeTab === tab.id ? 'active' : ''}`}
               title={tt(`tabs.${tab.id}`)}
               aria-label={tt(`tabs.${tab.id}`)}
               aria-current={activeTab === tab.id ? 'page' : undefined}
             >
               <span className="text-base">{tab.icon}</span>
-              <span className="flex-1">{tab.label}</span>
+              <span className="hidden md:inline flex-1">{tab.label}</span>
               {tab.id === 'downloads' && activeCount > 0 && (
-                <span className="text-xs font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--color-accent)', color: '#000' }}>
+                <span className="hidden md:inline text-xs font-medium px-1.5 py-0.5 rounded-full" style={{ background: 'var(--color-accent)', color: '#000' }}>
                   {activeCount}
                 </span>
               )}
               {tab.id === 'settings' && (updateInfo?.ytdlpUpdateAvailable || updateInfo?.koalaPullUpdateAvailable) && (
-                <span className="text-xs font-medium px-1.5 py-0.5 rounded-full" style={{ background: '#fbbf24', color: '#000' }}>
+                <span className="hidden md:inline text-xs font-medium px-1.5 py-0.5 rounded-full" style={{ background: '#fbbf24', color: '#000' }}>
                   {(updateInfo?.ytdlpUpdateAvailable ? 1 : 0) + (updateInfo?.koalaPullUpdateAvailable ? 1 : 0)}
                 </span>
               )}
@@ -1135,7 +1143,7 @@ const fmtTime = useCallback((t: string): string => {
             <svg className="w-4 h-4 shrink-0" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.21 11.38.6.11.79-.26.79-.58v-2.23c-3.34.73-4.03-1.41-4.03-1.41-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.84 1.24 1.84 1.24 1.07 1.83 2.81 1.3 3.49 1 .11-.78.42-1.31.76-1.61-2.66-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.53-1.53.12-3.18 0 0 1-.32 3.3 1.23.96-.27 1.98-.4 3-.4s2.05.13 3.01.4c2.29-1.55 3.3-1.23 3.3-1.23.65 1.65.24 2.88.12 3.18.77.84 1.24 1.91 1.24 3.22 0 4.61-2.81 5.62-5.48 5.92.43.37.82 1.1.82 2.22v3.29c0 .32.19.69.8.57C20.56 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12z" />
             </svg>
-            <span className="font-mono text-xs">{formatAppVersionLabel(appVersion)}</span>
+            <span className="hidden md:inline font-mono text-xs">{formatAppVersionLabel(appVersion)}</span>
           </button>
         </div>
       </aside>
@@ -1146,7 +1154,7 @@ const fmtTime = useCallback((t: string): string => {
         {activeTab === 'downloads' && (
             <div className="flex-1 flex flex-col overflow-hidden">
             <div className="px-4 lg:px-8 py-4 lg:py-5 shrink-0">
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <div className="flex-1 relative">
                   <label htmlFor="urlInput" className="sr-only">Video URL</label>
                   <input
@@ -1167,7 +1175,7 @@ const fmtTime = useCallback((t: string): string => {
                         setMetadata(null)
                         setFetchError('')
                       }}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 text-lg leading-none"
+                      className="icon-button absolute right-1 top-1/2 -translate-y-1/2 text-lg leading-none"
                       style={{ color: 'var(--text-muted)' }}
                       title={tt('clearUrl')}
                       aria-label={tt('clearUrl')}
@@ -1193,7 +1201,7 @@ const fmtTime = useCallback((t: string): string => {
             <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 lg:py-6 space-y-4">
               {fetched && metadata && (
                 <div className="rounded-lg overflow-hidden" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
-                  <div className="flex gap-4 p-4">
+                  <div className="flex flex-col sm:flex-row gap-4 p-4">
                     {metadata.thumbnail ? (
                       <img src={metadata.thumbnail} alt={metadata.title} loading="lazy" className="w-36 lg:w-52 h-20 lg:h-28 rounded-md object-cover shrink-0" style={{ background: 'var(--color-surface-lighter)' }} />
                     ) : (
@@ -1416,7 +1424,7 @@ const fmtTime = useCallback((t: string): string => {
                   <p className="text-sm">{t('history.empty')}</p>
                 </div>
               ) : (
-                <HistoryEntries entries={history} search={historySearch} onDelete={handleDeleteHistoryEntry} fmtTime={fmtTime} t={t} />
+                <HistoryEntries entries={history} search={historySearch} onDelete={handleDeleteHistoryEntry} onReuse={handleReuseHistoryURL} fmtTime={fmtTime} t={t} />
               )}
             </div>
           </div>
@@ -1443,9 +1451,10 @@ const fmtTime = useCallback((t: string): string => {
                     <button
                       key={themeOption}
                       onClick={() => handleThemeChange(themeOption)}
-                      className="flex-1 rounded-lg py-3 px-4 text-sm font-medium transition-colors"
+                      className="flex-1 rounded-lg py-3 px-4 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
                       title={themeOption === 'dark' ? tt('themeDark') : tt('themeLight')}
                       aria-label={themeOption === 'dark' ? tt('themeDark') : tt('themeLight')}
+                      aria-pressed={theme === themeOption}
                       style={{
                         background: theme === themeOption ? 'color-mix(in srgb, var(--color-accent) 20%, transparent)' : 'var(--color-surface-lighter)',
                         border: theme === themeOption ? '1px solid var(--color-accent)' : '1px solid var(--color-surface-border)',

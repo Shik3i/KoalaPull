@@ -27,7 +27,7 @@ func main() {
 		Title:     "KoalaPull",
 		Width:     1280,
 		Height:    800,
-		MinWidth:  960,
+		MinWidth:  560,
 		MinHeight: 600,
 		AssetServer: &assetserver.Options{
 			Assets: assets,
