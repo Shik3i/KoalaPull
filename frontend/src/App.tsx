@@ -1651,27 +1651,6 @@ const fmtTime = useCallback((t: string): string => {
                 </div>
               </section>
 
-              {/* Max Concurrency */}
-              <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
-                <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('maxConcurrency')}>{t('settings.downloads')}</h3>
-                <div className="flex items-center gap-3">
-                  <label htmlFor="maxConcurrency" className="text-xs" style={{ color: 'var(--text-muted)', minWidth: '7rem' }} title={tt('maxConcurrency')}>{t('settings.maxParallelDownloads')}</label>
-                  <input
-                    id="maxConcurrency"
-                    type="number" min={1} max={10}
-                    value={maxConcurrency}
-                    onChange={async (e) => {
-                      const v = Math.max(1, Math.min(10, parseInt(e.target.value) || 1))
-                      setMaxConcurrency(v)
-                      try { await saveSettings({ maxConcurrency: v }) } catch (err) { console.warn('UpdateSettings failed:', err) }
-                    }}
-                    className="input-dark text-xs w-16 text-center"
-                    title={tt('maxConcurrency')}
-                    aria-label={tt('maxConcurrency')}
-                  />
-                </div>
-              </section>
-
               {/* Auto-Paste URL */}
               <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <div className="flex items-center justify-between">
@@ -1699,6 +1678,29 @@ const fmtTime = useCallback((t: string): string => {
                       style={{ left: '2px', transform: autoPasteEnabled ? 'translateX(20px)' : 'translateX(0)' }}
                     />
                   </button>
+                </div>
+              </section>
+
+              {showAdvanced && (
+              <>
+              {/* Max Concurrency */}
+              <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+                <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('maxConcurrency')}>{t('settings.downloads')}</h3>
+                <div className="flex items-center gap-3">
+                  <label htmlFor="maxConcurrency" className="text-xs" style={{ color: 'var(--text-muted)', minWidth: '7rem' }} title={tt('maxConcurrency')}>{t('settings.maxParallelDownloads')}</label>
+                  <input
+                    id="maxConcurrency"
+                    type="number" min={1} max={10}
+                    value={maxConcurrency}
+                    onChange={async (e) => {
+                      const v = Math.max(1, Math.min(10, parseInt(e.target.value) || 1))
+                      setMaxConcurrency(v)
+                      try { await saveSettings({ maxConcurrency: v }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                    }}
+                    className="input-dark text-xs w-16 text-center"
+                    title={tt('maxConcurrency')}
+                    aria-label={tt('maxConcurrency')}
+                  />
                 </div>
               </section>
 
@@ -1872,6 +1874,8 @@ const fmtTime = useCallback((t: string): string => {
                   </div>
                 )}
               </section>
+              </>
+              )}
 
               {/* ffmpeg Path (Advanced) */}
               {showAdvanced && (
