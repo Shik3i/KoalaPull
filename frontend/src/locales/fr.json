@@ -115,6 +115,7 @@
     "versions": "Versions",
     "openBinFolder": "Ouvrir le dossier des exécutables",
     "updates": "Mises à jour",
+    "advanced": "Avancé",
     "showAdvanced": "Avancé",
     "hideAdvanced": "Simple",
     "ffmpegPathTitle": "Chemin FFmpeg personnalisé",

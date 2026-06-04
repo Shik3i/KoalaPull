@@ -115,6 +115,7 @@
     "versions": "Versions",
     "openBinFolder": "Open Engine Folder",
     "updates": "Updates",
+    "advanced": "Advanced",
     "showAdvanced": "Advanced",
     "hideAdvanced": "Basic",
     "ffmpegPathTitle": "Custom FFmpeg Path",
