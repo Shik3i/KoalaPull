@@ -15,6 +15,7 @@ func TestCanonicalVerifierRunsRequiredChecks(t *testing.T) {
 		`run("npx", ["tsc", "--noEmit"]`,
 		`run("npm", ["run", "build"]`,
 		`run("npm", ["audit", "--audit-level=moderate"]`,
+		`run("npm", ["ci", "--include=optional"], { cwd: repoRoot })`,
 		`run("node", ["--test"]`,
 		`run("go", ["test", "-count=1", "./..."]`,
 		`run("go", ["test", "-race", "-count=1", "./..."]`,
@@ -28,6 +29,9 @@ func TestCanonicalVerifierRunsRequiredChecks(t *testing.T) {
 	}
 	if strings.Index(data, `run("npm", ["ci", "--include=optional"]`) > strings.Index(data, `run("npm", ["run", "test"]`) {
 		t.Fatal("scripts/verify.mjs must run npm ci before frontend tests")
+	}
+	if strings.Index(data, `run("npm", ["ci", "--include=optional"], { cwd: repoRoot })`) > strings.Index(data, `run("node", ["--test"]`) {
+		t.Fatal("scripts/verify.mjs must run root npm ci before website tests")
 	}
 	if strings.Index(data, `run("npm", ["run", "build"]`) > strings.Index(data, `run("go", ["test", "-count=1", "./..."]`) {
 		t.Fatal("scripts/verify.mjs must build frontend before go test so embedded frontend/dist exists")

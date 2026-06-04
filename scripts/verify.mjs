@@ -57,6 +57,7 @@ run("npx", ["tsc", "--noEmit"], { cwd: frontendDir })
 run("npm", ["run", "build"], { cwd: frontendDir })
 run("npm", ["audit", "--audit-level=moderate"], { cwd: frontendDir })
 
+run("npm", ["ci", "--include=optional"], { cwd: repoRoot })
 run("node", ["--test"], { cwd: websiteDir })
 
 run("go", ["test", "-count=1", "./..."])
