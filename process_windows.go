@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"os/exec"
@@ -40,9 +41,52 @@ func startCommand(ctx context.Context, cmd *exec.Cmd) (func(), error) {
 }
 
 func commandOutput(ctx context.Context, name string, arg ...string) ([]byte, error) {
-	cmd := exec.CommandContext(ctx, name, arg...)
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	cmd := exec.Command(name, arg...)
 	cmd.SysProcAttr = hiddenProcAttr()
-	return cmd.Output()
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	started := make(chan error, 1)
+	type result struct {
+		output []byte
+		err    error
+	}
+	done := make(chan result, 1)
+	// Start and Wait can block on Windows, so keep the cancellation path independent.
+	go func() {
+		if err := cmd.Start(); err != nil {
+			started <- err
+			done <- result{err: err}
+			return
+		}
+		started <- nil
+		err := cmd.Wait()
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			exitErr.Stderr = stderr.Bytes()
+		}
+		done <- result{output: stdout.Bytes(), err: err}
+	}()
+	select {
+	case res := <-done:
+		if res.err != nil {
+			if ctx.Err() != nil {
+				return nil, ctx.Err()
+			}
+			return nil, res.err
+		}
+		return res.output, nil
+	case <-ctx.Done():
+		go func() {
+			if err := <-started; err == nil && cmd.Process != nil {
+				_ = cmd.Process.Kill()
+			}
+		}()
+		return nil, ctx.Err()
+	}
 }
 
 func command(name string, arg ...string) *exec.Cmd {
