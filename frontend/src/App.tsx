@@ -1682,29 +1682,6 @@ const fmtTime = useCallback((t: string): string => {
                 </div>
               </section>
 
-              {showAdvanced && (
-              <>
-              {/* Max Concurrency */}
-              <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
-                <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('maxConcurrency')}>{t('settings.downloads')}</h3>
-                <div className="flex items-center gap-3">
-                  <label htmlFor="maxConcurrency" className="text-xs" style={{ color: 'var(--text-muted)', minWidth: '7rem' }} title={tt('maxConcurrency')}>{t('settings.maxParallelDownloads')}</label>
-                  <input
-                    id="maxConcurrency"
-                    type="number" min={1} max={10}
-                    value={maxConcurrency}
-                    onChange={async (e) => {
-                      const v = Math.max(1, Math.min(10, parseInt(e.target.value) || 1))
-                      setMaxConcurrency(v)
-                      try { await saveSettings({ maxConcurrency: v }) } catch (err) { console.warn('UpdateSettings failed:', err) }
-                    }}
-                    className="input-dark text-xs w-16 text-center"
-                    title={tt('maxConcurrency')}
-                    aria-label={tt('maxConcurrency')}
-                  />
-                </div>
-              </section>
-
               {/* Speed Limit */}
               <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <div className="flex items-center justify-between mb-3">
@@ -1751,6 +1728,29 @@ const fmtTime = useCallback((t: string): string => {
                     placeholder="1"
                     title={t('settings.speedLimitLabel')}
                     aria-label={t('settings.speedLimitLabel')}
+                  />
+                </div>
+              </section>
+
+              {showAdvanced && (
+              <>
+              {/* Max Concurrency */}
+              <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+                <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('maxConcurrency')}>{t('settings.downloads')}</h3>
+                <div className="flex items-center gap-3">
+                  <label htmlFor="maxConcurrency" className="text-xs" style={{ color: 'var(--text-muted)', minWidth: '7rem' }} title={tt('maxConcurrency')}>{t('settings.maxParallelDownloads')}</label>
+                  <input
+                    id="maxConcurrency"
+                    type="number" min={1} max={10}
+                    value={maxConcurrency}
+                    onChange={async (e) => {
+                      const v = Math.max(1, Math.min(10, parseInt(e.target.value) || 1))
+                      setMaxConcurrency(v)
+                      try { await saveSettings({ maxConcurrency: v }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                    }}
+                    className="input-dark text-xs w-16 text-center"
+                    title={tt('maxConcurrency')}
+                    aria-label={tt('maxConcurrency')}
                   />
                 </div>
               </section>
@@ -1955,7 +1955,7 @@ const fmtTime = useCallback((t: string): string => {
               </section>
               )}
 
-              {/* Version Info */}
+              {showAdvanced && (
               <section className="md:col-span-2 xl:col-span-3 rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <div className="flex items-center justify-between mb-3 gap-2">
                   <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }} title={tt('versionKoalaPull')}>{t('settings.versions')}</h3>
@@ -2019,6 +2019,7 @@ const fmtTime = useCallback((t: string): string => {
                   </div>
                 </div>
               </section>
+              )}
 
               {/* Updates */}
               <section className="md:col-span-2 xl:col-span-3 rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
