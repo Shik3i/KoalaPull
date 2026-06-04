@@ -6,12 +6,12 @@ import {
   GetAppVersion, GetVersionInfo, GetHistory,
   ClearHistory, DeleteHistoryEntry,
   UpdateDependencies, OpenOutputDir, CheckForUpdates, OpenExternalLink,
-  SelectCookieFile, IsBrowserRunning, KillBrowser,
+  SelectCookieFile, IsBrowserRunning, KillBrowser, OpenBinDir,
 } from "../wailsjs/go/main/App"
 import { EventsOn, ClipboardGetText } from "../wailsjs/runtime/runtime"
 import type { main } from "../wailsjs/go/models"
 import { createLatestSerializedWriter, startSerialPoll, type LatestSerializedWriter } from "./lib/asyncControl"
-import { formatTotalEta, parseBytes, parseSpeed, parseEta, formatSpeed, formatEta } from "./lib/downloadMetrics"
+import { formatTotalEta, parseBytes, parseSpeed, parseEta, formatSpeed, formatEta, formatBytes } from "./lib/downloadMetrics"
 import { createTranslator, getLanguageLocale, isSupportedLanguage, type LanguageCode } from "./lib/i18n"
 import appIcon from './assets/images/app-icon.png'
 import './style.css'
@@ -55,6 +55,9 @@ interface AppSettings {
   cookieSource: 'none' | 'browser' | 'file'
   cookieBrowser: string
   cookieFilePath: string
+  rateLimitEnabled: boolean
+  rateLimitValue: string
+  customArgs: string
 }
 interface VersionInfo { ytdlp: string; ffmpeg: string; app: string }
 interface SupportedSite {
@@ -111,6 +114,9 @@ const defaultAppSettings: AppSettings = {
   cookieSource: 'none',
   cookieBrowser: 'chrome',
   cookieFilePath: '',
+  rateLimitEnabled: false,
+  rateLimitValue: '1',
+  customArgs: '',
 }
 
 const downloadPresetOptions: Array<{ value: DownloadPreset; label: string; description: string }> = [
@@ -142,6 +148,9 @@ function normalizeAppSettings(settings: main.Settings): AppSettings {
     cookieSource: isCookieSource(settings.cookieSource) ? settings.cookieSource : 'none',
     cookieBrowser: settings.cookieBrowser || 'chrome',
     cookieFilePath: settings.cookieFilePath || '',
+    rateLimitEnabled: !!settings.rateLimitEnabled,
+    rateLimitValue: settings.rateLimitValue || '1',
+    customArgs: settings.customArgs || '',
   }
 }
 
@@ -243,6 +252,79 @@ function buildFormatOptions(formats: FormatInfo[], t: (key: string, params?: Rec
   }
   options.push({ label: t('downloads.audioOnly'), formatId: 'bestaudio/best' })
   return options
+}
+
+function buildVideoOptions(formats: FormatInfo[], t: (key: string, params?: Record<string, string | number>) => string): { value: string; label: string }[] {
+  const options = [
+    { value: 'bestvideo', label: `⭐ ${t('downloads.bestVideoAudio')}` },
+  ]
+  const sorted = [...formats]
+    .filter((f) => f.vcodec !== 'none' && f.vcodec !== '' && f.height > 0)
+    .sort((a, b) => b.height - a.height)
+  
+  const seen = new Set<string>()
+  for (const f of sorted) {
+    const codec = f.vcodec.split('.')[0] || ''
+    const key = `${f.height}_${codec}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      const note = f.formatNote ? ` (${f.formatNote})` : ''
+      const codecStr = codec ? ` · ${codec}` : ''
+      options.push({ value: f.formatId, label: `${f.height}p${note}${codecStr} · ${f.ext}` })
+    }
+  }
+  options.push({ value: 'none', label: `❌ ${t('downloads.noVideo') || 'No Video'}` })
+  return options
+}
+
+function buildAudioOptions(formats: FormatInfo[], t: (key: string, params?: Record<string, string | number>) => string): { value: string; label: string }[] {
+  const options = [
+    { value: 'bestaudio', label: `⭐ ${t('downloads.bestAudio') || 'Best Audio'}` },
+  ]
+  const sorted = [...formats]
+    .filter((f) => f.acodec !== 'none' && f.acodec !== '')
+    .sort((a, b) => (b.filesize || 0) - (a.filesize || 0))
+  
+  const seen = new Set<string>()
+  for (const f of sorted) {
+    const codec = f.acodec.split('.')[0] || ''
+    const note = f.formatNote && f.formatNote !== 'none' ? ` (${f.formatNote})` : ''
+    const key = `${codec}_${f.ext}_${note}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      const bitrateStr = f.filesize ? ` · ${formatBytes(f.filesize)}` : ''
+      options.push({ value: f.formatId, label: `${codec}${note}${bitrateStr} · ${f.ext}` })
+    }
+  }
+  options.push({ value: 'none', label: `❌ ${t('downloads.noAudio') || 'No Audio'}` })
+  return options
+}
+
+function parseFormatIds(combinedId: string): { videoId: string; audioId: string } {
+  if (combinedId === 'bestvideo+bestaudio/best') {
+    return { videoId: 'bestvideo', audioId: 'bestaudio' }
+  }
+  if (combinedId === 'bestaudio/best') {
+    return { videoId: 'none', audioId: 'bestaudio' }
+  }
+  if (combinedId.includes('+')) {
+    const parts = combinedId.split('+')
+    return { videoId: parts[0] || 'bestvideo', audioId: parts[1] || 'bestaudio' }
+  }
+  return { videoId: combinedId, audioId: 'bestaudio' }
+}
+
+function combineFormatIds(videoId: string, audioId: string): string {
+  if (videoId === 'bestvideo' && audioId === 'bestaudio') {
+    return 'bestvideo+bestaudio/best'
+  }
+  if (videoId === 'none') {
+    return 'bestaudio/best'
+  }
+  if (audioId === 'none') {
+    return videoId
+  }
+  return `${videoId}+${audioId}`
 }
 
 function HistoryEntries({ entries, search, onDelete, onReuse, fmtTime, t }: { entries: main.HistoryEntry[]; search: string; onDelete: (id: string) => void; onReuse: (url: string) => void; fmtTime: (t: string) => string; t: (key: string, params?: Record<string, string | number>) => string }) {
@@ -462,6 +544,25 @@ function App() {
   const [selectedPreset, setSelectedPreset] = useState<DownloadPreset>(defaultDownloadPreset)
   const [selectedFormat, setSelectedFormat] = useState(defaultCustomFormatId)
   const [formatOptions, setFormatOptions] = useState<FormatOption[]>([])
+  const [videoOptions, setVideoOptions] = useState<{ value: string; label: string }[]>([])
+  const [audioOptions, setAudioOptions] = useState<{ value: string; label: string }[]>([])
+
+  const { videoId, audioId } = useMemo(() => {
+    return parseFormatIds(selectedFormat)
+  }, [selectedFormat])
+
+  const handleVideoChange = async (nextVideoId: string) => {
+    const nextCombined = combineFormatIds(nextVideoId, audioId)
+    setSelectedFormat(nextCombined)
+    try { await saveSettings({ customFormatId: nextCombined }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+  }
+
+  const handleAudioChange = async (nextAudioId: string) => {
+    const nextCombined = combineFormatIds(videoId, nextAudioId)
+    setSelectedFormat(nextCombined)
+    try { await saveSettings({ customFormatId: nextCombined }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+  }
+
   const [selectedContainer, setSelectedContainer] = useState(defaultCustomContainer)
   const [selectedSubs, setSelectedSubs] = useState(defaultCustomSubtitle)
 
@@ -491,6 +592,9 @@ function App() {
   const [cookieSource, setCookieSource] = useState<'none' | 'browser' | 'file'>('none')
   const [cookieBrowser, setCookieBrowser] = useState<string>('chrome')
   const [cookieFilePath, setCookieFilePath] = useState<string>('')
+  const [rateLimitEnabled, setRateLimitEnabled] = useState(defaultAppSettings.rateLimitEnabled)
+  const [rateLimitValue, setRateLimitValue] = useState(defaultAppSettings.rateLimitValue)
+  const [customArgs, setCustomArgs] = useState(defaultAppSettings.customArgs)
   const [browserRunning, setBrowserRunning] = useState<boolean>(false)
   const [isCheckingBrowser, setIsCheckingBrowser] = useState<boolean>(false)
   const [browserError, setBrowserError] = useState('')
@@ -527,6 +631,9 @@ function App() {
     setCookieSource(settings.cookieSource)
     setCookieBrowser(settings.cookieBrowser)
     setCookieFilePath(settings.cookieFilePath)
+    setRateLimitEnabled(settings.rateLimitEnabled)
+    setRateLimitValue(settings.rateLimitValue)
+    setCustomArgs(settings.customArgs)
   }, [])
   const settingsWriterRef = useRef<LatestSerializedWriter<AppSettings> | null>(null)
   if (!settingsWriterRef.current) {
@@ -706,6 +813,8 @@ function App() {
   useEffect(() => {
     if (!metadata) return
     setFormatOptions(buildFormatOptions(metadata.formats || [], t))
+    setVideoOptions(buildVideoOptions(metadata.formats || [], t))
+    setAudioOptions(buildAudioOptions(metadata.formats || [], t))
   }, [metadata, t])
 
   useEffect(() => {
@@ -896,6 +1005,8 @@ function App() {
       lastFetchedUrlRef.current = url
       setMetadata(meta)
       setFormatOptions(buildFormatOptions(meta.formats || [], t))
+      setVideoOptions(buildVideoOptions(meta.formats || [], t))
+      setAudioOptions(buildAudioOptions(meta.formats || [], t))
       setFetched(true)
     } catch (err: any) {
       if (requestId !== fetchRequestIdRef.current) return
@@ -1257,58 +1368,87 @@ const fmtTime = useCallback((t: string): string => {
                         </div>
 
                         {selectedPreset === 'custom' && (
-                          <div className="flex flex-wrap gap-2">
-                            <label htmlFor="customFormatSelect" className="sr-only">Format</label>
-                            <select
-                              id="customFormatSelect"
-                              value={selectedFormat}
-                              onChange={async (e) => {
-                                const next = e.target.value
-                                setSelectedFormat(next)
-                                try { await saveSettings({ customFormatId: next }) } catch (err) { console.warn('UpdateSettings failed:', err) }
-                              }}
-                              className="select-dark text-xs flex-1 min-w-[140px]"
-                              title={tt('formatSelect')}
-                              aria-label={tt('formatSelect')}
-                            >
-                              {formatOptions.map((opt) => (
-                                <option key={opt.formatId} value={opt.formatId}>{opt.label}</option>
-                              ))}
-                            </select>
-                            <label htmlFor="customSubtitleSelect" className="sr-only">Subtitles</label>
-                            <select
-                              id="customSubtitleSelect"
-                              value={selectedSubs}
-                              onChange={async (e) => {
-                                const next = e.target.value
-                                setSelectedSubs(next)
-                                try { await saveSettings({ customSubtitle: next }) } catch (err) { console.warn('UpdateSettings failed:', err) }
-                              }}
-                              className="select-dark text-xs flex-1 min-w-[100px]"
-                              title={tt('subtitleSelect')}
-                              aria-label={tt('subtitleSelect')}
-                            >
-                              <option value="none">{t('downloads.subtitlesNone')}</option>
-                              <option value="auto">{t('downloads.subtitlesAuto')}</option>
-                              <option value="embed">{t('downloads.subtitlesEmbed')}</option>
-                            </select>
-                            <label htmlFor="customContainerSelect" className="sr-only">Container</label>
-                            <select
-                              id="customContainerSelect"
-                              value={selectedContainer}
-                              onChange={async (e) => {
-                                const next = e.target.value
-                                setSelectedContainer(next)
-                                try { await saveSettings({ customContainer: next }) } catch (err) { console.warn('UpdateSettings failed:', err) }
-                              }}
-                              className="select-dark text-xs flex-1 min-w-[80px]"
-                              title={tt('containerSelect')}
-                              aria-label={tt('containerSelect')}
-                            >
-                              <option value="mp4">MP4</option>
-                              <option value="mkv">MKV</option>
-                              <option value="mp3">MP3</option>
-                            </select>
+                          <div className="flex flex-col gap-2.5 w-full">
+                            <div className="flex flex-wrap gap-2 items-center">
+                              <div className="flex-1 min-w-[140px]">
+                                <label htmlFor="customVideoSelect" className="block text-xs mb-1" style={{ color: 'var(--text-muted)' }}>{t('downloads.videoLabel') || 'Video Stream'}</label>
+                                <select
+                                  id="customVideoSelect"
+                                  value={videoId}
+                                  onChange={(e) => handleVideoChange(e.target.value)}
+                                  className="select-dark text-xs w-full"
+                                  title={t('downloads.videoLabel') || 'Video Stream'}
+                                >
+                                  {videoOptions.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                              <div className="flex-1 min-w-[140px]">
+                                <label htmlFor="customAudioSelect" className="block text-xs mb-1" style={{ color: 'var(--text-muted)' }}>{t('downloads.audioLabel') || 'Audio Stream'}</label>
+                                <select
+                                  id="customAudioSelect"
+                                  value={audioId}
+                                  onChange={(e) => handleAudioChange(e.target.value)}
+                                  className="select-dark text-xs w-full"
+                                  title={t('downloads.audioLabel') || 'Audio Stream'}
+                                >
+                                  {audioOptions.map((opt) => (
+                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                                  ))}
+                                </select>
+                              </div>
+                            </div>
+                            <div className="flex flex-wrap gap-2">
+                              <div className="flex-1 min-w-[140px]">
+                                <label htmlFor="customSubtitleSelect" className="block text-xs mb-1" style={{ color: 'var(--text-muted)' }}>{t('downloads.subtitleSelect') || 'Subtitles'}</label>
+                                <select
+                                  id="customSubtitleSelect"
+                                  value={selectedSubs}
+                                  onChange={async (e) => {
+                                    const next = e.target.value
+                                    setSelectedSubs(next)
+                                    try { await saveSettings({ customSubtitle: next }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                                  }}
+                                  className="select-dark text-xs w-full"
+                                  title={tt('subtitleSelect')}
+                                  aria-label={tt('subtitleSelect')}
+                                >
+                                  <option value="none">{t('downloads.subtitlesNone')}</option>
+                                  <option value="auto">{t('downloads.subtitlesAuto')}</option>
+                                  <option value="embed">{t('downloads.subtitlesEmbed')}</option>
+                                </select>
+                              </div>
+                              <div className="flex-1 min-w-[100px]">
+                                <label htmlFor="customContainerSelect" className="block text-xs mb-1" style={{ color: 'var(--text-muted)' }}>{t('downloads.containerSelect') || 'Container'}</label>
+                                <select
+                                  id="customContainerSelect"
+                                  value={selectedContainer}
+                                  onChange={async (e) => {
+                                    const next = e.target.value
+                                    setSelectedContainer(next)
+                                    try { await saveSettings({ customContainer: next }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                                  }}
+                                  className="select-dark text-xs w-full"
+                                  title={tt('containerSelect')}
+                                  aria-label={tt('containerSelect')}
+                                >
+                                  <optgroup label="Video">
+                                    <option value="mp4">MP4</option>
+                                    <option value="mkv">MKV</option>
+                                    <option value="webm">WEBM</option>
+                                  </optgroup>
+                                  <optgroup label="Audio">
+                                    <option value="mp3">MP3</option>
+                                    <option value="aac">AAC</option>
+                                    <option value="m4a">M4A (AAC)</option>
+                                    <option value="opus">OPUS</option>
+                                    <option value="flac">FLAC</option>
+                                    <option value="wav">WAV</option>
+                                  </optgroup>
+                                </select>
+                              </div>
+                            </div>
                           </div>
                         )}
                       </div>
@@ -1470,9 +1610,9 @@ const fmtTime = useCallback((t: string): string => {
               <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <label htmlFor="languageSelect" className="block text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('languageSelect')}>{t('settings.language')}</label>
                 <select id="languageSelect" value={language} onChange={(e) => { void handleLanguageChange(e.target.value as LanguageCode) }} className="select-dark text-sm w-full" title={tt('languageSelect')} aria-label={tt('languageSelect')}>
-                  <option value="en">{t('settings.languageEnglish')}</option>
-                  <option value="de">{t('settings.languageGerman')}</option>
-                  <option value="fr">{t('settings.languageFrench')}</option>
+                  <option value="en">🇺🇸 {t('settings.languageEnglish')}</option>
+                  <option value="de">🇩🇪 {t('settings.languageGerman')}</option>
+                  <option value="fr">🇫🇷 {t('settings.languageFrench')}</option>
                 </select>
               </section>
 
@@ -1535,6 +1675,56 @@ const fmtTime = useCallback((t: string): string => {
                       style={{ left: '2px', transform: autoPasteEnabled ? 'translateX(20px)' : 'translateX(0)' }}
                     />
                   </button>
+                </div>
+              </section>
+
+              {/* Speed Limit */}
+              <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }} title={t('settings.speedLimitTitle')}>{t('settings.speedLimitTitle')}</h3>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }} title={t('settings.speedLimitDescription')}>{t('settings.speedLimitDescription')}</p>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={rateLimitEnabled}
+                    onClick={async () => {
+                      const next = !rateLimitEnabled
+                      setRateLimitEnabled(next)
+                      try { await saveSettings({ rateLimitEnabled: next }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                    }}
+                    className="relative w-10 h-5 rounded-full transition-colors shrink-0"
+                    style={{
+                      background: rateLimitEnabled ? 'var(--color-accent)' : 'var(--color-surface-border)',
+                    }}
+                    title={t('settings.speedLimitTitle')}
+                    aria-label={t('settings.speedLimitTitle')}
+                  >
+                    <span
+                      className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform"
+                      style={{ left: '2px', transform: rateLimitEnabled ? 'translateX(20px)' : 'translateX(0)' }}
+                    />
+                  </button>
+                </div>
+                <div className="flex items-center gap-3">
+                  <label htmlFor="rateLimitValueInput" className="text-xs" style={{ color: 'var(--text-muted)', minWidth: '7rem' }}>
+                    {t('settings.speedLimitLabel')}
+                  </label>
+                  <input
+                    id="rateLimitValueInput"
+                    type="text"
+                    disabled={!rateLimitEnabled}
+                    value={rateLimitValue}
+                    onChange={async (e) => {
+                      const val = e.target.value
+                      setRateLimitValue(val)
+                      try { await saveSettings({ rateLimitValue: val }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                    }}
+                    className="input-dark text-xs w-20 text-center"
+                    placeholder="1"
+                    title={t('settings.speedLimitLabel')}
+                    aria-label={t('settings.speedLimitLabel')}
+                  />
                 </div>
               </section>
 
@@ -1659,9 +1849,39 @@ const fmtTime = useCallback((t: string): string => {
                 )}
               </section>
 
+              {/* Custom Arguments */}
+              <section className="rounded-xl p-4 border md:col-span-2 xl:col-span-3" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+                <h3 className="text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>{t('settings.customArgsTitle')}</h3>
+                <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{t('settings.customArgsDescription')}</p>
+                <textarea
+                  id="customArgsInput"
+                  value={customArgs}
+                  onChange={async (e) => {
+                    const val = e.target.value
+                    setCustomArgs(val)
+                    try { await saveSettings({ customArgs: val }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                  }}
+                  className="input-dark text-xs w-full h-20 font-mono resize-y"
+                  placeholder={t('settings.customArgsPlaceholder')}
+                  title={t('settings.customArgsTitle')}
+                  aria-label={t('settings.customArgsTitle')}
+                />
+              </section>
+
               {/* Version Info */}
               <section className="md:col-span-2 xl:col-span-3 rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
-                <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('versionKoalaPull')}>{t('settings.versions')}</h3>
+                <div className="flex items-center justify-between mb-3 gap-2">
+                  <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }} title={tt('versionKoalaPull')}>{t('settings.versions')}</h3>
+                  <button
+                    onClick={() => OpenBinDir().catch((err: any) => { console.warn('OpenBinDir failed:', err) })}
+                    className="btn-primary text-xs px-2.5 py-1.5 flex items-center gap-1.5 shrink-0"
+                    title={tt('openBinFolder')}
+                    aria-label={tt('openBinFolder')}
+                  >
+                    <span>📂</span>
+                    <span>{t('settings.openBinFolder')}</span>
+                  </button>
+                </div>
                 <div className="space-y-2 text-sm">
                   <div className="flex items-center gap-2">
                     <span className="w-20" style={{ color: 'var(--text-muted)' }}>KoalaPull</span>

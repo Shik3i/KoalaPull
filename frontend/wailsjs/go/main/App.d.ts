@@ -32,6 +32,8 @@ export function IsBrowserRunning(arg1:string):Promise<boolean>;
 
 export function KillBrowser(arg1:string):Promise<void>;
 
+export function OpenBinDir():Promise<void>;
+
 export function OpenExternalLink(arg1:string):Promise<void>;
 
 export function OpenOutputDir(arg1:string):Promise<void>;

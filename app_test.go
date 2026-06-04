@@ -881,6 +881,74 @@ func TestParsePlaylistStatus(t *testing.T) {
 	}
 }
 
+func TestParseRateLimitToBytes(t *testing.T) {
+	tests := []struct {
+		input string
+		want  int64
+	}{
+		{"1", 1024 * 1024},
+		{"1.5", int64(1.5 * 1024 * 1024)},
+		{"1,5", int64(1.5 * 1024 * 1024)},
+		{"0.5", int64(0.5 * 1024 * 1024)},
+		{"0,25", int64(0.25 * 1024 * 1024)},
+		{"0", 0},
+		{"-1.5", 0},
+		{"invalid", 0},
+		{"", 0},
+	}
+	for _, tt := range tests {
+		if got := parseRateLimitToBytes(tt.input); got != tt.want {
+			t.Errorf("parseRateLimitToBytes(%q) = %d, want %d", tt.input, got, tt.want)
+		}
+	}
+}
+
+func TestParseCustomArgs(t *testing.T) {
+	tests := []struct {
+		input string
+		want  []string
+	}{
+		{"--proxy socks5://127.0.0.1:1080 --geo-bypass", []string{"--proxy", "socks5://127.0.0.1:1080", "--geo-bypass"}},
+		{"--proxy \"socks5://127.0.0.1:1080\" --geo-bypass", []string{"--proxy", "socks5://127.0.0.1:1080", "--geo-bypass"}},
+		{"--proxy 'socks5://127.0.0.1:1080'", []string{"--proxy", "socks5://127.0.0.1:1080"}},
+		{"  --arg1   --arg2  ", []string{"--arg1", "--arg2"}},
+		{"", nil},
+	}
+	for _, tt := range tests {
+		got := parseCustomArgs(tt.input)
+		if len(got) != len(tt.want) {
+			t.Errorf("parseCustomArgs(%q) len = %d, want %d (got: %#v)", tt.input, len(got), len(tt.want), got)
+			continue
+		}
+		for i := range got {
+			if got[i] != tt.want[i] {
+				t.Errorf("parseCustomArgs(%q)[%d] = %q, want %q", tt.input, i, got[i], tt.want[i])
+			}
+		}
+	}
+}
+
+func TestValidateSettingsNewFields(t *testing.T) {
+	s := validateSettings(Settings{
+		RateLimitEnabled: true,
+		RateLimitValue:   "2,5",
+		CustomArgs:       "--proxy localhost:8080",
+	})
+	if s.RateLimitValue != "2,5" {
+		t.Errorf("RateLimitValue = %q, want 2,5", s.RateLimitValue)
+	}
+	if s.CustomArgs != "--proxy localhost:8080" {
+		t.Errorf("CustomArgs = %q, want --proxy localhost:8080", s.CustomArgs)
+	}
+
+	s2 := validateSettings(Settings{
+		RateLimitValue: "invalid",
+	})
+	if s2.RateLimitValue != "1" {
+		t.Errorf("invalid RateLimitValue should fallback to 1, got %q", s2.RateLimitValue)
+	}
+}
+
 func installFakeYtDlp(t *testing.T) string {
 	t.Helper()
 	tempDir := t.TempDir()

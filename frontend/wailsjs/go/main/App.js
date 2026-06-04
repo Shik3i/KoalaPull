@@ -62,6 +62,10 @@ export function KillBrowser(arg1) {
   return window['go']['main']['App']['KillBrowser'](arg1);
 }
 
+export function OpenBinDir() {
+  return window['go']['main']['App']['OpenBinDir']();
+}
+
 export function OpenExternalLink(arg1) {
   return window['go']['main']['App']['OpenExternalLink'](arg1);
 }

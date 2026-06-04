@@ -103,6 +103,9 @@ export namespace main {
 	    cookieSource: string;
 	    cookieBrowser: string;
 	    cookieFilePath: string;
+	    rateLimitEnabled: boolean;
+	    rateLimitValue: string;
+	    customArgs: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -122,6 +125,9 @@ export namespace main {
 	        this.cookieSource = source["cookieSource"];
 	        this.cookieBrowser = source["cookieBrowser"];
 	        this.cookieFilePath = source["cookieFilePath"];
+	        this.rateLimitEnabled = source["rateLimitEnabled"];
+	        this.rateLimitValue = source["rateLimitValue"];
+	        this.customArgs = source["customArgs"];
 	    }
 	}
 	export class UpdateInfo {

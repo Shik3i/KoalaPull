@@ -74,3 +74,7 @@ export function formatEta(seconds: number): string {
   }
   return `${mm}:${ss}`
 }
+
+export function formatBytes(bytes: number): string {
+  return formatSpeed(bytes).replace('/s', '')
+}

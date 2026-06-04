@@ -116,6 +116,9 @@ type Settings struct {
 	CookieSource     string `json:"cookieSource"`
 	CookieBrowser    string `json:"cookieBrowser"`
 	CookieFilePath   string `json:"cookieFilePath"`
+	RateLimitEnabled bool   `json:"rateLimitEnabled"`
+	RateLimitValue   string `json:"rateLimitValue"`
+	CustomArgs       string `json:"customArgs"`
 }
 
 type HistoryEntry struct {
@@ -388,6 +391,9 @@ func (a *App) loadSettings() {
 		CookieSource:     "none",
 		CookieBrowser:    "chrome",
 		CookieFilePath:   "",
+		RateLimitEnabled: false,
+		RateLimitValue:   "1",
+		CustomArgs:       "",
 	})
 	a.cachedSettings = s
 	if err := a.writeSettingsLocked(s); err != nil {
@@ -474,7 +480,12 @@ func validateSettings(s Settings) Settings {
 	if s.CustomFormatID == "" {
 		s.CustomFormatID = defaultCustomFormatID
 	}
-	if s.CustomContainer != "mp4" && s.CustomContainer != "mkv" && s.CustomContainer != "mp3" {
+	isValidContainer := false
+	switch s.CustomContainer {
+	case "mp4", "mkv", "webm", "mp3", "aac", "m4a", "opus", "flac", "wav":
+		isValidContainer = true
+	}
+	if !isValidContainer {
 		s.CustomContainer = defaultCustomContainer
 	}
 	if s.CustomSubtitle != "none" && s.CustomSubtitle != "auto" && s.CustomSubtitle != "embed" {
@@ -491,7 +502,72 @@ func validateSettings(s Settings) Settings {
 	if len(s.CookieFilePath) > maxPathLength {
 		s.CookieFilePath = truncateToValidUTF8Prefix(s.CookieFilePath, maxPathLength)
 	}
+	if s.RateLimitValue == "" {
+		s.RateLimitValue = "1"
+	}
+	if len(s.RateLimitValue) > 32 {
+		s.RateLimitValue = truncateToValidUTF8Prefix(s.RateLimitValue, 32)
+	}
+	cleanedVal := strings.ReplaceAll(s.RateLimitValue, ",", ".")
+	cleanedVal = strings.TrimSpace(cleanedVal)
+	if _, err := strconv.ParseFloat(cleanedVal, 64); err != nil {
+		s.RateLimitValue = "1"
+	}
+	if len(s.CustomArgs) > 1024 {
+		s.CustomArgs = truncateToValidUTF8Prefix(s.CustomArgs, 1024)
+	}
 	return s
+}
+
+func parseRateLimitToBytes(valStr string) int64 {
+	valStr = strings.ReplaceAll(valStr, ",", ".")
+	valStr = strings.TrimSpace(valStr)
+	val, err := strconv.ParseFloat(valStr, 64)
+	if err != nil || val <= 0 {
+		return 0
+	}
+	return int64(val * 1024 * 1024)
+}
+
+func parseCustomArgs(s string) []string {
+	var args []string
+	var current strings.Builder
+	inDoubleQuotes := false
+	inSingleQuotes := false
+	escaped := false
+
+	for i := 0; i < len(s); i++ {
+		r := s[i]
+		if escaped {
+			current.WriteByte(r)
+			escaped = false
+			continue
+		}
+		if r == '\\' && !inSingleQuotes {
+			escaped = true
+			continue
+		}
+		if r == '"' && !inSingleQuotes {
+			inDoubleQuotes = !inDoubleQuotes
+			continue
+		}
+		if r == '\'' && !inDoubleQuotes {
+			inSingleQuotes = !inSingleQuotes
+			continue
+		}
+		if (r == ' ' || r == '\t' || r == '\n' || r == '\r') && !inDoubleQuotes && !inSingleQuotes {
+			if current.Len() > 0 {
+				args = append(args, current.String())
+				current.Reset()
+			}
+		} else {
+			current.WriteByte(r)
+		}
+	}
+	if current.Len() > 0 {
+		args = append(args, current.String())
+	}
+	return args
 }
 
 func truncateToValidUTF8Prefix(s string, maxBytes int) string {
@@ -873,6 +949,10 @@ func (a *App) UpdateDependencies() error {
 		return err
 	}
 	return a.downloadFfmpeg(true)
+}
+
+func (a *App) OpenBinDir() error {
+	return a.OpenOutputDir(a.binDir)
 }
 
 func (a *App) OpenOutputDir(dir string) error {
@@ -1395,6 +1475,9 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	args := []string{"--no-check-formats", "--no-warnings", "--dump-json", "--skip-download", "--flat-playlist"}
 	settings := a.GetSettings()
 	args = append(args, a.getCookieArgs(settings)...)
+	if settings.CustomArgs != "" {
+		args = append(args, parseCustomArgs(settings.CustomArgs)...)
+	}
 	args = append(args, "--", url)
 	ctx, cancel := context.WithTimeout(a.appContext(), 30*time.Second)
 	defer cancel()
@@ -1491,6 +1574,15 @@ func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subti
 	}
 	settings := a.GetSettings()
 	args = append(args, a.getCookieArgs(settings)...)
+	if settings.RateLimitEnabled {
+		limitBytes := parseRateLimitToBytes(settings.RateLimitValue)
+		if limitBytes > 0 {
+			args = append(args, "--limit-rate", strconv.FormatInt(limitBytes, 10))
+		}
+	}
+	if settings.CustomArgs != "" {
+		args = append(args, parseCustomArgs(settings.CustomArgs)...)
+	}
 	args = append(args, downloadPostProcessingArgs(preset, container, subtitle)...)
 	args = append(args, "--", url)
 
@@ -1516,8 +1608,13 @@ func downloadPostProcessingArgs(preset, container, subtitle string) []string {
 		return []string{"--recode-video", "mp4"}
 	default:
 		args := make([]string, 0, 4)
-		if container == "mp3" {
-			args = append(args, "-x", "--audio-format", "mp3")
+		isAudio := false
+		switch container {
+		case "mp3", "aac", "m4a", "opus", "flac", "wav":
+			isAudio = true
+		}
+		if isAudio {
+			args = append(args, "-x", "--audio-format", container)
 		} else if container != "" && container != "none" {
 			args = append(args, "--merge-output-format", container)
 		}
