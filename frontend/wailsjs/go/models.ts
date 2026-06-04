@@ -106,6 +106,7 @@ export namespace main {
 	    rateLimitEnabled: boolean;
 	    rateLimitValue: string;
 	    customArgs: string;
+	    ffmpegPath: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -128,6 +129,7 @@ export namespace main {
 	        this.rateLimitEnabled = source["rateLimitEnabled"];
 	        this.rateLimitValue = source["rateLimitValue"];
 	        this.customArgs = source["customArgs"];
+	        this.ffmpegPath = source["ffmpegPath"];
 	    }
 	}
 	export class UpdateInfo {
@@ -135,6 +137,8 @@ export namespace main {
 	    latestYtdlpVersion: string;
 	    koalaPullUpdateAvailable: boolean;
 	    latestKoalaPullVersion: string;
+	    ffmpegUpdateAvailable: boolean;
+	    latestFfmpegVersion: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new UpdateInfo(source);
@@ -146,6 +150,8 @@ export namespace main {
 	        this.latestYtdlpVersion = source["latestYtdlpVersion"];
 	        this.koalaPullUpdateAvailable = source["koalaPullUpdateAvailable"];
 	        this.latestKoalaPullVersion = source["latestKoalaPullVersion"];
+	        this.ffmpegUpdateAvailable = source["ffmpegUpdateAvailable"];
+	        this.latestFfmpegVersion = source["latestFfmpegVersion"];
 	    }
 	}
 	export class VersionInfo {

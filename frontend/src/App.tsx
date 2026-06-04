@@ -6,7 +6,7 @@ import {
   GetAppVersion, GetVersionInfo, GetHistory,
   ClearHistory, DeleteHistoryEntry,
   UpdateDependencies, OpenOutputDir, CheckForUpdates, OpenExternalLink,
-  SelectCookieFile, IsBrowserRunning, KillBrowser, OpenBinDir,
+  SelectCookieFile, IsBrowserRunning, KillBrowser, OpenBinDir, SelectFfmpegPath,
 } from "../wailsjs/go/main/App"
 import { EventsOn, ClipboardGetText } from "../wailsjs/runtime/runtime"
 import type { main } from "../wailsjs/go/models"
@@ -58,6 +58,7 @@ interface AppSettings {
   rateLimitEnabled: boolean
   rateLimitValue: string
   customArgs: string
+  ffmpegPath: string
 }
 interface VersionInfo { ytdlp: string; ffmpeg: string; app: string }
 interface SupportedSite {
@@ -117,6 +118,7 @@ const defaultAppSettings: AppSettings = {
   rateLimitEnabled: false,
   rateLimitValue: '1',
   customArgs: '',
+  ffmpegPath: '',
 }
 
 const downloadPresetOptions: Array<{ value: DownloadPreset; label: string; description: string }> = [
@@ -151,6 +153,7 @@ function normalizeAppSettings(settings: main.Settings): AppSettings {
     rateLimitEnabled: !!settings.rateLimitEnabled,
     rateLimitValue: settings.rateLimitValue || '1',
     customArgs: settings.customArgs || '',
+    ffmpegPath: settings.ffmpegPath || '',
   }
 }
 
@@ -595,6 +598,8 @@ function App() {
   const [rateLimitEnabled, setRateLimitEnabled] = useState(defaultAppSettings.rateLimitEnabled)
   const [rateLimitValue, setRateLimitValue] = useState(defaultAppSettings.rateLimitValue)
   const [customArgs, setCustomArgs] = useState(defaultAppSettings.customArgs)
+  const [ffmpegPath, setFfmpegPath] = useState(defaultAppSettings.ffmpegPath)
+  const [showAdvanced, setShowAdvanced] = useState(false)
   const [browserRunning, setBrowserRunning] = useState<boolean>(false)
   const [isCheckingBrowser, setIsCheckingBrowser] = useState<boolean>(false)
   const [browserError, setBrowserError] = useState('')
@@ -634,6 +639,7 @@ function App() {
     setRateLimitEnabled(settings.rateLimitEnabled)
     setRateLimitValue(settings.rateLimitValue)
     setCustomArgs(settings.customArgs)
+    setFfmpegPath(settings.ffmpegPath)
   }, [])
   const settingsWriterRef = useRef<LatestSerializedWriter<AppSettings> | null>(null)
   if (!settingsWriterRef.current) {
@@ -1573,16 +1579,34 @@ const fmtTime = useCallback((t: string): string => {
         {/* --- Settings Tab --- */}
         {activeTab === 'settings' && (
           <div className="flex-1 flex flex-col overflow-hidden">
-            <div className="px-4 lg:px-8 py-4 lg:py-5 shrink-0">
+            <div className="px-4 lg:px-8 py-4 lg:py-5 shrink-0 flex items-center justify-between gap-4">
               <h2 className="text-base lg:text-lg font-semibold" title={tt('languageSelect')}>{t('settings.title')}</h2>
+              <button
+                onClick={() => setShowAdvanced(!showAdvanced)}
+                className="btn-primary text-xs px-3 py-1.5 shrink-0 flex items-center gap-1.5"
+                title={showAdvanced ? tt('settingsHideAdvanced') : tt('settingsShowAdvanced')}
+                aria-label={showAdvanced ? tt('settingsHideAdvanced') : tt('settingsShowAdvanced')}
+                aria-pressed={showAdvanced}
+                style={{
+                  background: showAdvanced ? 'var(--color-accent)' : 'var(--color-surface-lighter)',
+                  border: showAdvanced ? '1px solid var(--color-accent)' : '1px solid var(--color-surface-border)',
+                  color: showAdvanced ? '#fff' : 'var(--text-secondary)',
+                }}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                </svg>
+                {showAdvanced ? t('settings.hideAdvanced') : t('settings.showAdvanced')}
+              </button>
             </div>
             <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-5 lg:py-6">
               {settingsError && (
-                <div role="alert" className="max-w-4xl mb-4 p-3 rounded-lg border text-xs text-red-400" style={{ borderColor: '#ef4444' }}>
+                <div role="alert" className="mb-4 p-3 rounded-lg border text-xs text-red-400" style={{ borderColor: '#ef4444' }}>
                   {settingsError}
                 </div>
               )}
-              <div className="max-w-4xl grid gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3 items-start">
+              <div className="grid gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3 items-start">
               {/* Theme */}
               <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('themeDark')}>{t('settings.appearance')}</h3>
@@ -1849,7 +1873,64 @@ const fmtTime = useCallback((t: string): string => {
                 )}
               </section>
 
-              {/* Custom Arguments */}
+              {/* ffmpeg Path (Advanced) */}
+              {showAdvanced && (
+                <section className="rounded-xl p-4 border md:col-span-2 xl:col-span-3" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+                  <h3 className="text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>{t('settings.ffmpegPathTitle')}</h3>
+                  <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{t('settings.ffmpegPathDescription')}</p>
+                  <div className="flex gap-2">
+                    <input
+                      id="ffmpegPathInput"
+                      type="text"
+                      value={ffmpegPath}
+                      onChange={async (e) => {
+                        const val = e.target.value
+                        setFfmpegPath(val)
+                        try { await saveSettings({ ffmpegPath: val }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                      }}
+                      className="input-dark text-xs flex-1 truncate"
+                      placeholder={t('settings.ffmpegPathPlaceholder')}
+                      title={t('settings.ffmpegPathTitle')}
+                      aria-label={t('settings.ffmpegPathTitle')}
+                    />
+                    <button
+                      onClick={async () => {
+                        try {
+                          const file = await SelectFfmpegPath()
+                          if (file) {
+                            setFfmpegPath(file)
+                            await saveSettings({ ffmpegPath: file })
+                          }
+                        } catch (err) {
+                          console.warn('SelectFfmpegPath failed:', err)
+                        }
+                      }}
+                      className="btn-primary text-xs px-3 py-1.5 shrink-0"
+                      title={tt('settingsBrowseFfmpeg')}
+                      aria-label={tt('settingsBrowseFfmpeg')}
+                    >
+                      {t('actions.change')}
+                    </button>
+                    {ffmpegPath && (
+                      <button
+                        onClick={async () => {
+                          setFfmpegPath('')
+                          try { await saveSettings({ ffmpegPath: '' }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                        }}
+                        className="text-xs px-3 py-1.5 shrink-0 rounded-lg border transition-colors"
+                        style={{ borderColor: 'var(--color-surface-border)', color: 'var(--text-muted)' }}
+                        title={tt('settingsClearFfmpegPath')}
+                        aria-label={tt('settingsClearFfmpegPath')}
+                      >
+                        {t('actions.clear')}
+                      </button>
+                    )}
+                  </div>
+                </section>
+              )}
+
+              {/* Custom Arguments (Advanced) */}
+              {showAdvanced && (
               <section className="rounded-xl p-4 border md:col-span-2 xl:col-span-3" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <h3 className="text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>{t('settings.customArgsTitle')}</h3>
                 <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{t('settings.customArgsDescription')}</p>
@@ -1867,6 +1948,7 @@ const fmtTime = useCallback((t: string): string => {
                   aria-label={t('settings.customArgsTitle')}
                 />
               </section>
+              )}
 
               {/* Version Info */}
               <section className="md:col-span-2 xl:col-span-3 rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
@@ -1967,27 +2049,40 @@ const fmtTime = useCallback((t: string): string => {
                         ) : (
                           <p>{t('updates.ytdlpCurrent', { version: toolVersions?.ytdlp || '?' })}</p>
                         )}
-                        <button
-                          onClick={async () => {
-                            setUpdatingDeps(true)
-                            setUpdatesError('')
-                            try {
-                              await UpdateDependencies()
-                              await Promise.all([loadToolVersions(), loadUpdateInfo()])
-                            } catch (err: any) {
-                              setUpdatesError(err?.message || t('errors.updateFailed'))
-                            } finally {
-                              setUpdatingDeps(false)
-                            }
-                          }}
-                          disabled={updatingDeps}
-                          className="btn-primary text-xs px-4 py-1.5 mt-2"
-                          title={tt('redownloadDependencies')}
-                          aria-label={tt('redownloadDependencies')}
-                        >
-                          {updatingDeps ? t('actions.updating') : updateInfo.ytdlpUpdateAvailable ? t('actions.downloadUpdate') : t('actions.redownload')}
-                        </button>
                       </div>
+
+                      {/* ffmpeg */}
+                      <div>
+                        {updateInfo.ffmpegUpdateAvailable ? (
+                          <div>
+                            <span style={{ color: '#fbbf24' }}>{t('updates.ffmpegAvailable')}</span>
+                            <span className="ml-2" style={{ color: 'var(--text-muted)' }}>{t('common.currentVersion', { version: toolVersions?.ffmpeg || '?' })}</span>
+                          </div>
+                        ) : (
+                          <p>{t('updates.ffmpegCurrent', { version: toolVersions?.ffmpeg || '?' })}</p>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={async () => {
+                          setUpdatingDeps(true)
+                          setUpdatesError('')
+                          try {
+                            await UpdateDependencies()
+                            await Promise.all([loadToolVersions(), loadUpdateInfo()])
+                          } catch (err: any) {
+                            setUpdatesError(err?.message || t('errors.updateFailed'))
+                          } finally {
+                            setUpdatingDeps(false)
+                          }
+                        }}
+                        disabled={updatingDeps}
+                        className="btn-primary text-xs px-4 py-1.5 mt-2"
+                        title={tt('redownloadDependencies')}
+                        aria-label={tt('redownloadDependencies')}
+                      >
+                        {updatingDeps ? t('actions.updating') : t('actions.redownloadAll')}
+                      </button>
                     </>
                   ) : updateLoading ? (
                     <p>{t('updates.checking')}</p>

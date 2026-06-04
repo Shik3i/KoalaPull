@@ -119,6 +119,7 @@ type Settings struct {
 	RateLimitEnabled bool   `json:"rateLimitEnabled"`
 	RateLimitValue   string `json:"rateLimitValue"`
 	CustomArgs       string `json:"customArgs"`
+	FfmpegPath       string `json:"ffmpegPath"`
 }
 
 type HistoryEntry struct {
@@ -145,6 +146,8 @@ type UpdateInfo struct {
 	LatestYtdlpVersion       string `json:"latestYtdlpVersion"`
 	KoalaPullUpdateAvailable bool   `json:"koalaPullUpdateAvailable"`
 	LatestKoalaPullVersion   string `json:"latestKoalaPullVersion"`
+	FfmpegUpdateAvailable    bool   `json:"ffmpegUpdateAvailable"`
+	LatestFfmpegVersion      string `json:"latestFfmpegVersion"`
 }
 
 var progressRegex = regexp.MustCompile(`\[download\]\s+([\d.]+)%\s+of\s+~?([\d.]+\S+)\s+at\s+([\d.]+\S+)(?:\s+ETA\s+(\S+))?`)
@@ -276,6 +279,10 @@ func (a *App) ytdlpPath() string {
 }
 
 func (a *App) ffmpegPath() string {
+	s := a.GetSettings()
+	if s.FfmpegPath != "" {
+		return s.FfmpegPath
+	}
 	name := "ffmpeg"
 	if runtime.GOOS == "windows" {
 		name += ".exe"
@@ -394,6 +401,7 @@ func (a *App) loadSettings() {
 		RateLimitEnabled: false,
 		RateLimitValue:   "1",
 		CustomArgs:       "",
+		FfmpegPath:       "",
 	})
 	a.cachedSettings = s
 	if err := a.writeSettingsLocked(s); err != nil {
@@ -948,7 +956,11 @@ func (a *App) UpdateDependencies() error {
 	if err := a.downloadYtdlp(true); err != nil {
 		return err
 	}
-	return a.downloadFfmpeg(true)
+	s := a.GetSettings()
+	if s.FfmpegPath == "" {
+		return a.downloadFfmpeg(true)
+	}
+	return nil
 }
 
 func (a *App) OpenBinDir() error {
@@ -971,7 +983,8 @@ func (a *App) OpenOutputDir(dir string) error {
 	case "darwin":
 		cmd = command("open", dir)
 	case "windows":
-		cmd = command("explorer", dir)
+		// Do not use the command() helper here; explorer needs to show its GUI window and will fail/exit with code 1 if run with CREATE_NO_WINDOW/HideWindow attributes.
+		cmd = exec.Command("explorer", dir)
 	default:
 		cmd = command("xdg-open", dir)
 	}
@@ -1018,6 +1031,17 @@ func (a *App) CheckForUpdates() UpdateInfo {
 			info.LatestKoalaPullVersion = latest
 			if isVersionNewer(latest, AppVersion) {
 				info.KoalaPullUpdateAvailable = true
+			}
+		}
+	}
+	s := a.GetSettings()
+	if s.FfmpegPath == "" {
+		info.LatestFfmpegVersion = a.GetFfmpegVersion()
+		if latest, err := fetchLatestFfmpegBuildDate(a.appContext()); err == nil {
+			if fi, e := os.Stat(a.ffmpegPath()); e == nil {
+				if latest.After(fi.ModTime()) {
+					info.FfmpegUpdateAvailable = true
+				}
 			}
 		}
 	}
@@ -1131,6 +1155,53 @@ func fetchLatestKoalaPullVersion(ctx context.Context) (string, error) {
 		return "", err
 	}
 	return result.TagName, nil
+}
+
+func fetchLatestFfmpegBuildDate(ctx context.Context) (time.Time, error) {
+	dlCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(dlCtx, http.MethodGet, "https://api.github.com/repos/BtbN/FFmpeg-Builds/releases/latest", nil)
+	if err != nil {
+		return time.Time{}, err
+	}
+	req.Header.Set("Accept", "application/json")
+	req.Header.Set("User-Agent", "KoalaPull/"+AppVersion)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return time.Time{}, err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return time.Time{}, fmt.Errorf("GitHub API returned %s", resp.Status)
+	}
+	var result struct {
+		PublishedAt string `json:"published_at"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return time.Time{}, err
+	}
+	return time.Parse(time.RFC3339, result.PublishedAt)
+}
+
+func (a *App) SelectFfmpegPath() (string, error) {
+	title := "Select FFmpeg Executable"
+	file, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title: title,
+		Filters: []wailsRuntime.FileFilter{
+			{
+				DisplayName: "FFmpeg Executable (ffmpeg*)",
+				Pattern:     "ffmpeg*",
+			},
+			{
+				DisplayName: "All Files (*.*)",
+				Pattern:     "*.*",
+			},
+		},
+	})
+	if err != nil {
+		return "", err
+	}
+	return file, nil
 }
 
 func (a *App) OpenExternalLink(url string) error {

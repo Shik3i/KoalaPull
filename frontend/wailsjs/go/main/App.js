@@ -82,6 +82,10 @@ export function SelectDirectory() {
   return window['go']['main']['App']['SelectDirectory']();
 }
 
+export function SelectFfmpegPath() {
+  return window['go']['main']['App']['SelectFfmpegPath']();
+}
+
 export function StartDownload(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['StartDownload'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
