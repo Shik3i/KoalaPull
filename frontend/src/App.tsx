@@ -2112,7 +2112,7 @@ const fmtTime = useCallback((t: string): string => {
               <h2 className="text-base lg:text-lg font-semibold" title={tt('helpSteps')}>{t('help.title')}</h2>
             </div>
             <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-5 lg:py-6">
-              <div className="space-y-6 max-w-6xl">
+              <div className="space-y-6">
                 <section className="rounded-xl p-4 lg:p-6 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                   <h3 className="text-sm lg:text-base font-medium mb-2" style={{ color: 'var(--text-secondary)' }} title={tt('helpSteps')}>{t('help.howToTitle')}</h3>
                   <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
