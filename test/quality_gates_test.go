@@ -192,7 +192,7 @@ func TestGoModuleRequiresPatchedToolchain(t *testing.T) {
 }
 
 func TestReleaseWorkflowUsesLeastPrivilege(t *testing.T) {
-	data := mustReadRepoFile(t, ".github", "workflows", "release.yml")
+	data := strings.ReplaceAll(mustReadRepoFile(t, ".github", "workflows", "release.yml"), "\r\n", "\n")
 	read := strings.Index(data, "permissions:\n  contents: read")
 	release := strings.Index(data, "release:\n")
 	write := strings.LastIndex(data, "permissions:\n      contents: write")
