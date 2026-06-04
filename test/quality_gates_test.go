@@ -10,6 +10,7 @@ import (
 func TestCanonicalVerifierRunsRequiredChecks(t *testing.T) {
 	data := mustReadRepoFile(t, "scripts", "verify.mjs")
 	for _, want := range []string{
+		`run("npm", ["ci", "--include=optional"]`,
 		`run("npm", ["run", "test"]`,
 		`run("npx", ["tsc", "--noEmit"]`,
 		`run("npm", ["run", "build"]`,
@@ -19,10 +20,14 @@ func TestCanonicalVerifierRunsRequiredChecks(t *testing.T) {
 		`run("go", ["test", "-race", "-count=1", "./..."]`,
 		`run("go", ["vet", "./..."]`,
 		`govulncheck@v1.3.0`,
+		`actionlint@v1.7.12`,
 	} {
 		if !strings.Contains(data, want) {
 			t.Fatalf("scripts/verify.mjs missing %q", want)
 		}
+	}
+	if strings.Index(data, `run("npm", ["ci", "--include=optional"]`) > strings.Index(data, `run("npm", ["run", "test"]`) {
+		t.Fatal("scripts/verify.mjs must run npm ci before frontend tests")
 	}
 	if strings.Index(data, `run("npm", ["run", "build"]`) > strings.Index(data, `run("go", ["test", "-count=1", "./..."]`) {
 		t.Fatal("scripts/verify.mjs must build frontend before go test so embedded frontend/dist exists")
@@ -92,6 +97,13 @@ func TestReleaseWorkflowRunsVerificationBeforeBuild(t *testing.T) {
 		if !strings.Contains(data, want) {
 			t.Fatalf("release workflow verification missing %q", want)
 		}
+	}
+}
+
+func TestReleaseWorkflowDoesNotCancelOtherPlatformsAfterOneFailure(t *testing.T) {
+	data := mustReadRepoFile(t, ".github", "workflows", "release.yml")
+	if !strings.Contains(data, "fail-fast: false") {
+		t.Fatal("release workflow must keep testing all platforms after one matrix failure")
 	}
 }
 
@@ -184,10 +196,45 @@ func TestWorkflowsUsePatchedToolchains(t *testing.T) {
 	}
 }
 
+func TestWorkflowsUseNode24ActionGenerations(t *testing.T) {
+	ci := mustReadRepoFile(t, ".github", "workflows", "ci.yml")
+	release := mustReadRepoFile(t, ".github", "workflows", "release.yml")
+	for _, want := range []string{
+		"actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6",
+		"actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6",
+		"actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6",
+	} {
+		if !strings.Contains(ci, want) || !strings.Contains(release, want) {
+			t.Fatalf("workflows missing verified Node 24 action %q", want)
+		}
+	}
+	for _, want := range []string{
+		"actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7",
+		"actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7",
+		"softprops/action-gh-release@b4309332981a82ec1c5618f44dd2e27cc8bfbfda # v3",
+	} {
+		if !strings.Contains(release, want) {
+			t.Fatalf("release workflow missing verified Node 24 action %q", want)
+		}
+	}
+}
+
 func TestGoModuleRequiresPatchedToolchain(t *testing.T) {
 	data := mustReadRepoFile(t, "go.mod")
 	if !strings.Contains(data, "go 1.26.4") {
 		t.Fatal("go.mod must require patched Go 1.26.4 or newer")
+	}
+}
+
+func TestFrontendLockfileIncludesOptionalWasmDependencies(t *testing.T) {
+	data := mustReadRepoFile(t, "frontend", "package-lock.json")
+	for _, want := range []string{
+		`"node_modules/@emnapi/core"`,
+		`"node_modules/@emnapi/runtime"`,
+	} {
+		if !strings.Contains(data, want) {
+			t.Fatalf("frontend/package-lock.json missing %q", want)
+		}
 	}
 }
 

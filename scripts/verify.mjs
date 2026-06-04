@@ -51,6 +51,7 @@ function commandWorks(name, args = ["--version"]) {
   return !result.error && result.status === 0
 }
 
+run("npm", ["ci", "--include=optional"], { cwd: frontendDir })
 run("npm", ["run", "test"], { cwd: frontendDir })
 run("npx", ["tsc", "--noEmit"], { cwd: frontendDir })
 run("npm", ["run", "build"], { cwd: frontendDir })
@@ -70,11 +71,9 @@ if (["linux", "windows", "darwin"].includes(goos) && commandWorks(cc)) {
 
 run("go", ["vet", "./..."])
 run("go", ["run", "golang.org/x/vuln/cmd/govulncheck@v1.3.0", "./..."])
-
-if (commandWorks("ruby")) {
-  run("ruby", ["-ryaml", "-e", "YAML.load_file('.github/workflows/ci.yml')"])
-  run("ruby", ["-ryaml", "-e", "YAML.load_file('.github/workflows/release.yml')"])
-  console.log("Workflow YAML syntax verified.")
-} else {
-  console.warn("Warning: ruby not found, skipping workflow YAML verification.")
-}
+run("go", [
+  "run",
+  "github.com/rhysd/actionlint/cmd/actionlint@v1.7.12",
+  ".github/workflows/ci.yml",
+  ".github/workflows/release.yml",
+])
