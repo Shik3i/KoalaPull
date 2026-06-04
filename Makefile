@@ -1,2 +1,2 @@
 verify:
-	./scripts/verify.sh
+	node scripts/verify.mjs
