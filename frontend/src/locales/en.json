@@ -51,6 +51,7 @@
     "status": {
       "downloading": "Downloading - {percent}%",
       "starting": "Starting...",
+      "retrying": "Retrying...",
       "queued": "Queued",
       "completed": "Completed",
       "error": "Error",

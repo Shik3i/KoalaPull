@@ -21,6 +21,10 @@ import (
 	"unicode/utf8"
 )
 
+func init() {
+	isTesting = true
+}
+
 func TestDependencyArtifactsRequireIntegrityVerification(t *testing.T) {
 	for _, goos := range []string{"windows", "darwin", "linux"} {
 		artifact := ffmpegArtifactFor(goos)
@@ -904,4 +908,141 @@ func installFakeYtDlp(t *testing.T) string {
 
 	t.Setenv("GO_WANT_HELPER_PROCESS", "1")
 	return binDir
+}
+
+type mockTransport struct {
+	roundTrip func(*http.Request) (*http.Response, error)
+}
+
+func (m *mockTransport) RoundTrip(req *http.Request) (*http.Response, error) {
+	return m.roundTrip(req)
+}
+
+func TestDependencySkipChecks(t *testing.T) {
+	oldTransport := http.DefaultClient.Transport
+	defer func() {
+		http.DefaultClient.Transport = oldTransport
+	}()
+
+	var ytdlpDlCount, ffmpegDlCount int
+	var mu sync.Mutex
+
+	http.DefaultClient.Transport = &mockTransport{
+		roundTrip: func(req *http.Request) (*http.Response, error) {
+			mu.Lock()
+			defer mu.Unlock()
+			urlStr := req.URL.String()
+			if strings.Contains(urlStr, "yt-dlp") {
+				ytdlpDlCount++
+			} else if strings.Contains(urlStr, "ffmpeg") {
+				ffmpegDlCount++
+			}
+			return nil, errors.New("mock network error")
+		},
+	}
+
+	t.Run("ytdlp_installed_ffmpeg_missing", func(t *testing.T) {
+		mu.Lock()
+		ytdlpDlCount = 0
+		ffmpegDlCount = 0
+		mu.Unlock()
+
+		app := NewApp()
+		app.ctx = context.Background()
+		app.binDir = t.TempDir()
+
+		if err := os.WriteFile(app.ytdlpPath(), []byte("dummy-ytdlp"), 0755); err != nil {
+			t.Fatal(err)
+		}
+
+		err := app.DownloadDependencies()
+		if err == nil {
+			t.Fatal("expected download error for ffmpeg")
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		if ytdlpDlCount != 0 {
+			t.Errorf("yt-dlp download was not skipped: count = %d", ytdlpDlCount)
+		}
+		if ffmpegDlCount == 0 {
+			t.Error("ffmpeg download was not attempted")
+		}
+	})
+
+	t.Run("ffmpeg_installed_ytdlp_missing", func(t *testing.T) {
+		mu.Lock()
+		ytdlpDlCount = 0
+		ffmpegDlCount = 0
+		mu.Unlock()
+
+		app := NewApp()
+		app.ctx = context.Background()
+		app.binDir = t.TempDir()
+
+		if err := os.WriteFile(app.ffmpegPath(), []byte("dummy-ffmpeg"), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if runtime.GOOS == "windows" {
+			if err := os.WriteFile(app.ffprobePath(), []byte("dummy-ffprobe"), 0755); err != nil {
+				t.Fatal(err)
+			}
+		}
+
+		err := app.DownloadDependencies()
+		if err == nil {
+			t.Fatal("expected download error for yt-dlp")
+		}
+
+		mu.Lock()
+		defer mu.Unlock()
+		if ytdlpDlCount == 0 {
+			t.Error("yt-dlp download was not attempted")
+		}
+	})
+
+	if runtime.GOOS == "windows" {
+		t.Run("ffmpeg_exists_ffprobe_missing", func(t *testing.T) {
+			mu.Lock()
+			ytdlpDlCount = 0
+			ffmpegDlCount = 0
+			mu.Unlock()
+
+			app := NewApp()
+			app.ctx = context.Background()
+			app.binDir = t.TempDir()
+
+			if err := os.WriteFile(app.ytdlpPath(), []byte("dummy-ytdlp"), 0755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(app.ffmpegPath(), []byte("dummy-ffmpeg"), 0755); err != nil {
+				t.Fatal(err)
+			}
+
+			err := app.DownloadDependencies()
+			if err == nil {
+				t.Fatal("expected download error for ffmpeg")
+			}
+
+			mu.Lock()
+			defer mu.Unlock()
+			if ytdlpDlCount != 0 {
+				t.Errorf("yt-dlp download was not skipped: count = %d", ytdlpDlCount)
+			}
+			if ffmpegDlCount == 0 {
+				t.Error("ffmpeg download was not attempted despite missing ffprobe")
+			}
+		})
+	}
+}
+
+func TestSaveHistoryEntryReturnsErrorOnWriteFailure(t *testing.T) {
+	app := NewApp()
+	app.historyFilePath = filepath.Join(t.TempDir(), "missing-dir", "history.json")
+	app.historyLoaded = true
+
+	err := app.saveHistoryEntry(HistoryEntry{DownloadID: "new"})
+	if err == nil {
+		t.Fatal("expected saveHistoryEntry to return error on write failure, got nil")
+	}
 }

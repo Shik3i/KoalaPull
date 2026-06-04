@@ -51,6 +51,7 @@
     "status": {
       "downloading": "Lädt herunter - {percent}%",
       "starting": "Wird gestartet...",
+      "retrying": "Erneuter Versuch...",
       "queued": "In Warteschlange",
       "completed": "Abgeschlossen",
       "error": "Fehler",

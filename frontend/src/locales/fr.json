@@ -51,6 +51,7 @@
     "status": {
       "downloading": "Téléchargement - {percent}%",
       "starting": "Démarrage...",
+      "retrying": "Nouvelle tentative...",
       "queued": "En file d'attente",
       "completed": "Terminé",
       "error": "Erreur",

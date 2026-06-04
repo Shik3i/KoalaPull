@@ -340,6 +340,7 @@ const QueueRow = memo(({
           <span className={statusColors[item.status]}>
             {item.status === 'downloading' && t('downloads.status.downloading', { percent: item.progress })}
             {item.status === 'starting' && t('downloads.status.starting')}
+            {item.status === 'retrying' && t('downloads.status.retrying')}
             {item.status === 'queued' && t('downloads.status.queued')}
             {item.status === 'completed' && t('downloads.status.completed')}
             {item.status === 'error' && t('downloads.status.error')}
@@ -349,15 +350,18 @@ const QueueRow = memo(({
           {item.eta && <span style={{ color: 'var(--text-muted)' }}>{t('downloads.eta', { eta: item.eta })}</span>}
           {item.playlistStatus && <span style={{ color: 'var(--text-muted)' }}>{item.playlistStatus}</span>}
         </div>
-        {(item.status === 'downloading' || item.status === 'starting') && (
+        {(item.status === 'downloading' || item.status === 'starting' || item.status === 'retrying') && (
           <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
             <div className="h-full rounded-full transition-all duration-300 ease-out" style={{ width: `${Math.max(item.progress, 2)}%`, background: 'var(--color-accent)' }} />
           </div>
         )}
         {item.status === 'completed' && (
-          <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
-            <div className="h-full rounded-full" style={{ width: '100%', background: '#22c55e' }} />
-          </div>
+          <>
+            <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
+              <div className="h-full rounded-full" style={{ width: '100%', background: '#22c55e' }} />
+            </div>
+            {item.errorMsg && <p className="mt-1 text-xs truncate" style={{ color: '#fbbf24' }}>{item.errorMsg}</p>}
+          </>
         )}
         {item.status === 'error' && (
           <>
@@ -385,7 +389,7 @@ const QueueRow = memo(({
           </svg>
         </div>
       )}
-      {(item.status === 'downloading' || item.status === 'starting') && (
+      {(item.status === 'downloading' || item.status === 'starting' || item.status === 'retrying') && (
         <div className="flex items-center gap-1">
           <svg className="w-5 h-5 animate-pulse shrink-0" style={{ color: 'var(--color-accent)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
@@ -438,7 +442,7 @@ export class ErrorBoundary extends Component<{ children: React.ReactNode }, { ha
 }
 
 const statusColors: Record<string, string> = {
-  downloading: 'text-accent', starting: 'text-accent',
+  downloading: 'text-accent', starting: 'text-accent', retrying: 'text-accent',
   queued: 'text-gray-400', completed: 'text-green-400',
   error: 'text-red-400', cancelled: 'text-yellow-400',
 }
@@ -449,6 +453,7 @@ function App() {
   const historyRequestIdRef = useRef(0)
   const [activeTab, setActiveTab] = useState<Tab>('downloads')
   const [url, setUrl] = useState('')
+  const lastFetchedUrlRef = useRef<string>('')
   const [fetched, setFetched] = useState(false)
   const [fetching, setFetching] = useState(false)
   const [fetchError, setFetchError] = useState('')
@@ -458,6 +463,14 @@ function App() {
   const [formatOptions, setFormatOptions] = useState<FormatOption[]>([])
   const [selectedContainer, setSelectedContainer] = useState(defaultCustomContainer)
   const [selectedSubs, setSelectedSubs] = useState(defaultCustomSubtitle)
+
+  useEffect(() => {
+    if (url !== lastFetchedUrlRef.current) {
+      setFetched(false)
+      setMetadata(null)
+      setFetchError('')
+    }
+  }, [url])
 
   const [depsReady, setDepsReady] = useState(false)
   const [checkingDeps, setCheckingDeps] = useState(true)
@@ -526,7 +539,7 @@ function App() {
     )
   }
 
-  const activeCount = queue.filter((i) => ['queued', 'starting', 'downloading'].includes(i.status)).length
+  const activeCount = queue.filter((i) => ['queued', 'starting', 'downloading', 'retrying'].includes(i.status)).length
 
   const totalEta = useMemo(() => {
     let rem = 0, spd = 0
@@ -714,7 +727,7 @@ function App() {
         let nextItem: QueueItem
         if (data.status === 'completed') {
           delete progressHistoryRef.current[data.downloadId]
-          nextItem = { ...item, status: 'completed', progress: 100, playlistStatus: '' }
+          nextItem = { ...item, status: 'completed', progress: 100, errorMsg: data.error || '', playlistStatus: '' }
         } else if (data.status === 'error') {
           delete progressHistoryRef.current[data.downloadId]
           const msg = data.error || t('errors.downloadFailed')
@@ -879,6 +892,7 @@ function App() {
     try {
       const meta = await FetchMetadata(url)
       if (requestId !== fetchRequestIdRef.current) return
+      lastFetchedUrlRef.current = url
       setMetadata(meta)
       setFormatOptions(buildFormatOptions(meta.formats || [], t))
       setFetched(true)
@@ -898,7 +912,7 @@ function App() {
     setAddQueueError('')
     try {
       const choice = resolveDownloadChoice(selectedPreset, selectedFormat, selectedContainer, selectedSubs)
-      const downloadId = await StartDownloadWithPreset(url, choice.formatId, defaultOutputDir, choice.container, choice.subtitle, metadata.title, selectedPreset)
+      const downloadId = await StartDownloadWithPreset(lastFetchedUrlRef.current, choice.formatId, defaultOutputDir, choice.container, choice.subtitle, metadata.title, selectedPreset)
       setQueue((prev) => {
         const pending = pendingProgressRef.current[downloadId]
         const newItem: QueueItem = {

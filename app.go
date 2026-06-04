@@ -34,6 +34,7 @@ func init() {
 }
 
 var AppVersion = "dev"
+var isTesting = false
 
 type App struct {
 	ctx              context.Context
@@ -746,12 +747,12 @@ func (a *App) GetHistory() ([]HistoryEntry, error) {
 	return reverseHistoryEntries(a.historyCache), nil
 }
 
-func (a *App) saveHistoryEntry(entry HistoryEntry) {
+func (a *App) saveHistoryEntry(entry HistoryEntry) error {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
 	if err := a.ensureHistoryLoadedLocked(); err != nil {
 		log.Printf("saveHistoryEntry load: %v", err)
-		return
+		return err
 	}
 	next := append(append([]HistoryEntry(nil), a.historyCache...), entry)
 	if len(next) > maxHistoryEntries {
@@ -759,9 +760,10 @@ func (a *App) saveHistoryEntry(entry HistoryEntry) {
 	}
 	if err := writeHistoryEntriesToFile(a.historyPath(), next); err != nil {
 		log.Printf("saveHistoryEntry: %v", err)
-		return
+		return err
 	}
 	a.historyCache = next
+	return nil
 }
 
 func (a *App) ClearHistory() error {
@@ -1041,6 +1043,12 @@ func (a *App) OpenExternalLink(url string) error {
 }
 
 func (a *App) emitProgress(dep string, pct int, status, errMsg string) {
+	if isTesting {
+		return
+	}
+	defer func() {
+		_ = recover()
+	}()
 	ev := DepProgress{
 		Dependency: dep,
 		Progress:   pct,
@@ -1053,6 +1061,12 @@ func (a *App) emitProgress(dep string, pct int, status, errMsg string) {
 }
 
 func (a *App) emitDownloadProgress(downloadID string, percent float64, speed, eta, fileSize, status, errMsg, playlistStatus string) {
+	if isTesting {
+		return
+	}
+	defer func() {
+		_ = recover()
+	}()
 	ev := DownloadProgress{
 		DownloadID:     downloadID,
 		Percent:        percent,
@@ -1088,7 +1102,7 @@ func (a *App) DownloadDependencies() error {
 func (a *App) downloadYtdlp(force bool) error {
 	a.emitProgress("yt-dlp", 0, "downloading", "")
 	destPath := a.ytdlpPath()
-	if !force && a.ffmpegToolsInstalled() {
+	if !force && fileExists(destPath) {
 		a.emitProgress("yt-dlp", 100, "completed", "")
 		return nil
 	}
@@ -1126,7 +1140,7 @@ func (a *App) downloadYtdlp(force bool) error {
 func (a *App) downloadFfmpeg(force bool) error {
 	a.emitProgress("ffmpeg", 0, "downloading", "")
 	destPath := a.ffmpegPath()
-	if !force && fileExists(destPath) {
+	if !force && a.ffmpegToolsInstalled() {
 		a.emitProgress("ffmpeg", 100, "completed", "")
 		return nil
 	}
@@ -1557,12 +1571,16 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 	for attempt := 0; attempt < 2; attempt++ {
 		if attempt > 0 {
 			if ctx.Err() != nil {
+				_ = a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "cancelled", StartTime: startTime, EndTime: time.Now()})
+				a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
 				return
 			}
 			a.emitDownloadProgress(downloadID, 0, "", "", "", "retrying", "", "")
 			select {
 			case <-time.After(2 * time.Second):
 			case <-ctx.Done():
+				_ = a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "cancelled", StartTime: startTime, EndTime: time.Now()})
+				a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
 				return
 			}
 			lastProgress.Store(time.Now())
@@ -1725,8 +1743,11 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 				return
 			}
 
-			a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, FileSize: lastFileSz, AvgSpeed: lastSpeed, Status: "completed", StartTime: startTime, EndTime: endTime})
-			a.emitDownloadProgress(downloadID, 100, "", "", lastFileSz, "completed", "", "")
+			var errText string
+			if historyErr := a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, FileSize: lastFileSz, AvgSpeed: lastSpeed, Status: "completed", StartTime: startTime, EndTime: endTime}); historyErr != nil {
+				errText = fmt.Sprintf("History error: %v", historyErr)
+			}
+			a.emitDownloadProgress(downloadID, 100, "", "", lastFileSz, "completed", errText, "")
 		}()
 
 		attemptCancel()
