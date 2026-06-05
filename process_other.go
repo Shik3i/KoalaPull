@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"os/exec"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -92,6 +93,17 @@ func commandOutputLimited(ctx context.Context, maxBytes int64, name string, arg 
 
 func command(name string, arg ...string) *exec.Cmd {
 	return exec.Command(name, arg...)
+}
+
+func openFileWithDefaultApp(path string) error {
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "darwin":
+		cmd = command("open", path)
+	default:
+		cmd = command("xdg-open", path)
+	}
+	return cmd.Start()
 }
 
 func (a *App) IsBrowserRunning(browser string) (bool, error) {

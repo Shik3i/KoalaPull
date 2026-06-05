@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -30,6 +31,33 @@ type dependencyArtifact struct {
 	ChecksumURL  string
 	SignatureURL string
 	MaxBytes     int64
+}
+
+func trustedDependencyHTTPClient() *http.Client {
+	return &http.Client{
+		Transport: http.DefaultClient.Transport,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			if len(via) >= 10 {
+				return errors.New("too many redirects")
+			}
+			if !isTrustedDependencyURL(req.URL) {
+				return fmt.Errorf("dependency redirect to untrusted host: %s", req.URL.Hostname())
+			}
+			return nil
+		},
+	}
+}
+
+func isTrustedDependencyURL(u *url.URL) bool {
+	if u == nil || u.Scheme != "https" {
+		return false
+	}
+	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
+	switch host {
+	case "github.com", "objects.githubusercontent.com", "evermeet.cx", "www.evermeet.cx":
+		return true
+	}
+	return strings.HasSuffix(host, ".githubusercontent.com")
 }
 
 func ffmpegArtifactFor(goos string) dependencyArtifact {
@@ -109,8 +137,6 @@ func fetchLimitedBytes(ctx context.Context, rawURL string, maxBytes int64) ([]by
 	}
 	return data, nil
 }
-
-
 
 func extractFFmpegFromZipBounded(ctx context.Context, archivePath, destPath string) error {
 	return extractZipBinaryBounded(ctx, archivePath, destPath, "ffmpeg", "ffmpeg.exe")
@@ -315,5 +341,3 @@ func (r contextReader) Read(p []byte) (int, error) {
 		return r.reader.Read(p)
 	}
 }
-
-

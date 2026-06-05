@@ -195,6 +195,8 @@ const (
 	maxHistoryEntries      = 2000
 	maxHistoryFileBytes    = 64 << 20
 	maxMetadataOutputBytes = 16 << 20
+	maxUpdateResponseBytes = 1 << 20
+	maxBatchItems          = 25
 	defaultDownloadPreset  = "compatible"
 	defaultCustomFormatID  = "bestvideo+bestaudio/best"
 	defaultCustomContainer = "mp4"
@@ -660,8 +662,53 @@ var blockedCustomArgNames = map[string]struct{}{
 	"--ffmpeg-location":          {},
 }
 
+var allowedCustomArgNames = map[string]bool{
+	"--add-header":           true,
+	"--concurrent-fragments": true,
+	"--convert-thumbnails":   true,
+	"--embed-metadata":       false,
+	"--embed-thumbnail":      false,
+	"--extractor-retries":    true,
+	"--force-ipv4":           false,
+	"--force-ipv6":           false,
+	"--fragment-retries":     true,
+	"--geo-bypass":           false,
+	"--geo-bypass-country":   true,
+	"--geo-bypass-ip-block":  true,
+	"--max-sleep-interval":   true,
+	"--no-mtime":             false,
+	"--no-part":              false,
+	"--referer":              true,
+	"--restrict-filenames":   false,
+	"--retries":              true,
+	"--retry-sleep":          true,
+	"--sleep-interval":       true,
+	"--sleep-requests":       true,
+	"--sub-langs":            true,
+	"--trim-filenames":       true,
+	"--user-agent":           true,
+	"--windows-filenames":    false,
+	"--write-auto-subs":      false,
+	"--write-subs":           false,
+	"--write-thumbnail":      false,
+}
+
 func sanitizeCustomArgs(raw []string) ([]string, error) {
+	expectingValueFor := ""
 	for _, arg := range raw {
+		if arg == "" {
+			continue
+		}
+		if expectingValueFor != "" {
+			if strings.HasPrefix(arg, "-") {
+				return nil, fmt.Errorf("custom argument %q requires a value", expectingValueFor)
+			}
+			expectingValueFor = ""
+			continue
+		}
+		if !strings.HasPrefix(arg, "-") {
+			return nil, fmt.Errorf("custom argument value %q has no option", arg)
+		}
 		name := arg
 		if idx := strings.Index(name, "="); idx >= 0 {
 			name = name[:idx]
@@ -669,6 +716,16 @@ func sanitizeCustomArgs(raw []string) ([]string, error) {
 		if _, blocked := blockedCustomArgNames[name]; blocked {
 			return nil, fmt.Errorf("custom argument %q is not allowed", name)
 		}
+		requiresValue, allowed := allowedCustomArgNames[name]
+		if !allowed {
+			return nil, fmt.Errorf("custom argument %q is not supported", name)
+		}
+		if requiresValue && !strings.Contains(arg, "=") {
+			expectingValueFor = name
+		}
+	}
+	if expectingValueFor != "" {
+		return nil, fmt.Errorf("custom argument %q requires a value", expectingValueFor)
 	}
 	return raw, nil
 }
@@ -1273,7 +1330,7 @@ func fetchLatestYtdlpVersion(ctx context.Context) (string, error) {
 	var result struct {
 		TagName string `json:"tag_name"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := decodeJSONResponseLimited(resp, &result, maxUpdateResponseBytes); err != nil {
 		return "", err
 	}
 	return result.TagName, nil
@@ -1299,7 +1356,7 @@ func fetchLatestKoalaPullVersion(ctx context.Context) (string, error) {
 	var result struct {
 		TagName string `json:"tag_name"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := decodeJSONResponseLimited(resp, &result, maxUpdateResponseBytes); err != nil {
 		return "", err
 	}
 	return result.TagName, nil
@@ -1325,10 +1382,25 @@ func fetchLatestFfmpegBuildDate(ctx context.Context) (time.Time, error) {
 	var result struct {
 		PublishedAt string `json:"published_at"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+	if err := decodeJSONResponseLimited(resp, &result, maxUpdateResponseBytes); err != nil {
 		return time.Time{}, err
 	}
 	return time.Parse(time.RFC3339, result.PublishedAt)
+}
+
+func decodeJSONResponseLimited(resp *http.Response, dest any, maxBytes int64) error {
+	if resp.ContentLength > maxBytes {
+		return fmt.Errorf("response exceeds %d bytes", maxBytes)
+	}
+	limited := io.LimitReader(resp.Body, maxBytes+1)
+	data, err := io.ReadAll(limited)
+	if err != nil {
+		return err
+	}
+	if int64(len(data)) > maxBytes {
+		return fmt.Errorf("response exceeds %d bytes", maxBytes)
+	}
+	return json.Unmarshal(data, dest)
 }
 
 func (a *App) SelectFfmpegPath() (string, error) {
@@ -1355,6 +1427,9 @@ func (a *App) SelectFfmpegPath() (string, error) {
 func (a *App) OpenExternalLink(url string) error {
 	if !isAllowedDownloadURL(url) {
 		return errors.New("external link must use http or https")
+	}
+	if !isAllowedExternalLinkHost(url) {
+		return errors.New("external link host is not allowed")
 	}
 	wailsRuntime.BrowserOpenURL(a.appContext(), url)
 	return nil
@@ -1523,7 +1598,7 @@ func (a *App) downloadFile(ctx context.Context, url, destPath, depName string, m
 	if err != nil {
 		return fmt.Errorf("http request failed: %w", err)
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := trustedDependencyHTTPClient().Do(req)
 	if err != nil {
 		return fmt.Errorf("http get failed: %w", err)
 	}
@@ -1583,7 +1658,7 @@ func fetchChecksumForAsset(ctx context.Context, checksumURL, assetName string) (
 	if err != nil {
 		return "", err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := trustedDependencyHTTPClient().Do(req)
 	if err != nil {
 		return "", err
 	}
@@ -1693,6 +1768,9 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	if !isAllowedDownloadURL(url) {
 		return nil, fmt.Errorf("url must use http or https")
 	}
+	if err := validateDownloadURLForLaunch(ctxWithDefault(a.appContext()), url); err != nil {
+		return nil, err
+	}
 	args := []string{"--no-check-formats", "--no-warnings", "--dump-json", "--skip-download", "--flat-playlist"}
 	settings := a.GetSettings()
 	args = append(args, a.getCookieArgs(settings)...)
@@ -1732,7 +1810,7 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 		meta := &VideoMetadata{
 			ID:         raw.ID,
 			Title:      raw.Title,
-			Thumbnail:  raw.Thumbnail,
+			Thumbnail:  sanitizeRemoteMediaURLWithResolver(ctx, raw.Thumbnail),
 			Uploader:   raw.Uploader,
 			IsPlaylist: true,
 			EntryCount: len(raw.Entries),
@@ -1745,7 +1823,7 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	meta := &VideoMetadata{
 		ID:        raw.ID,
 		Title:     raw.Title,
-		Thumbnail: raw.Thumbnail,
+		Thumbnail: sanitizeRemoteMediaURLWithResolver(ctx, raw.Thumbnail),
 		Uploader:  raw.Uploader,
 		Duration:  raw.Duration,
 		Formats:   make([]FormatInfo, 0, len(raw.Formats)),
@@ -1780,6 +1858,9 @@ func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subti
 	}
 	if !isAllowedDownloadURL(url) {
 		return "", fmt.Errorf("url must use http or https")
+	}
+	if err := validateDownloadURLForLaunch(ctxWithDefault(a.appContext()), url); err != nil {
+		return "", err
 	}
 	if len(url) > maxInputLength || len(outputDir) > maxPathLength {
 		return "", fmt.Errorf("input too long")
@@ -1824,6 +1905,9 @@ func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subti
 		args = append(args, customArgs...)
 	}
 	if playlistItems != "" {
+		if err := validatePlaylistItems(playlistItems); err != nil {
+			return "", err
+		}
 		args = append(args, "--playlist-items", playlistItems)
 	}
 	args = append(args, downloadPostProcessingArgs(preset, container, subtitle)...)
@@ -1952,11 +2036,110 @@ func isAllowedDownloadURL(raw string) bool {
 		return false
 	}
 	if ip := net.ParseIP(host); ip != nil {
-		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		if !isAllowedRemoteIP(ip) {
 			return false
 		}
 	}
 	return true
+}
+
+func ctxWithDefault(ctx context.Context) context.Context {
+	if ctx != nil {
+		return ctx
+	}
+	return context.Background()
+}
+
+func validateDownloadURLForLaunch(ctx context.Context, raw string) error {
+	if isTesting {
+		return nil
+	}
+	parsed, err := url.ParseRequestURI(raw)
+	if err != nil {
+		return fmt.Errorf("invalid url")
+	}
+	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
+	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
+	if err != nil {
+		return fmt.Errorf("resolve url host: %w", err)
+	}
+	if len(ips) == 0 {
+		return errors.New("url host has no addresses")
+	}
+	for _, ip := range ips {
+		if !isAllowedRemoteIP(ip) {
+			return errors.New("url host resolves to a blocked network address")
+		}
+	}
+	return nil
+}
+
+func isAllowedRemoteIP(ip net.IP) bool {
+	return ip != nil &&
+		!ip.IsLoopback() &&
+		!ip.IsPrivate() &&
+		!ip.IsLinkLocalUnicast() &&
+		!ip.IsLinkLocalMulticast() &&
+		!ip.IsMulticast() &&
+		!ip.IsUnspecified()
+}
+
+func isAllowedExternalLinkHost(raw string) bool {
+	parsed, err := url.ParseRequestURI(raw)
+	if err != nil {
+		return false
+	}
+	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
+	switch host {
+	case "github.com", "www.github.com", "yt-dlp.org", "www.yt-dlp.org", "ffmpeg.org", "www.ffmpeg.org", "evermeet.cx", "www.evermeet.cx":
+		return true
+	}
+	return strings.HasSuffix(host, ".github.com")
+}
+
+func sanitizeRemoteMediaURL(raw string) string {
+	if isAllowedDownloadURL(raw) {
+		return raw
+	}
+	return ""
+}
+
+func sanitizeRemoteMediaURLWithResolver(ctx context.Context, raw string) string {
+	if !isAllowedDownloadURL(raw) {
+		return ""
+	}
+	if err := validateDownloadURLForLaunch(ctxWithDefault(ctx), raw); err != nil {
+		return ""
+	}
+	return raw
+}
+
+func validatePlaylistItems(raw string) error {
+	items := strings.Split(raw, ",")
+	if len(items) > maxBatchItems {
+		return fmt.Errorf("playlist item limit is %d", maxBatchItems)
+	}
+	rangeRe := regexp.MustCompile(`^\d+(-\d+)?$`)
+	for _, item := range items {
+		item = strings.TrimSpace(item)
+		if item == "" || !rangeRe.MatchString(item) {
+			return fmt.Errorf("invalid playlist item selection")
+		}
+		if strings.Contains(item, "-") {
+			parts := strings.SplitN(item, "-", 2)
+			start, _ := strconv.Atoi(parts[0])
+			end, _ := strconv.Atoi(parts[1])
+			if start < 1 || end < start || end-start+1 > maxBatchItems {
+				return fmt.Errorf("playlist item limit is %d", maxBatchItems)
+			}
+			continue
+		}
+		n, _ := strconv.Atoi(item)
+		if n < 1 {
+			return fmt.Errorf("invalid playlist item selection")
+		}
+	}
+	return nil
 }
 
 func (a *App) CancelDownload(downloadID string) {
@@ -2245,17 +2428,42 @@ func (a *App) PlayFile(filePath string) error {
 	if info.IsDir() {
 		return errors.New("path is a directory, not a file")
 	}
+	if !isSafePlayableFile(cleaned) {
+		return errors.New("file type is not safe to play from KoalaPull")
+	}
 
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = command("cmd.exe", "/c", "start", "", cleaned)
+		return openFileWithDefaultApp(cleaned)
 	case "darwin":
 		cmd = command("open", cleaned)
 	default:
 		cmd = command("xdg-open", cleaned)
 	}
 	return cmd.Start()
+}
+
+var playableFileExtensions = map[string]struct{}{
+	".3gp":  {},
+	".aac":  {},
+	".flac": {},
+	".m4a":  {},
+	".m4v":  {},
+	".mkv":  {},
+	".mov":  {},
+	".mp3":  {},
+	".mp4":  {},
+	".oga":  {},
+	".ogg":  {},
+	".opus": {},
+	".wav":  {},
+	".webm": {},
+}
+
+func isSafePlayableFile(path string) bool {
+	_, ok := playableFileExtensions[strings.ToLower(filepath.Ext(path))]
+	return ok
 }
 
 func (a *App) ShowFileInFolder(filePath string) error {

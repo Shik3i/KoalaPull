@@ -8,8 +8,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -480,6 +482,12 @@ func TestAllowedDownloadURLRejectsNonHTTPProtocols(t *testing.T) {
 	}
 }
 
+func TestOpenExternalLinkRejectsUnknownHTTPHosts(t *testing.T) {
+	if err := NewApp().OpenExternalLink("https://evil.example/phish"); err == nil {
+		t.Fatal("OpenExternalLink accepted unknown host")
+	}
+}
+
 func TestAllowedDownloadURLRejectsLocalNetworkTargets(t *testing.T) {
 	for _, raw := range []string{
 		"http://localhost:8080/video",
@@ -495,6 +503,17 @@ func TestAllowedDownloadURLRejectsLocalNetworkTargets(t *testing.T) {
 	}
 }
 
+func TestAllowedRemoteIPRejectsUnsafeRanges(t *testing.T) {
+	for _, raw := range []string{"127.0.0.1", "10.0.0.1", "192.168.1.1", "169.254.169.254", "::1"} {
+		if isAllowedRemoteIP(net.ParseIP(raw)) {
+			t.Fatalf("%s was allowed, want rejected", raw)
+		}
+	}
+	if !isAllowedRemoteIP(net.ParseIP("8.8.8.8")) {
+		t.Fatal("public IP was rejected")
+	}
+}
+
 func TestFetchMetadataRejectsInvalidURLsBeforeExec(t *testing.T) {
 	app := NewApp()
 	app.ctx = context.Background()
@@ -504,6 +523,52 @@ func TestFetchMetadataRejectsInvalidURLsBeforeExec(t *testing.T) {
 		if _, err := app.FetchMetadata(raw); err == nil {
 			t.Fatalf("FetchMetadata(%q) succeeded, want validation error", raw[:min(len(raw), 64)])
 		}
+	}
+}
+
+func TestSanitizeRemoteMediaURLRejectsLocalTargets(t *testing.T) {
+	if got := sanitizeRemoteMediaURL("http://127.0.0.1:8080/thumb.jpg"); got != "" {
+		t.Fatalf("sanitizeRemoteMediaURL local = %q, want empty", got)
+	}
+	if got := sanitizeRemoteMediaURL("https://example.com/thumb.jpg"); got == "" {
+		t.Fatal("sanitizeRemoteMediaURL rejected public https URL")
+	}
+}
+
+func TestDecodeJSONResponseLimitedRejectsOversizeBody(t *testing.T) {
+	resp := &http.Response{
+		ContentLength: 8,
+		Body:          io.NopCloser(strings.NewReader(`{"x":1}`)),
+	}
+	var out map[string]int
+	if err := decodeJSONResponseLimited(resp, &out, 4); err == nil {
+		t.Fatal("decodeJSONResponseLimited accepted oversized response")
+	}
+
+	resp = &http.Response{
+		ContentLength: -1,
+		Body:          io.NopCloser(strings.NewReader(`{"x":1}`)),
+	}
+	if err := decodeJSONResponseLimited(resp, &out, 32); err != nil {
+		t.Fatalf("decodeJSONResponseLimited rejected small response: %v", err)
+	}
+}
+
+func TestTrustedDependencyURLRejectsUntrustedHosts(t *testing.T) {
+	trusted, err := url.Parse("https://github.com/yt-dlp/yt-dlp/releases/download/x/yt-dlp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !isTrustedDependencyURL(trusted) {
+		t.Fatal("github.com dependency URL rejected")
+	}
+
+	untrusted, err := url.Parse("https://evil.example/yt-dlp")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if isTrustedDependencyURL(untrusted) {
+		t.Fatal("untrusted dependency URL accepted")
 	}
 }
 
@@ -950,14 +1015,42 @@ func TestSanitizeCustomArgsRejectsDangerousOptions(t *testing.T) {
 		"--cookies secret.txt",
 		"--ffmpeg-location /tmp/fake",
 		"--output=%(title)s",
+		"--proxy socks5://127.0.0.1:1080",
+		"--unknown-option",
+		"stray-value",
 	} {
 		if _, err := sanitizeCustomArgs(parseCustomArgs(input)); err == nil {
 			t.Fatalf("sanitizeCustomArgs(%q) succeeded, want error", input)
 		}
 	}
 
-	if got, err := sanitizeCustomArgs(parseCustomArgs("--proxy socks5://127.0.0.1:1080 --geo-bypass")); err != nil || len(got) != 3 {
+	if got, err := sanitizeCustomArgs(parseCustomArgs("--user-agent KoalaPull --geo-bypass")); err != nil || len(got) != 3 {
 		t.Fatalf("safe custom args rejected: got %#v err %v", got, err)
+	}
+}
+
+func TestValidatePlaylistItems(t *testing.T) {
+	if err := validatePlaylistItems("1,2,3"); err != nil {
+		t.Fatalf("validatePlaylistItems valid list: %v", err)
+	}
+	if err := validatePlaylistItems("1-25"); err != nil {
+		t.Fatalf("validatePlaylistItems valid range: %v", err)
+	}
+	for _, raw := range []string{"0", "1-26", "1,abc", strings.Repeat("1,", 26) + "1"} {
+		if err := validatePlaylistItems(raw); err == nil {
+			t.Fatalf("validatePlaylistItems(%q) succeeded, want error", raw)
+		}
+	}
+}
+
+func TestIsSafePlayableFile(t *testing.T) {
+	if !isSafePlayableFile("movie.mp4") {
+		t.Fatal("mp4 should be playable")
+	}
+	for _, path := range []string{"tool.exe", "script.bat", "shortcut.lnk", "site.url"} {
+		if isSafePlayableFile(path) {
+			t.Fatalf("%s should not be playable", path)
+		}
 	}
 }
 

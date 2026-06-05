@@ -162,6 +162,19 @@ func command(name string, arg ...string) *exec.Cmd {
 	return cmd
 }
 
+func openFileWithDefaultApp(path string) error {
+	verb, err := windows.UTF16PtrFromString("open")
+	if err != nil {
+		return err
+	}
+	file, err := windows.UTF16PtrFromString(path)
+	if err != nil {
+		return err
+	}
+	cwd := (*uint16)(nil)
+	return windows.ShellExecute(0, verb, file, nil, cwd, 1)
+}
+
 func (a *App) IsBrowserRunning(browser string) (bool, error) {
 	processes, ok := browserProcessNames[strings.ToLower(browser)]
 	if !ok {
