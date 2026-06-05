@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -198,6 +199,9 @@ const (
 	defaultCustomFormatID  = "bestvideo+bestaudio/best"
 	defaultCustomContainer = "mp4"
 	defaultCustomSubtitle  = "none"
+	privateDirMode         = 0700
+	outputDirMode          = 0750
+	privateFileMode        = 0600
 )
 
 func NewApp() *App {
@@ -270,7 +274,7 @@ func (a *App) startup(ctx context.Context) {
 	}
 	a.settingsFilePath = a.resolveSettingsPath()
 	a.historyFilePath = a.resolveHistoryPath()
-	if err := os.MkdirAll(a.binDir, 0755); err != nil {
+	if err := os.MkdirAll(a.binDir, privateDirMode); err != nil {
 		a.startupErr = fmt.Errorf("create bin directory: %w", err)
 		log.Printf("create bin directory: %v", err)
 	}
@@ -385,7 +389,7 @@ func resolveSettingsPathFor(configDir, portablePath, fallbackName string) string
 	if fileExists(portablePath) || isWritableDir(filepath.Dir(portablePath)) {
 		if !fileExists(portablePath) && fileExists(fallback) {
 			if data, err := os.ReadFile(fallback); err == nil {
-				if writeErr := os.WriteFile(portablePath, data, 0644); writeErr != nil {
+				if writeErr := os.WriteFile(portablePath, data, privateFileMode); writeErr != nil {
 					log.Printf("failed to copy settings to portable path: %v", writeErr)
 				}
 			}
@@ -462,7 +466,7 @@ func (a *App) writeSettingsLocked(s Settings) error {
 	if err != nil {
 		return fmt.Errorf("marshal settings: %w", err)
 	}
-	if err := writeFileAtomically(a.settingsPath(), data, 0644); err != nil {
+	if err := writeFileAtomically(a.settingsPath(), data, privateFileMode); err != nil {
 		return fmt.Errorf("write settings file: %w", err)
 	}
 	a.cachedSettings = s
@@ -498,6 +502,11 @@ func validateSettings(s Settings) Settings {
 	}
 	if len(s.DefaultOutputDir) > maxPathLength {
 		s.DefaultOutputDir = truncateToValidUTF8Prefix(s.DefaultOutputDir, maxPathLength)
+	}
+	if cleaned, err := cleanAbsolutePath(s.DefaultOutputDir); err == nil && !isFilesystemRoot(cleaned) {
+		s.DefaultOutputDir = cleaned
+	} else {
+		s.DefaultOutputDir = defaultOutputDir()
 	}
 	if s.Theme != "dark" && s.Theme != "light" {
 		s.Theme = "dark"
@@ -541,6 +550,13 @@ func validateSettings(s Settings) Settings {
 	if len(s.CookieFilePath) > maxPathLength {
 		s.CookieFilePath = truncateToValidUTF8Prefix(s.CookieFilePath, maxPathLength)
 	}
+	if s.CookieFilePath != "" {
+		if cleaned, err := cleanAbsolutePath(s.CookieFilePath); err == nil {
+			s.CookieFilePath = cleaned
+		} else {
+			s.CookieFilePath = ""
+		}
+	}
 	if s.RateLimitValue == "" {
 		s.RateLimitValue = "1"
 	}
@@ -554,6 +570,15 @@ func validateSettings(s Settings) Settings {
 	}
 	if len(s.CustomArgs) > 1024 {
 		s.CustomArgs = truncateToValidUTF8Prefix(s.CustomArgs, 1024)
+	}
+	if s.FfmpegPath != "" {
+		cleaned, err := cleanAbsolutePath(s.FfmpegPath)
+		base := strings.ToLower(filepath.Base(cleaned))
+		if err != nil || (!strings.HasPrefix(base, "ffmpeg") && base != "ffmpeg.exe") {
+			s.FfmpegPath = ""
+		} else {
+			s.FfmpegPath = cleaned
+		}
 	}
 	return s
 }
@@ -607,6 +632,45 @@ func parseCustomArgs(s string) []string {
 		args = append(args, current.String())
 	}
 	return args
+}
+
+var blockedCustomArgNames = map[string]struct{}{
+	"--exec":                     {},
+	"--exec-before-download":     {},
+	"--external-downloader":      {},
+	"--external-downloader-args": {},
+	"--downloader-args":          {},
+	"--use-postprocessor":        {},
+	"--postprocessor-args":       {},
+	"--load-info-json":           {},
+	"--config-locations":         {},
+	"--alias":                    {},
+	"--plugin-dirs":              {},
+	"--enable-file-urls":         {},
+	"--paths":                    {},
+	"-P":                         {},
+	"--output":                   {},
+	"-o":                         {},
+	"--download-archive":         {},
+	"--cache-dir":                {},
+	"--rm-cache-dir":             {},
+	"--write-pages":              {},
+	"--cookies":                  {},
+	"--cookies-from-browser":     {},
+	"--ffmpeg-location":          {},
+}
+
+func sanitizeCustomArgs(raw []string) ([]string, error) {
+	for _, arg := range raw {
+		name := arg
+		if idx := strings.Index(name, "="); idx >= 0 {
+			name = name[:idx]
+		}
+		if _, blocked := blockedCustomArgNames[name]; blocked {
+			return nil, fmt.Errorf("custom argument %q is not allowed", name)
+		}
+	}
+	return raw, nil
 }
 
 func truncateToValidUTF8Prefix(s string, maxBytes int) string {
@@ -859,6 +923,42 @@ func (a *App) GetHistory() ([]HistoryEntry, error) {
 	return reverseHistoryEntries(a.historyCache), nil
 }
 
+func (a *App) isKnownHistoryOutputFile(path string) bool {
+	a.historyMu.Lock()
+	defer a.historyMu.Unlock()
+	if err := a.ensureHistoryLoadedLocked(); err != nil {
+		return false
+	}
+	for _, entry := range a.historyCache {
+		if entry.OutputPath == "" {
+			continue
+		}
+		cleaned, err := cleanAbsolutePath(entry.OutputPath)
+		if err == nil && samePath(path, cleaned) {
+			return true
+		}
+	}
+	return false
+}
+
+func (a *App) isKnownHistoryOutputDir(dir string) bool {
+	a.historyMu.Lock()
+	defer a.historyMu.Unlock()
+	if err := a.ensureHistoryLoadedLocked(); err != nil {
+		return false
+	}
+	for _, entry := range a.historyCache {
+		if entry.OutputPath == "" {
+			continue
+		}
+		cleaned, err := cleanAbsolutePath(entry.OutputPath)
+		if err == nil && samePath(dir, filepath.Dir(cleaned)) {
+			return true
+		}
+	}
+	return false
+}
+
 func (a *App) saveHistoryEntry(entry HistoryEntry) error {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
@@ -1006,18 +1106,22 @@ func (a *App) OpenOutputDir(dir string) error {
 			dir = defaultOutputDir()
 		}
 	}
-	if len(dir) > maxPathLength {
-		return fmt.Errorf("output dir path too long")
+	cleaned, err := cleanAbsolutePath(dir)
+	if err != nil {
+		return err
+	}
+	if !a.isAllowedOpenDir(cleaned) {
+		return errors.New("directory is outside KoalaPull-managed paths")
 	}
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "darwin":
-		cmd = command("open", dir)
+		cmd = command("open", cleaned)
 	case "windows":
 		// Do not use the command() helper here; explorer needs to show its GUI window and will fail/exit with code 1 if run with CREATE_NO_WINDOW/HideWindow attributes.
-		cmd = exec.Command("explorer", dir)
+		cmd = exec.Command("explorer", cleaned)
 	default:
-		cmd = command("xdg-open", dir)
+		cmd = command("xdg-open", cleaned)
 	}
 	if err := cmd.Start(); err != nil {
 		return err
@@ -1028,6 +1132,19 @@ func (a *App) OpenOutputDir(dir string) error {
 		}
 	}()
 	return nil
+}
+
+func (a *App) isAllowedOpenDir(dir string) bool {
+	settings := a.GetSettings()
+	defaultDir, err := cleanAbsolutePath(settings.DefaultOutputDir)
+	if err == nil && samePath(dir, defaultDir) {
+		return true
+	}
+	binDir, err := cleanAbsolutePath(a.binDir)
+	if err == nil && samePath(dir, binDir) {
+		return true
+	}
+	return a.isKnownHistoryOutputDir(dir)
 }
 
 func (a *App) GetVersionInfo() VersionInfo {
@@ -1322,7 +1439,7 @@ func (a *App) downloadYtdlp(force bool) error {
 		return err
 	}
 	if runtime.GOOS != "windows" {
-		if err := os.Chmod(tmpPath, 0755); err != nil {
+		if err := os.Chmod(tmpPath, privateDirMode); err != nil {
 			os.Remove(tmpPath)
 			return fmt.Errorf("chmod failed: %w", err)
 		}
@@ -1370,7 +1487,7 @@ func (a *App) downloadFfmpeg(force bool) error {
 		return fmt.Errorf("ffmpeg binary not found after extraction")
 	}
 	if runtime.GOOS != "windows" {
-		if err := os.Chmod(extractedPath, 0755); err != nil {
+		if err := os.Chmod(extractedPath, privateDirMode); err != nil {
 			return fmt.Errorf("chmod failed: %w", err)
 		}
 	} else {
@@ -1390,7 +1507,7 @@ func (a *App) downloadFfmpeg(force bool) error {
 }
 
 func (a *App) downloadFile(ctx context.Context, url, destPath, depName string, maxBytes int64) (retErr error) {
-	out, err := os.Create(destPath)
+	out, err := os.OpenFile(destPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, privateFileMode)
 	if err != nil {
 		return fmt.Errorf("create file failed: %w", err)
 	}
@@ -1580,7 +1697,11 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	settings := a.GetSettings()
 	args = append(args, a.getCookieArgs(settings)...)
 	if settings.CustomArgs != "" {
-		args = append(args, parseCustomArgs(settings.CustomArgs)...)
+		customArgs, err := sanitizeCustomArgs(parseCustomArgs(settings.CustomArgs))
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, customArgs...)
 	}
 	args = append(args, "--", url)
 	ctx, cancel := context.WithTimeout(a.appContext(), 30*time.Second)
@@ -1663,14 +1784,14 @@ func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subti
 	if len(url) > maxInputLength || len(outputDir) > maxPathLength {
 		return "", fmt.Errorf("input too long")
 	}
-	if outputDir == "" {
-		settings := a.GetSettings()
-		outputDir = settings.DefaultOutputDir
+	outputDir, err := a.normalizeOutputDir(outputDir)
+	if err != nil {
+		return "", err
 	}
 	if len(title) > 1024 {
 		title = truncateToValidUTF8Prefix(title, 1024)
 	}
-	if err := os.MkdirAll(outputDir, 0755); err != nil {
+	if err := os.MkdirAll(outputDir, outputDirMode); err != nil {
 		return "", fmt.Errorf("output dir: %w", err)
 	}
 
@@ -1696,7 +1817,11 @@ func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subti
 		}
 	}
 	if settings.CustomArgs != "" {
-		args = append(args, parseCustomArgs(settings.CustomArgs)...)
+		customArgs, err := sanitizeCustomArgs(parseCustomArgs(settings.CustomArgs))
+		if err != nil {
+			return "", err
+		}
+		args = append(args, customArgs...)
 	}
 	if playlistItems != "" {
 		args = append(args, "--playlist-items", playlistItems)
@@ -1746,12 +1871,92 @@ func downloadPostProcessingArgs(preset, container, subtitle string) []string {
 	}
 }
 
+func cleanAbsolutePath(path string) (string, error) {
+	if path == "" {
+		return "", errors.New("path is empty")
+	}
+	if len(path) > maxPathLength {
+		return "", errors.New("path too long")
+	}
+	cleaned := filepath.Clean(path)
+	if !filepath.IsAbs(cleaned) {
+		abs, err := filepath.Abs(cleaned)
+		if err != nil {
+			return "", err
+		}
+		cleaned = abs
+	}
+	return cleaned, nil
+}
+
+func samePath(left, right string) bool {
+	left = filepath.Clean(left)
+	right = filepath.Clean(right)
+	if runtime.GOOS == "windows" {
+		return strings.EqualFold(left, right)
+	}
+	return left == right
+}
+
+func isWithinPath(path, root string) bool {
+	path = filepath.Clean(path)
+	root = filepath.Clean(root)
+	if samePath(path, root) {
+		return true
+	}
+	rel, err := filepath.Rel(root, path)
+	if err != nil {
+		return false
+	}
+	return rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func isFilesystemRoot(path string) bool {
+	cleaned := filepath.Clean(path)
+	parent := filepath.Dir(cleaned)
+	return samePath(parent, cleaned)
+}
+
+func (a *App) normalizeOutputDir(outputDir string) (string, error) {
+	settings := a.GetSettings()
+	if outputDir == "" {
+		outputDir = settings.DefaultOutputDir
+	}
+	cleaned, err := cleanAbsolutePath(outputDir)
+	if err != nil {
+		return "", fmt.Errorf("output dir: %w", err)
+	}
+	if isFilesystemRoot(cleaned) {
+		return "", errors.New("output dir cannot be a filesystem root")
+	}
+	defaultDir, err := cleanAbsolutePath(settings.DefaultOutputDir)
+	if err != nil {
+		return "", fmt.Errorf("default output dir: %w", err)
+	}
+	if !samePath(cleaned, defaultDir) {
+		return "", errors.New("output dir must match the configured download directory")
+	}
+	return cleaned, nil
+}
+
 func isAllowedDownloadURL(raw string) bool {
 	parsed, err := url.ParseRequestURI(raw)
 	if err != nil {
 		return false
 	}
-	return parsed.Scheme == "http" || parsed.Scheme == "https"
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return false
+	}
+	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
+	if host == "" || host == "localhost" || strings.HasSuffix(host, ".localhost") {
+		return false
+	}
+	if ip := net.ParseIP(host); ip != nil {
+		if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+			return false
+		}
+	}
+	return true
 }
 
 func (a *App) CancelDownload(downloadID string) {
@@ -2026,9 +2231,12 @@ func (a *App) PlayFile(filePath string) error {
 	if filePath == "" {
 		return errors.New("file path is empty")
 	}
-	cleaned := filepath.Clean(filePath)
-	if !filepath.IsAbs(cleaned) {
-		return errors.New("file path must be absolute")
+	cleaned, err := cleanAbsolutePath(filePath)
+	if err != nil {
+		return err
+	}
+	if !a.isAllowedOutputFile(cleaned) {
+		return errors.New("file is outside KoalaPull-managed output paths")
 	}
 	info, err := os.Stat(cleaned)
 	if err != nil {
@@ -2054,11 +2262,14 @@ func (a *App) ShowFileInFolder(filePath string) error {
 	if filePath == "" {
 		return errors.New("file path is empty")
 	}
-	cleaned := filepath.Clean(filePath)
-	if !filepath.IsAbs(cleaned) {
-		return errors.New("file path must be absolute")
+	cleaned, err := cleanAbsolutePath(filePath)
+	if err != nil {
+		return err
 	}
-	_, err := os.Stat(cleaned)
+	if !a.isAllowedOutputFile(cleaned) {
+		return errors.New("file is outside KoalaPull-managed output paths")
+	}
+	_, err = os.Stat(cleaned)
 	if err != nil {
 		return fmt.Errorf("file error: %w", err)
 	}
@@ -2073,6 +2284,15 @@ func (a *App) ShowFileInFolder(filePath string) error {
 		cmd = command("xdg-open", filepath.Dir(cleaned))
 	}
 	return cmd.Start()
+}
+
+func (a *App) isAllowedOutputFile(path string) bool {
+	settings := a.GetSettings()
+	defaultDir, err := cleanAbsolutePath(settings.DefaultOutputDir)
+	if err == nil && isWithinPath(path, defaultDir) {
+		return true
+	}
+	return a.isKnownHistoryOutputFile(path)
 }
 
 var ytIDSuffixRegex = regexp.MustCompile(`\s+\[[A-Za-z0-9_-]{11}\]$`)

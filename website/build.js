@@ -249,18 +249,21 @@ async function build() {
   }
 
   const flatLocales = {};
+  const renderLocales = {};
   const baseLocale = flattenObject(JSON.parse(readText(path.join(localeDir, 'en.json'))));
   for (const lang of localeFiles) {
-    flatLocales[lang] = {
+    const locale = flattenObject(JSON.parse(readText(path.join(localeDir, `${lang}.json`))));
+    flatLocales[lang] = locale;
+    renderLocales[lang] = {
       ...baseLocale,
-      ...flattenObject(JSON.parse(readText(path.join(localeDir, `${lang}.json`))))
+      ...locale
     };
   }
   assertLocaleKeyParity(flatLocales);
 
   log('Generating locale pages...');
   for (const lang of localeFiles) {
-    const locale = flatLocales[lang];
+    const locale = renderLocales[lang];
     const assetPrefix = lang === 'en' ? '' : '../';
     const outputDir = lang === 'en' ? wwwDir : path.join(wwwDir, lang);
     ensureDir(outputDir);

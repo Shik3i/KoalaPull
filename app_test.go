@@ -72,7 +72,6 @@ func runHelperProcess() {
 	}
 }
 
-
 func TestDependencyArtifactsRequireIntegrityVerification(t *testing.T) {
 	for _, goos := range []string{"windows", "darwin", "linux"} {
 		artifact := ffmpegArtifactFor(goos)
@@ -306,7 +305,6 @@ func TestFetchMetadataConcurrentRequestsDoNotInterfere(t *testing.T) {
 	}
 }
 
-
 func TestCommandOutputCancellationKillsProcessTree(t *testing.T) {
 	exe, err := os.Executable()
 	if err != nil {
@@ -479,6 +477,21 @@ func TestAllowedDownloadURLRejectsNonHTTPProtocols(t *testing.T) {
 	}
 	if err := NewApp().OpenExternalLink("file:///etc/passwd"); err == nil {
 		t.Fatal("OpenExternalLink accepted file URL")
+	}
+}
+
+func TestAllowedDownloadURLRejectsLocalNetworkTargets(t *testing.T) {
+	for _, raw := range []string{
+		"http://localhost:8080/video",
+		"http://127.0.0.1:8080/video",
+		"http://[::1]:8080/video",
+		"http://192.168.1.10/video",
+		"http://10.0.0.5/video",
+		"http://172.16.0.5/video",
+	} {
+		if isAllowedDownloadURL(raw) {
+			t.Fatalf("%q was allowed, want rejected", raw)
+		}
 	}
 }
 
@@ -928,6 +941,26 @@ func TestParseCustomArgs(t *testing.T) {
 	}
 }
 
+func TestSanitizeCustomArgsRejectsDangerousOptions(t *testing.T) {
+	for _, input := range []string{
+		"--exec echo {}",
+		"--external-downloader aria2c",
+		"--paths /tmp",
+		"-P /tmp",
+		"--cookies secret.txt",
+		"--ffmpeg-location /tmp/fake",
+		"--output=%(title)s",
+	} {
+		if _, err := sanitizeCustomArgs(parseCustomArgs(input)); err == nil {
+			t.Fatalf("sanitizeCustomArgs(%q) succeeded, want error", input)
+		}
+	}
+
+	if got, err := sanitizeCustomArgs(parseCustomArgs("--proxy socks5://127.0.0.1:1080 --geo-bypass")); err != nil || len(got) != 3 {
+		t.Fatalf("safe custom args rejected: got %#v err %v", got, err)
+	}
+}
+
 func TestValidateSettingsNewFields(t *testing.T) {
 	s := validateSettings(Settings{
 		RateLimitEnabled: true,
@@ -1130,14 +1163,29 @@ func TestStartDownloadQueueLimit(t *testing.T) {
 	app := NewApp()
 	app.ctx = context.Background()
 	app.configDir = t.TempDir()
+	outputDir := t.TempDir()
+	app.cachedSettings = validateSettings(Settings{DefaultOutputDir: outputDir, MaxConcurrency: 3})
 
 	for i := 0; i < maxQueueLimit; i++ {
 		app.activeDownloads[fmt.Sprintf("dl-%d", i)] = func() {}
 	}
 
-	_, err := app.StartDownloadWithPreset("https://example.com/video", "best", t.TempDir(), "mp4", "none", "title", "best", "")
+	_, err := app.StartDownloadWithPreset("https://example.com/video", "best", outputDir, "mp4", "none", "title", "best", "")
 	if err == nil || !strings.Contains(err.Error(), "queue limit reached") {
 		t.Fatalf("expected queue limit error, got: %v", err)
+	}
+}
+
+func TestStartDownloadRejectsUnmanagedOutputDir(t *testing.T) {
+	app := NewApp()
+	app.ctx = context.Background()
+	defaultDir := t.TempDir()
+	otherDir := t.TempDir()
+	app.cachedSettings = validateSettings(Settings{DefaultOutputDir: defaultDir, MaxConcurrency: 3})
+
+	_, err := app.StartDownloadWithPreset("https://example.com/video", "best", otherDir, "mp4", "none", "title", "best", "")
+	if err == nil || !strings.Contains(err.Error(), "configured download directory") {
+		t.Fatalf("expected unmanaged output dir error, got: %v", err)
 	}
 }
 

@@ -1569,24 +1569,28 @@ const fmtTime = useCallback((t: string): string => {
             {/* Download Mode Tabs */}
             <div className="px-4 lg:px-8 pt-4 shrink-0 flex border-b border-[var(--color-surface-border)]">
               <button
+                type="button"
                 onClick={() => setDownloadMode('single')}
+                aria-pressed={downloadMode === 'single'}
                 className="px-4 py-2 text-sm font-semibold transition-all border-b-2 outline-none flex items-center gap-1.5"
                 style={{
                   color: downloadMode === 'single' ? 'var(--color-accent)' : 'var(--text-muted)',
                   borderColor: downloadMode === 'single' ? 'var(--color-accent)' : 'transparent',
                 }}
               >
-                📹 {t('downloads.singleTab') || 'Single URL'}
+                {t('downloads.singleTab') || 'Single URL'}
               </button>
               <button
+                type="button"
                 onClick={() => setDownloadMode('batch')}
+                aria-pressed={downloadMode === 'batch'}
                 className="px-4 py-2 text-sm font-semibold transition-all border-b-2 outline-none flex items-center gap-1.5"
                 style={{
                   color: downloadMode === 'batch' ? 'var(--color-accent)' : 'var(--text-muted)',
                   borderColor: downloadMode === 'batch' ? 'var(--color-accent)' : 'transparent',
                 }}
               >
-                🗂️ {t('downloads.batchTab') || 'Batch Import'}
+                {t('downloads.batchTab') || 'Batch Import'}
               </button>
             </div>
 
@@ -1638,6 +1642,7 @@ const fmtTime = useCallback((t: string): string => {
                       value={batchUrls}
                       onChange={(e) => setBatchUrls(e.target.value)}
                       placeholder={t('downloads.batchPlaceholder') || 'Paste URLs here, one per line...'}
+                      aria-label={t('downloads.batchTab') || 'Batch Import'}
                       className="input-dark w-full text-xs font-mono resize-none p-3 rounded-lg border border-[var(--color-surface-border)]"
                       style={{ background: 'var(--color-surface-light)' }}
                     />
@@ -1646,22 +1651,18 @@ const fmtTime = useCallback((t: string): string => {
                   {/* Batch Download Preset Selector */}
                   <div className="p-3 rounded-lg border border-[var(--color-surface-border)]" style={{ background: 'var(--color-surface-light)' }}>
                     <span className="block text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
-                      ⚙️ Select Download Preset
+                      Select Download Preset
                     </span>
                     <div className="grid grid-cols-3 gap-2.5">
                       {(['best', 'compatible', 'audio'] as const).map((presetOption) => {
                         const isSelected = selectedPreset === presetOption;
                         let title = '';
-                        let icon = '';
                         if (presetOption === 'best') {
                           title = 'Best Quality';
-                          icon = '⭐';
                         } else if (presetOption === 'compatible') {
                           title = 'MP4 Video';
-                          icon = '📱';
                         } else if (presetOption === 'audio') {
                           title = 'MP3 Audio';
-                          icon = '🎵';
                         }
                         
                         return (
@@ -1678,7 +1679,6 @@ const fmtTime = useCallback((t: string): string => {
                               borderColor: isSelected ? 'var(--color-accent)' : 'var(--color-surface-border)',
                             }}
                           >
-                            <span className="text-sm mb-1">{icon}</span>
                             <span className="text-[11px] font-bold" style={{ color: isSelected ? 'var(--color-accent)' : 'var(--text-primary)' }}>
                               {title}
                             </span>
