@@ -1135,7 +1135,7 @@ func TestStartDownloadQueueLimit(t *testing.T) {
 		app.activeDownloads[fmt.Sprintf("dl-%d", i)] = func() {}
 	}
 
-	_, err := app.StartDownloadWithPreset("https://example.com/video", "best", t.TempDir(), "mp4", "none", "title", "best")
+	_, err := app.StartDownloadWithPreset("https://example.com/video", "best", t.TempDir(), "mp4", "none", "title", "best", "")
 	if err == nil || !strings.Contains(err.Error(), "queue limit reached") {
 		t.Fatalf("expected queue limit error, got: %v", err)
 	}

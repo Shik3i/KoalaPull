@@ -7,6 +7,7 @@ import {
   ClearHistory, DeleteHistoryEntry,
   UpdateDependencies, OpenOutputDir, CheckForUpdates, OpenExternalLink,
   SelectCookieFile, IsBrowserRunning, KillBrowser, OpenBinDir, SelectFfmpegPath,
+  PlayFile, ShowFileInFolder,
 } from "../wailsjs/go/main/App"
 import { EventsOn, ClipboardGetText } from "../wailsjs/runtime/runtime"
 import type { main } from "../wailsjs/go/models"
@@ -21,14 +22,19 @@ interface FormatInfo {
   vcodec: string; acodec: string; filesize: number; formatNote: string
 }
 
+interface PlaylistEntry {
+  id: string; title: string
+}
+
 interface VideoMetadata {
   id: string; title: string; thumbnail: string; uploader: string
   duration: number; formats: FormatInfo[]; isPlaylist: boolean; entryCount: number
+  entries?: PlaylistEntry[]
 }
 
 interface QueueItem {
   id: string; title: string; thumbnail: string; status: string
-  progress: number; speed: string; eta: string; fileSize: string; errorMsg: string; playlistStatus: string; outputDir: string
+  progress: number; speed: string; eta: string; fileSize: string; errorMsg: string; playlistStatus: string; outputDir: string; outputPath?: string
 }
 
 interface DepProgress {
@@ -37,7 +43,7 @@ interface DepProgress {
 
 interface DownloadProgress {
   downloadId: string; percent: number; speed: string; eta: string; fileSize: string
-  status: string; error?: string; playlistStatus?: string
+  status: string; error?: string; playlistStatus?: string; outputPath?: string; title?: string
 }
 
 interface FormatOption { label: string; formatId: string }
@@ -59,6 +65,7 @@ interface AppSettings {
   rateLimitValue: string
   customArgs: string
   ffmpegPath: string
+  sponsorBlockEnabled: boolean
 }
 interface VersionInfo { ytdlp: string; ffmpeg: string; app: string }
 interface SupportedSite {
@@ -119,6 +126,7 @@ const defaultAppSettings: AppSettings = {
   rateLimitValue: '1',
   customArgs: '',
   ffmpegPath: '',
+  sponsorBlockEnabled: false,
 }
 
 const downloadPresetOptions: Array<{ value: DownloadPreset; label: string; description: string }> = [
@@ -154,6 +162,7 @@ function normalizeAppSettings(settings: main.Settings): AppSettings {
     rateLimitValue: settings.rateLimitValue || '1',
     customArgs: settings.customArgs || '',
     ffmpegPath: settings.ffmpegPath || '',
+    sponsorBlockEnabled: !!settings.sponsorBlockEnabled,
   }
 }
 
@@ -378,6 +387,32 @@ const HistoryRow = memo(({ entry, onDelete, onReuse, fmtTime, t }: { entry: main
         )}
       </div>
       <div className="shrink-0 flex items-center gap-1">
+        {entry.status === 'completed' && entry.outputPath && (
+          <>
+            <button
+              onClick={() => PlayFile(entry.outputPath)}
+              className="icon-button"
+              style={{ color: 'var(--color-accent)' }}
+              title={t('actions.playFile')}
+              aria-label={t('actions.playFile')}
+            >
+              <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                <path d="M8 5v14l11-7z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => ShowFileInFolder(entry.outputPath)}
+              className="icon-button"
+              style={{ color: 'var(--text-secondary)' }}
+              title={t('actions.showFile')}
+              aria-label={t('actions.showFile')}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              </svg>
+            </button>
+          </>
+        )}
         <button onClick={() => onReuse(entry.url)} className="icon-button" style={{ color: 'var(--color-accent)' }} title={t('actions.useAgain')} aria-label={t('actions.useAgain')}>
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v6h6M20 20v-6h-6M5.5 15a7 7 0 0011.5 2M18.5 9A7 7 0 007 7" />
@@ -393,13 +428,43 @@ const HistoryRow = memo(({ entry, onDelete, onReuse, fmtTime, t }: { entry: main
   )
 })
 
+const SpeedSparkline = ({ history }: { history?: Array<{ speed: number }> }) => {
+  if (!history || history.length < 2) return null;
+  const data = history.map(h => h.speed);
+  if (data.length > 20) {
+    data.splice(0, data.length - 20);
+  }
+  const width = 60;
+  const height = 18;
+  const max = Math.max(...data, 1);
+  const min = Math.min(...data);
+  const range = max - min || 1;
+  
+  const points = data.map((val, index) => {
+    const x = (index / (data.length - 1)) * width;
+    const y = height - ((val - min) / range) * height;
+    return `${x},${y}`;
+  });
+  
+  const pathD = `M ${points.join(' L ')}`;
+  const fillD = `${pathD} L ${width},${height} L 0,${height} Z`;
+  
+  return (
+    <svg width={width} height={height} className="opacity-80 inline-block align-middle ml-2" style={{ overflow: 'visible' }}>
+      <path d={fillD} fill="color-mix(in srgb, var(--color-accent) 15%, transparent)" />
+      <path d={pathD} fill="none" stroke="var(--color-accent)" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+};
+
 const QueueRow = memo(({
   item,
   onCancel,
   onOpenFolder,
   statusColors,
   tt,
-  t
+  t,
+  speedHistory
 }: {
   item: QueueItem
   onCancel: (id: string) => void
@@ -407,6 +472,7 @@ const QueueRow = memo(({
   statusColors: Record<string, string>
   tt: (key: string) => string
   t: any
+  speedHistory?: Array<{ speed: number }>
 }) => {
   return (
     <div className="rounded-lg p-3 lg:p-4 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
@@ -432,7 +498,12 @@ const QueueRow = memo(({
             {item.status === 'error' && t('downloads.status.error')}
             {item.status === 'cancelled' && t('downloads.status.cancelled')}
           </span>
-          {item.speed && <span style={{ color: 'var(--text-muted)' }}>{item.speed}</span>}
+          {item.speed && (
+            <span style={{ color: 'var(--text-muted)' }} className="inline-flex items-center">
+              {item.speed}
+              <SpeedSparkline history={speedHistory} />
+            </span>
+          )}
           {item.eta && <span style={{ color: 'var(--text-muted)' }}>{t('downloads.eta', { eta: item.eta })}</span>}
           {item.playlistStatus && <span style={{ color: 'var(--text-muted)' }}>{item.playlistStatus}</span>}
         </div>
@@ -465,6 +536,32 @@ const QueueRow = memo(({
       </div>
       {item.status === 'completed' && (
         <div className="flex items-center gap-1.5">
+          {item.outputPath && (
+            <>
+              <button
+                onClick={() => PlayFile(item.outputPath!)}
+                className="icon-button"
+                style={{ color: 'var(--color-accent)' }}
+                title={t('actions.playFile')}
+                aria-label={t('actions.playFile')}
+              >
+                <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8 5v14l11-7z" />
+                </svg>
+              </button>
+              <button
+                onClick={() => ShowFileInFolder(item.outputPath!)}
+                className="icon-button"
+                style={{ color: 'var(--text-secondary)' }}
+                title={t('actions.showFile')}
+                aria-label={t('actions.showFile')}
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                </svg>
+              </button>
+            </>
+          )}
           <button onClick={() => onOpenFolder(item.outputDir)} className="icon-button" style={{ color: 'var(--text-muted)' }} title={tt('openOutputFolder')} aria-label={tt('openOutputFolder')}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 19a2 2 0 01-2-2V7a2 2 0 012-2h4l2 2h4a2 2 0 012 2v1M5 19h14a2 2 0 002-2v-5a2 2 0 00-2-2H9a2 2 0 00-2 2v5a2 2 0 01-2 2z" />
@@ -539,11 +636,15 @@ function App() {
   const historyRequestIdRef = useRef(0)
   const [activeTab, setActiveTab] = useState<Tab>('downloads')
   const [url, setUrl] = useState('')
+  const [downloadMode, setDownloadMode] = useState<'single' | 'batch'>('single')
+  const [batchUrls, setBatchUrls] = useState('')
+  const [batchAdding, setBatchAdding] = useState(false)
   const lastFetchedUrlRef = useRef<string>('')
   const [fetched, setFetched] = useState(false)
   const [fetching, setFetching] = useState(false)
   const [fetchError, setFetchError] = useState('')
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null)
+  const [selectedPlaylistIndices, setSelectedPlaylistIndices] = useState<Record<number, boolean>>({})
   const [selectedPreset, setSelectedPreset] = useState<DownloadPreset>(defaultDownloadPreset)
   const [selectedFormat, setSelectedFormat] = useState(defaultCustomFormatId)
   const [formatOptions, setFormatOptions] = useState<FormatOption[]>([])
@@ -599,6 +700,8 @@ function App() {
   const [rateLimitValue, setRateLimitValue] = useState(defaultAppSettings.rateLimitValue)
   const [customArgs, setCustomArgs] = useState(defaultAppSettings.customArgs)
   const [ffmpegPath, setFfmpegPath] = useState(defaultAppSettings.ffmpegPath)
+  const [sponsorBlockEnabled, setSponsorBlockEnabled] = useState(defaultAppSettings.sponsorBlockEnabled)
+  const [dragActive, setDragActive] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [browserRunning, setBrowserRunning] = useState<boolean>(false)
   const [isCheckingBrowser, setIsCheckingBrowser] = useState<boolean>(false)
@@ -640,6 +743,7 @@ function App() {
     setRateLimitValue(settings.rateLimitValue)
     setCustomArgs(settings.customArgs)
     setFfmpegPath(settings.ffmpegPath)
+    setSponsorBlockEnabled(settings.sponsorBlockEnabled)
   }, [])
   const settingsWriterRef = useRef<LatestSerializedWriter<AppSettings> | null>(null)
   if (!settingsWriterRef.current) {
@@ -676,13 +780,31 @@ function App() {
   ], [t])
 
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme)
+    if (theme === 'system') {
+      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
+      const updateTheme = (e: MediaQueryListEvent | MediaQueryList) => {
+        document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light')
+      }
+      updateTheme(mediaQuery)
+      mediaQuery.addEventListener('change', updateTheme)
+      return () => {
+        mediaQuery.removeEventListener('change', updateTheme)
+      }
+    } else {
+      document.documentElement.setAttribute('data-theme', theme)
+    }
   }, [theme])
 
   useEffect(() => {
     document.documentElement.lang = getLanguageLocale(language)
     fmtTimeRef.current.clear()
   }, [language])
+
+  useEffect(() => {
+    if ('Notification' in window && Notification.permission === 'default') {
+      void Notification.requestPermission()
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -741,173 +863,6 @@ function App() {
       setUpdateLoading(false)
     }
   }
-
-  useEffect(() => {
-    let cancelled = false
-    const run = async () => {
-      try {
-        const status = await CheckDependencies()
-        if (cancelled) return
-        if (status.ytDlpInstalled && status.ffmpegInstalled) {
-          setDepsReady(true)
-          setCheckingDeps(false)
-        } else {
-          setDepsReady(false)
-          setCheckingDeps(false)
-        }
-      } catch {
-        if (!cancelled) { setCheckingDeps(false); setDepError(tRef.current('errors.checkDependenciesFailed')) }
-      }
-    }
-    const handleDepProgress = (data: DepProgress) => {
-      setDepProgress((prev) => ({ ...prev, [data.dependency]: data.progress }))
-      if (data.status === 'error') { setDepError(data.error || tRef.current('errors.downloadFailed')); setInstallingDeps(false) }
-    }
-    const offDepProgress = EventsOn('dependency-progress', handleDepProgress)
-    run()
-    return () => { cancelled = true; offDepProgress() }
-  }, [])
-
-  useEffect(() => {
-    if (!installingDeps || depsReady) return
-    let cancelled = false
-    DownloadDependencies()
-      .then(() => { if (!cancelled) { setDepsReady(true); setInstallingDeps(false) } })
-      .catch((err: any) => { if (!cancelled) { setDepError(err?.message || tRef.current('errors.dependencyInstallFailed')); setInstallingDeps(false) } })
-    return () => { cancelled = true }
-  }, [installingDeps, depsReady])
-
-  useEffect(() => {
-    void loadAppVersion()
-  }, [])
-
-  useEffect(() => {
-    if (!depsReady) return
-    void loadToolVersions()
-    void loadUpdateInfo()
-  }, [depsReady])
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'l')) {
-        e.preventDefault()
-        urlInputRef.current?.focus()
-      }
-    }
-    window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [])
-
-  useEffect(() => {
-    if (!depsReady || !autoPasteEnabled || activeTab !== 'downloads') return
-    const checkClipboard = async () => {
-      try {
-        const text = await ClipboardGetText()
-        if (!text) return
-        const trimmed = text.trim()
-        const ytRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/
-        if (ytRegex.test(trimmed)) {
-          setUrl((prev) => prev || trimmed)
-        }
-      } catch { /* clipboard errors are benign */ }
-    }
-    checkClipboard()
-    window.addEventListener('focus', checkClipboard)
-    return () => window.removeEventListener('focus', checkClipboard)
-  }, [depsReady, autoPasteEnabled, activeTab])
-
-  useEffect(() => {
-    if (!metadata) return
-    setFormatOptions(buildFormatOptions(metadata.formats || [], t))
-    setVideoOptions(buildVideoOptions(metadata.formats || [], t))
-    setAudioOptions(buildAudioOptions(metadata.formats || [], t))
-  }, [metadata, t])
-
-  useEffect(() => {
-    if (selectedPreset !== 'custom') return
-    if (formatOptions.length === 0) return
-    if (!formatOptions.some((opt) => opt.formatId === selectedFormat)) {
-      setSelectedFormat(formatOptions[0]?.formatId || defaultCustomFormatId)
-    }
-  }, [formatOptions, selectedPreset, selectedFormat])
-
-  useEffect(() => {
-    const handleDlProgress = (data: DownloadProgress) => {
-      setQueue((prev) => {
-        const idx = prev.findIndex((item) => item.id === data.downloadId)
-        if (idx === -1) {
-          pendingProgressRef.current[data.downloadId] = data
-          return prev
-        }
-        const item = prev[idx]
-        let nextItem: QueueItem
-        if (data.status === 'completed') {
-          delete progressHistoryRef.current[data.downloadId]
-          nextItem = { ...item, status: 'completed', progress: 100, errorMsg: data.error || '', playlistStatus: '' }
-        } else if (data.status === 'error') {
-          delete progressHistoryRef.current[data.downloadId]
-          const msg = data.error || t('errors.downloadFailed')
-          nextItem = { ...item, status: 'error', progress: 0, speed: '', eta: '', fileSize: '', errorMsg: msg, playlistStatus: '' }
-        } else if (data.status === 'cancelled') {
-          delete progressHistoryRef.current[data.downloadId]
-          nextItem = { ...item, status: 'cancelled', progress: 0, speed: '', eta: '', fileSize: '', playlistStatus: '' }
-        } else if (data.status === 'starting') {
-          nextItem = { ...item, status: 'starting', progress: 0, playlistStatus: data.playlistStatus || '' }
-        } else {
-          let speedStr = data.speed
-          let etaStr = data.eta
-          const now = Date.now()
-          const currentSpeed = parseSpeed(data.speed)
-          const currentEta = parseEta(data.eta)
-
-          if (!progressHistoryRef.current[data.downloadId]) {
-            progressHistoryRef.current[data.downloadId] = []
-          }
-          const history = progressHistoryRef.current[data.downloadId]
-          history.push({ timestamp: now, speed: currentSpeed, eta: currentEta })
-
-          const cutoff = now - 10000
-          while (history.length > 0 && history[0].timestamp < cutoff) {
-            history.shift()
-          }
-
-          if (history.length > 0) {
-            let speedSum = 0
-            let speedCount = 0
-            let etaSum = 0
-            let etaCount = 0
-            for (const entry of history) {
-              if (entry.speed > 0) {
-                speedSum += entry.speed
-                speedCount++
-              }
-              if (entry.eta > 0) {
-                etaSum += entry.eta
-                etaCount++
-              }
-            }
-            if (speedCount > 0) {
-              speedStr = formatSpeed(speedSum / speedCount)
-            }
-            if (etaCount > 0) {
-              etaStr = formatEta(etaSum / etaCount)
-            }
-          }
-
-          nextItem = {
-            ...item, status: data.status,
-            progress: Math.round(data.percent), speed: speedStr, eta: etaStr, fileSize: data.fileSize || item.fileSize,
-            playlistStatus: data.playlistStatus || '',
-          }
-        }
-        const next = [...prev]
-        next[idx] = nextItem
-        return next
-      })
-    }
-    const offDownloadProgress = EventsOn('download-progress', handleDlProgress)
-    return () => { offDownloadProgress() }
-  }, [t])
 
   const isChromiumBrowser = useCallback((b: string) => {
     const low = b.toLowerCase()
@@ -996,8 +951,10 @@ function App() {
     }
   }, [activeTab, cookieSource, cookieBrowser, isChromiumBrowser])
 
-  const handleFetch = async () => {
-    if (!url.trim()) return
+  const triggerFetch = useCallback(async (targetUrl: string) => {
+    const trimmed = targetUrl.trim()
+    if (!trimmed) return
+    setUrl(trimmed)
     const proceed = await checkBrowserClosedForCookies()
     if (!proceed) return
     const requestId = ++fetchRequestIdRef.current
@@ -1006,10 +963,19 @@ function App() {
     setFetched(false)
     setMetadata(null)
     try {
-      const meta = await FetchMetadata(url)
+      const meta = await FetchMetadata(trimmed)
       if (requestId !== fetchRequestIdRef.current) return
-      lastFetchedUrlRef.current = url
+      lastFetchedUrlRef.current = trimmed
       setMetadata(meta)
+      if (meta.isPlaylist && meta.entries) {
+        const init: Record<number, boolean> = {}
+        for (let i = 0; i < meta.entries.length; i++) {
+          init[i + 1] = true
+        }
+        setSelectedPlaylistIndices(init)
+      } else {
+        setSelectedPlaylistIndices({})
+      }
       setFormatOptions(buildFormatOptions(meta.formats || [], t))
       setVideoOptions(buildVideoOptions(meta.formats || [], t))
       setAudioOptions(buildAudioOptions(meta.formats || [], t))
@@ -1020,7 +986,241 @@ function App() {
     } finally {
       if (requestId === fetchRequestIdRef.current) setFetching(false)
     }
+  }, [cookieSource, cookieBrowser, language, t])
+
+  const handleFetch = async () => {
+    await triggerFetch(url)
   }
+
+  useEffect(() => {
+    let cancelled = false
+    const run = async () => {
+      try {
+        const status = await CheckDependencies()
+        if (cancelled) return
+        if (status.ytDlpInstalled && status.ffmpegInstalled) {
+          setDepsReady(true)
+          setCheckingDeps(false)
+        } else {
+          setDepsReady(false)
+          setCheckingDeps(false)
+        }
+      } catch {
+        if (!cancelled) { setCheckingDeps(false); setDepError(tRef.current('errors.checkDependenciesFailed')) }
+      }
+    }
+    const handleDepProgress = (data: DepProgress) => {
+      setDepProgress((prev) => ({ ...prev, [data.dependency]: data.progress }))
+      if (data.status === 'error') { setDepError(data.error || tRef.current('errors.downloadFailed')); setInstallingDeps(false) }
+    }
+    const offDepProgress = EventsOn('dependency-progress', handleDepProgress)
+    run()
+    return () => { cancelled = true; offDepProgress() }
+  }, [])
+
+  useEffect(() => {
+    if (!installingDeps || depsReady) return
+    let cancelled = false
+    DownloadDependencies()
+      .then(() => { if (!cancelled) { setDepsReady(true); setInstallingDeps(false) } })
+      .catch((err: any) => { if (!cancelled) { setDepError(err?.message || tRef.current('errors.dependencyInstallFailed')); setInstallingDeps(false) } })
+    return () => { cancelled = true }
+  }, [installingDeps, depsReady])
+
+  useEffect(() => {
+    void loadAppVersion()
+  }, [])
+
+  useEffect(() => {
+    if (!depsReady) return
+    void loadToolVersions()
+    void loadUpdateInfo()
+  }, [depsReady])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'l')) {
+        e.preventDefault()
+        urlInputRef.current?.focus()
+      }
+      if ((e.metaKey || e.ctrlKey) && e.shiftKey && e.key.toLowerCase() === 'u') {
+        e.preventDefault()
+        urlInputRef.current?.focus()
+        ClipboardGetText().then((text) => {
+          if (text) {
+            setUrl(text.trim())
+          }
+        }).catch((err) => console.warn('Clipboard read failed:', err))
+      }
+      if (e.key === 'Escape') {
+        setFetchError('')
+        setAddQueueError('')
+        setBrowserError('')
+      }
+    }
+    window.addEventListener('keydown', handler)
+    return () => window.removeEventListener('keydown', handler)
+  }, [])
+
+  useEffect(() => {
+    const handleDragOver = (e: DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (e.dataTransfer) {
+        setDragActive(true)
+      }
+    }
+    const handleDragLeave = (e: DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setDragActive(false)
+    }
+    const handleDrop = async (e: DragEvent) => {
+      e.preventDefault()
+      e.stopPropagation()
+      setDragActive(false)
+      if (e.dataTransfer) {
+        const text = e.dataTransfer.getData('text') || e.dataTransfer.getData('URL')
+        if (text && (text.startsWith('http://') || text.startsWith('https://'))) {
+          setActiveTab('downloads')
+          void triggerFetch(text)
+        }
+      }
+    }
+    window.addEventListener('dragover', handleDragOver)
+    window.addEventListener('dragleave', handleDragLeave)
+    window.addEventListener('drop', handleDrop)
+    return () => {
+      window.removeEventListener('dragover', handleDragOver)
+      window.removeEventListener('dragleave', handleDragLeave)
+      window.removeEventListener('drop', handleDrop)
+    }
+  }, [triggerFetch])
+
+  useEffect(() => {
+    if (!depsReady || !autoPasteEnabled || activeTab !== 'downloads') return
+    const checkClipboard = async () => {
+      try {
+        const text = await ClipboardGetText()
+        if (!text) return
+        const trimmed = text.trim()
+        const ytRegex = /^(https?:\/\/)?(www\.)?(youtube\.com|youtu\.be)\/.+/
+        if (ytRegex.test(trimmed)) {
+          setUrl((prev) => prev || trimmed)
+        }
+      } catch { /* clipboard errors are benign */ }
+    }
+    checkClipboard()
+    window.addEventListener('focus', checkClipboard)
+    return () => window.removeEventListener('focus', checkClipboard)
+  }, [depsReady, autoPasteEnabled, activeTab])
+
+  useEffect(() => {
+    if (!metadata) return
+    setFormatOptions(buildFormatOptions(metadata.formats || [], t))
+    setVideoOptions(buildVideoOptions(metadata.formats || [], t))
+    setAudioOptions(buildAudioOptions(metadata.formats || [], t))
+  }, [metadata, t])
+
+  useEffect(() => {
+    if (selectedPreset !== 'custom') return
+    if (formatOptions.length === 0) return
+    if (!formatOptions.some((opt) => opt.formatId === selectedFormat)) {
+      setSelectedFormat(formatOptions[0]?.formatId || defaultCustomFormatId)
+    }
+  }, [formatOptions, selectedPreset, selectedFormat])
+
+  useEffect(() => {
+    const handleDlProgress = (data: DownloadProgress) => {
+      setQueue((prev) => {
+        const idx = prev.findIndex((item) => item.id === data.downloadId)
+        if (idx === -1) {
+          pendingProgressRef.current[data.downloadId] = data
+          return prev
+        }
+        const item = prev[idx]
+        const currentTitle = data.title || item.title
+        let nextItem: QueueItem
+        if (data.status === 'completed') {
+          delete progressHistoryRef.current[data.downloadId]
+          nextItem = { ...item, title: currentTitle, status: 'completed', progress: 100, errorMsg: data.error || '', playlistStatus: '', outputPath: data.outputPath || item.outputPath }
+          if ('Notification' in window && Notification.permission === 'granted') {
+            try {
+              new Notification('KoalaPull', {
+                body: `${currentTitle} downloaded successfully!`,
+                icon: item.thumbnail || undefined
+              })
+            } catch (err) {
+              console.warn('Notification failed:', err)
+            }
+          }
+        } else if (data.status === 'error') {
+          delete progressHistoryRef.current[data.downloadId]
+          const msg = data.error || t('errors.downloadFailed')
+          nextItem = { ...item, title: currentTitle, status: 'error', progress: 0, speed: '', eta: '', fileSize: '', errorMsg: msg, playlistStatus: '' }
+        } else if (data.status === 'cancelled') {
+          delete progressHistoryRef.current[data.downloadId]
+          nextItem = { ...item, title: currentTitle, status: 'cancelled', progress: 0, speed: '', eta: '', fileSize: '', playlistStatus: '' }
+        } else if (data.status === 'starting') {
+          nextItem = { ...item, title: currentTitle, status: 'starting', progress: 0, playlistStatus: data.playlistStatus || '' }
+        } else {
+          let speedStr = data.speed
+          let etaStr = data.eta
+          const now = Date.now()
+          const currentSpeed = parseSpeed(data.speed)
+          const currentEta = parseEta(data.eta)
+
+          if (!progressHistoryRef.current[data.downloadId]) {
+            progressHistoryRef.current[data.downloadId] = []
+          }
+          const history = progressHistoryRef.current[data.downloadId]
+          history.push({ timestamp: now, speed: currentSpeed, eta: currentEta })
+
+          const cutoff = now - 10000
+          while (history.length > 0 && history[0].timestamp < cutoff) {
+            history.shift()
+          }
+
+          if (history.length > 0) {
+            let speedSum = 0
+            let speedCount = 0
+            let etaSum = 0
+            let etaCount = 0
+            for (const entry of history) {
+              if (entry.speed > 0) {
+                speedSum += entry.speed
+                speedCount++
+              }
+              if (entry.eta > 0) {
+                etaSum += entry.eta
+                etaCount++
+              }
+            }
+            if (speedCount > 0) {
+              speedStr = formatSpeed(speedSum / speedCount)
+            }
+            if (etaCount > 0) {
+              etaStr = formatEta(etaSum / etaCount)
+            }
+          }
+
+          nextItem = {
+            ...item, title: currentTitle, status: data.status,
+            progress: Math.round(data.percent), speed: speedStr, eta: etaStr, fileSize: data.fileSize || item.fileSize,
+            playlistStatus: data.playlistStatus || '',
+            outputPath: data.outputPath || item.outputPath,
+          }
+        }
+        const next = [...prev]
+        next[idx] = nextItem
+        return next
+      })
+    }
+    const offDownloadProgress = EventsOn('download-progress', handleDlProgress)
+    return () => { offDownloadProgress() }
+  }, [t])
+
+
 
   const handleAddToQueue = async () => {
     if (!metadata || addingToQueue) return
@@ -1029,8 +1229,20 @@ function App() {
     setAddingToQueue(true)
     setAddQueueError('')
     try {
+      let playlistItems = ''
+      if (metadata.isPlaylist) {
+        const selected = Object.keys(selectedPlaylistIndices)
+          .map(Number)
+          .filter((idx) => selectedPlaylistIndices[idx])
+          .sort((a, b) => a - b)
+        if (selected.length === 0) {
+          setAddQueueError(t('errors.noPlaylistItemsSelected') || 'Please select at least one item')
+          return
+        }
+        playlistItems = selected.join(',')
+      }
       const choice = resolveDownloadChoice(selectedPreset, selectedFormat, selectedContainer, selectedSubs)
-      const downloadId = await StartDownloadWithPreset(lastFetchedUrlRef.current, choice.formatId, defaultOutputDir, choice.container, choice.subtitle, metadata.title, selectedPreset)
+      const downloadId = await StartDownloadWithPreset(lastFetchedUrlRef.current, choice.formatId, defaultOutputDir, choice.container, choice.subtitle, metadata.title, selectedPreset, playlistItems)
       setQueue((prev) => {
         const pending = pendingProgressRef.current[downloadId]
         const newItem: QueueItem = {
@@ -1058,6 +1270,77 @@ function App() {
     } finally {
       setAddingToQueue(false)
     }
+  }
+
+  const handleBatchImport = async () => {
+    if (batchAdding || !batchUrls.trim()) return
+    const proceed = await checkBrowserClosedForCookies()
+    if (!proceed) return
+    setBatchAdding(true)
+    setAddQueueError('')
+    const lines = batchUrls
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('http://') || line.startsWith('https://'))
+    if (lines.length === 0) {
+      setAddQueueError(t('errors.noValidUrls') || 'No valid URLs found')
+      setBatchAdding(false)
+      return
+    }
+    const choice = resolveDownloadChoice(selectedPreset, selectedFormat, selectedContainer, selectedSubs)
+    for (const targetUrl of lines) {
+      try {
+        const downloadId = await StartDownloadWithPreset(
+          targetUrl,
+          choice.formatId,
+          defaultOutputDir,
+          choice.container,
+          choice.subtitle,
+          targetUrl,
+          selectedPreset,
+          ''
+        )
+        setQueue((prev) => {
+          const pending = pendingProgressRef.current[downloadId]
+          const newItem: QueueItem = {
+            id: downloadId,
+            title: targetUrl,
+            thumbnail: '',
+            status: pending ? pending.status : 'queued',
+            progress: pending ? Math.round(pending.percent) : 0,
+            speed: pending ? pending.speed : '',
+            eta: pending ? pending.eta : '',
+            fileSize: pending ? pending.fileSize : '',
+            errorMsg: pending ? (pending.error || '') : '',
+            playlistStatus: pending ? (pending.playlistStatus || '') : '',
+            outputDir: defaultOutputDir,
+          }
+          delete pendingProgressRef.current[downloadId]
+          return [...prev, newItem]
+        })
+      } catch (err: any) {
+        console.error('Failed to start batch download:', err)
+        const fakeId = `failed-batch-${Date.now()}-${Math.random()}`
+        setQueue((prev) => [
+          ...prev,
+          {
+            id: fakeId,
+            title: targetUrl,
+            thumbnail: '',
+            status: 'error',
+            progress: 0,
+            speed: '',
+            eta: '',
+            fileSize: '',
+            errorMsg: err?.message || 'Failed to start download',
+            playlistStatus: '',
+            outputDir: defaultOutputDir,
+          }
+        ])
+      }
+    }
+    setBatchUrls('')
+    setBatchAdding(false)
   }
 
   const handleCancel = useCallback((id: string) => {
@@ -1217,6 +1500,19 @@ const fmtTime = useCallback((t: string): string => {
   // --- Main App ---
   return (
     <div className="h-screen flex" style={{ background: 'var(--color-surface)', color: 'var(--text-primary)' }}>
+      {dragActive && (
+        <div 
+          className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none transition-all duration-200"
+          style={{ background: 'rgba(17, 17, 17, 0.8)', backdropFilter: 'blur(8px)' }}
+        >
+          <div className="flex flex-col items-center justify-center p-8 rounded-2xl border-2 border-dashed border-accent" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-accent)' }}>
+            <svg className="w-16 h-16 mb-4 animate-bounce" style={{ color: 'var(--color-accent)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+            </svg>
+            <p className="text-lg font-semibold">{t('downloads.dropToImport')}</p>
+          </div>
+        </div>
+      )}
       {/* Sidebar */}
       <aside className="w-16 md:w-52 shrink-0 flex flex-col border-r" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
         <div className="flex items-center justify-center md:justify-start gap-1.5 px-2 md:px-5 py-4" style={{ background: 'var(--color-surface-light)', borderBottom: '1px solid var(--color-surface-border)' }}>
@@ -1269,45 +1565,146 @@ const fmtTime = useCallback((t: string): string => {
       <main className="flex-1 flex flex-col overflow-hidden">
         {/* --- Downloads Tab --- */}
         {activeTab === 'downloads' && (
-            <div className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 flex flex-col overflow-hidden">
+            {/* Download Mode Tabs */}
+            <div className="px-4 lg:px-8 pt-4 shrink-0 flex border-b border-[var(--color-surface-border)]">
+              <button
+                onClick={() => setDownloadMode('single')}
+                className="px-4 py-2 text-sm font-semibold transition-all border-b-2 outline-none flex items-center gap-1.5"
+                style={{
+                  color: downloadMode === 'single' ? 'var(--color-accent)' : 'var(--text-muted)',
+                  borderColor: downloadMode === 'single' ? 'var(--color-accent)' : 'transparent',
+                }}
+              >
+                📹 {t('downloads.singleTab') || 'Single URL'}
+              </button>
+              <button
+                onClick={() => setDownloadMode('batch')}
+                className="px-4 py-2 text-sm font-semibold transition-all border-b-2 outline-none flex items-center gap-1.5"
+                style={{
+                  color: downloadMode === 'batch' ? 'var(--color-accent)' : 'var(--text-muted)',
+                  borderColor: downloadMode === 'batch' ? 'var(--color-accent)' : 'transparent',
+                }}
+              >
+                🗂️ {t('downloads.batchTab') || 'Batch Import'}
+              </button>
+            </div>
+
             <div className="px-4 lg:px-8 py-4 lg:py-5 shrink-0">
-              <div className="flex flex-col sm:flex-row gap-2">
-                <div className="flex-1 relative">
-                  <label htmlFor="urlInput" className="sr-only">Video URL</label>
-                  <input
-                    id="urlInput"
-                    type="text" value={url}
-                    onChange={(e) => setUrl(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === 'Enter') handleFetch() }}
-                    placeholder={t('downloads.urlPlaceholder')}
-                    className="input-dark w-full pr-10 lg:text-sm"
-                    title={tt('urlInput')}
-                    aria-label={tt('urlInput')}
-                  />
-                  {url && (
-                    <button
-                      onClick={() => {
-                        setUrl('')
-                        setFetched(false)
-                        setMetadata(null)
-                        setFetchError('')
-                      }}
-                      className="icon-button absolute right-1 top-1/2 -translate-y-1/2 text-lg leading-none"
-                      style={{ color: 'var(--text-muted)' }}
-                      title={tt('clearUrl')}
-                      aria-label={tt('clearUrl')}
-                    >&times;</button>
-                  )}
+              {downloadMode === 'single' ? (
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <div className="flex-1 relative">
+                    <label htmlFor="urlInput" className="sr-only">Video URL</label>
+                    <input
+                      id="urlInput"
+                      type="text" value={url}
+                      onChange={(e) => setUrl(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === 'Enter') handleFetch() }}
+                      placeholder={t('downloads.urlPlaceholder')}
+                      className="input-dark w-full pr-10 lg:text-sm"
+                      title={tt('urlInput')}
+                      aria-label={tt('urlInput')}
+                    />
+                    {url && (
+                      <button
+                        onClick={() => {
+                          setUrl('')
+                          setFetched(false)
+                          setMetadata(null)
+                          setFetchError('')
+                        }}
+                        className="icon-button absolute right-1 top-1/2 -translate-y-1/2 text-lg leading-none"
+                        style={{ color: 'var(--text-muted)' }}
+                        title={tt('clearUrl')}
+                        aria-label={tt('clearUrl')}
+                      >&times;</button>
+                    )}
+                  </div>
+                  <button onClick={handleFetch} disabled={fetching || !url.trim()} className="btn-primary shrink-0 flex items-center gap-2" title={tt('fetch')} aria-label={tt('fetch')}>
+                    {fetching ? (
+                      <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg> {t('actions.fetching')}</>
+                    ) : t('actions.fetch')}
+                  </button>
                 </div>
-                <button onClick={handleFetch} disabled={fetching || !url.trim()} className="btn-primary shrink-0 flex items-center gap-2" title={tt('fetch')} aria-label={tt('fetch')}>
-                  {fetching ? (
-                    <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                    </svg> {t('actions.fetching')}</>
-                  ) : t('actions.fetch')}
-                </button>
-              </div>
+              ) : (
+                <div className="flex flex-col gap-3">
+                  <div className="relative">
+                    <textarea
+                      id="batchUrlsInput"
+                      rows={4}
+                      value={batchUrls}
+                      onChange={(e) => setBatchUrls(e.target.value)}
+                      placeholder={t('downloads.batchPlaceholder') || 'Paste URLs here, one per line...'}
+                      className="input-dark w-full text-xs font-mono resize-none p-3 rounded-lg border border-[var(--color-surface-border)]"
+                      style={{ background: 'var(--color-surface-light)' }}
+                    />
+                  </div>
+                  
+                  {/* Batch Download Preset Selector */}
+                  <div className="p-3 rounded-lg border border-[var(--color-surface-border)]" style={{ background: 'var(--color-surface-light)' }}>
+                    <span className="block text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
+                      ⚙️ Select Download Preset
+                    </span>
+                    <div className="grid grid-cols-3 gap-2.5">
+                      {(['best', 'compatible', 'audio'] as const).map((presetOption) => {
+                        const isSelected = selectedPreset === presetOption;
+                        let title = '';
+                        let icon = '';
+                        if (presetOption === 'best') {
+                          title = 'Best Quality';
+                          icon = '⭐';
+                        } else if (presetOption === 'compatible') {
+                          title = 'MP4 Video';
+                          icon = '📱';
+                        } else if (presetOption === 'audio') {
+                          title = 'MP3 Audio';
+                          icon = '🎵';
+                        }
+                        
+                        return (
+                          <button
+                            key={presetOption}
+                            type="button"
+                            onClick={async () => {
+                              setSelectedPreset(presetOption);
+                              try { await saveSettings({ downloadPreset: presetOption }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                            }}
+                            className="flex flex-col items-center justify-center p-2 rounded-lg border text-center transition-all cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                            style={{
+                              background: isSelected ? 'color-mix(in srgb, var(--color-accent) 12%, var(--color-surface-light))' : 'var(--color-surface-light)',
+                              borderColor: isSelected ? 'var(--color-accent)' : 'var(--color-surface-border)',
+                            }}
+                          >
+                            <span className="text-sm mb-1">{icon}</span>
+                            <span className="text-[11px] font-bold" style={{ color: isSelected ? 'var(--color-accent)' : 'var(--text-primary)' }}>
+                              {title}
+                            </span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={handleBatchImport}
+                    disabled={batchAdding || !batchUrls.trim()}
+                    className="btn-primary flex items-center justify-center gap-2 py-2.5 text-xs font-bold"
+                    title={t('downloads.addBatchToQueue')}
+                  >
+                    {batchAdding ? (
+                      <><svg className="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                      </svg> {t('common.loading') || 'Processing...'}</>
+                    ) : (
+                      <>🗂️ {t('downloads.addBatchToQueue') || 'Add Batch to Queue'}</>
+                    )}
+                  </button>
+                </div>
+              )}
               {fetchError && (
                 <div className="mt-3 px-4 py-3 rounded-lg text-sm" style={{ background: 'rgba(239,68,68,0.15)', border: '1px solid rgba(239,68,68,0.3)', color: '#fca5a5' }}>
                   {fetchError}
@@ -1316,7 +1713,7 @@ const fmtTime = useCallback((t: string): string => {
             </div>
 
             <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 lg:py-6 space-y-4">
-              {fetched && metadata && (
+              {downloadMode === 'single' && fetched && metadata && (
                 <div className="rounded-lg overflow-hidden" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
                   <div className="flex flex-col sm:flex-row gap-4 p-4">
                     {metadata.thumbnail ? (
@@ -1374,40 +1771,156 @@ const fmtTime = useCallback((t: string): string => {
                         </div>
 
                         {selectedPreset === 'custom' && (
-                          <div className="flex flex-col gap-2.5 w-full">
-                            <div className="flex flex-wrap gap-2 items-center">
-                              <div className="flex-1 min-w-[140px]">
-                                <label htmlFor="customVideoSelect" className="block text-xs mb-1" style={{ color: 'var(--text-muted)' }}>{t('downloads.videoLabel') || 'Video Stream'}</label>
-                                <select
-                                  id="customVideoSelect"
-                                  value={videoId}
-                                  onChange={(e) => handleVideoChange(e.target.value)}
-                                  className="select-dark text-xs w-full"
-                                  title={t('downloads.videoLabel') || 'Video Stream'}
-                                >
-                                  {videoOptions.map((opt) => (
-                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                  ))}
-                                </select>
-                              </div>
-                              <div className="flex-1 min-w-[140px]">
-                                <label htmlFor="customAudioSelect" className="block text-xs mb-1" style={{ color: 'var(--text-muted)' }}>{t('downloads.audioLabel') || 'Audio Stream'}</label>
-                                <select
-                                  id="customAudioSelect"
-                                  value={audioId}
-                                  onChange={(e) => handleAudioChange(e.target.value)}
-                                  className="select-dark text-xs w-full"
-                                  title={t('downloads.audioLabel') || 'Audio Stream'}
-                                >
-                                  {audioOptions.map((opt) => (
-                                    <option key={opt.value} value={opt.value}>{opt.label}</option>
-                                  ))}
-                                </select>
+                          <div className="flex flex-col gap-4 w-full">
+                            {/* Video Stream Selection */}
+                            <div>
+                              <span className="block text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
+                                📹 {t('downloads.videoLabel') || 'Video Stream'}
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-[160px] overflow-y-auto pr-1.5 custom-scrollbar">
+                                {videoOptions.map((opt) => {
+                                  const isSelected = videoId === opt.value;
+                                  let title = opt.label;
+                                  let badge = '';
+                                  let details = '';
+                                  
+                                  if (opt.value === 'bestvideo') {
+                                    title = t('downloads.bestVideoAudio') || 'Best Quality';
+                                    badge = '⭐';
+                                    details = 'Auto-select highest';
+                                  } else if (opt.value === 'none') {
+                                    title = t('downloads.noVideo') || 'No Video';
+                                    badge = '❌';
+                                    details = 'Audio only';
+                                  } else {
+                                    const parts = opt.label.split(' · ');
+                                    title = parts[0] || '';
+                                    if (parts.length > 2) {
+                                      badge = parts[2].toUpperCase();
+                                      details = parts[1] || '';
+                                    } else if (parts.length > 1) {
+                                      badge = parts[1].toUpperCase();
+                                      details = '';
+                                    }
+                                  }
+
+                                  return (
+                                    <button
+                                      key={opt.value}
+                                      type="button"
+                                      onClick={() => handleVideoChange(opt.value)}
+                                      className="flex flex-col text-left p-2.5 rounded-lg border transition-all relative outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                      style={{
+                                        background: isSelected ? 'color-mix(in srgb, var(--color-accent) 12%, var(--color-surface-light))' : 'var(--color-surface-light)',
+                                        borderColor: isSelected ? 'var(--color-accent)' : 'var(--color-surface-border)',
+                                      }}
+                                    >
+                                      <div className="flex items-center justify-between w-full mb-1">
+                                        <span className="text-xs font-bold truncate pr-2" style={{ color: isSelected ? 'var(--color-accent)' : 'var(--text-primary)' }}>
+                                          {title}
+                                        </span>
+                                        {badge && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold" style={{
+                                            background: isSelected ? 'var(--color-accent)' : 'var(--color-surface-lighter)',
+                                            color: isSelected ? 'var(--color-surface-light)' : 'var(--text-secondary)'
+                                          }}>
+                                            {badge}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {details && (
+                                        <span className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>
+                                          {details}
+                                        </span>
+                                      )}
+                                      {isSelected && (
+                                        <div className="absolute bottom-1 right-1 text-[10px]" style={{ color: 'var(--color-accent)' }}>
+                                          ✓
+                                        </div>
+                                      )}
+                                    </button>
+                                  );
+                                })}
                               </div>
                             </div>
-                            <div className="flex flex-wrap gap-2">
+
+                            {/* Audio Stream Selection */}
+                            <div>
+                              <span className="block text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
+                                🎵 {t('downloads.audioLabel') || 'Audio Stream'}
+                              </span>
+                              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2.5 max-h-[160px] overflow-y-auto pr-1.5 custom-scrollbar">
+                                {audioOptions.map((opt) => {
+                                  const isSelected = audioId === opt.value;
+                                  let title = opt.label;
+                                  let badge = '';
+                                  let details = '';
+                                  
+                                  if (opt.value === 'bestaudio') {
+                                    title = t('downloads.bestAudio') || 'Best Quality';
+                                    badge = '⭐';
+                                    details = 'Auto-select highest';
+                                  } else if (opt.value === 'none') {
+                                    title = t('downloads.noAudio') || 'No Audio';
+                                    badge = '❌';
+                                    details = 'Video only';
+                                  } else {
+                                    const parts = opt.label.split(' · ');
+                                    title = parts[0] || '';
+                                    if (parts.length > 1) {
+                                      badge = parts[1].toUpperCase();
+                                    }
+                                    if (title.includes(' · ')) {
+                                      const subparts = title.split(' · ');
+                                      title = subparts[0];
+                                      details = subparts.slice(1).join(' · ');
+                                    }
+                                  }
+
+                                  return (
+                                    <button
+                                      key={opt.value}
+                                      type="button"
+                                      onClick={() => handleAudioChange(opt.value)}
+                                      className="flex flex-col text-left p-2.5 rounded-lg border transition-all relative outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                                      style={{
+                                        background: isSelected ? 'color-mix(in srgb, var(--color-accent) 12%, var(--color-surface-light))' : 'var(--color-surface-light)',
+                                        borderColor: isSelected ? 'var(--color-accent)' : 'var(--color-surface-border)',
+                                      }}
+                                    >
+                                      <div className="flex items-center justify-between w-full mb-1">
+                                        <span className="text-xs font-bold truncate pr-2" style={{ color: isSelected ? 'var(--color-accent)' : 'var(--text-primary)' }}>
+                                          {title}
+                                        </span>
+                                        {badge && (
+                                          <span className="text-[10px] px-1.5 py-0.5 rounded font-mono font-bold" style={{
+                                            background: isSelected ? 'var(--color-accent)' : 'var(--color-surface-lighter)',
+                                            color: isSelected ? 'var(--color-surface-light)' : 'var(--text-secondary)'
+                                          }}>
+                                            {badge}
+                                          </span>
+                                        )}
+                                      </div>
+                                      {details && (
+                                        <span className="text-[10px] truncate" style={{ color: 'var(--text-muted)' }}>
+                                          {details}
+                                        </span>
+                                      )}
+                                      {isSelected && (
+                                        <div className="absolute bottom-1 right-1 text-[10px]" style={{ color: 'var(--color-accent)' }}>
+                                          ✓
+                                        </div>
+                                      )}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+
+                            {/* Subtitle & Container Selection */}
+                            <div className="flex flex-wrap gap-2.5">
                               <div className="flex-1 min-w-[140px]">
-                                <label htmlFor="customSubtitleSelect" className="block text-xs mb-1" style={{ color: 'var(--text-muted)' }}>{t('downloads.subtitleSelect') || 'Subtitles'}</label>
+                                <label htmlFor="customSubtitleSelect" className="block text-xs mb-1 font-semibold" style={{ color: 'var(--text-secondary)' }}>{t('downloads.subtitleSelect') || 'Subtitles'}</label>
                                 <select
                                   id="customSubtitleSelect"
                                   value={selectedSubs}
@@ -1426,7 +1939,7 @@ const fmtTime = useCallback((t: string): string => {
                                 </select>
                               </div>
                               <div className="flex-1 min-w-[100px]">
-                                <label htmlFor="customContainerSelect" className="block text-xs mb-1" style={{ color: 'var(--text-muted)' }}>{t('downloads.containerSelect') || 'Container'}</label>
+                                <label htmlFor="customContainerSelect" className="block text-xs mb-1 font-semibold" style={{ color: 'var(--text-secondary)' }}>{t('downloads.containerSelect') || 'Container'}</label>
                                 <select
                                   id="customContainerSelect"
                                   value={selectedContainer}
@@ -1454,6 +1967,68 @@ const fmtTime = useCallback((t: string): string => {
                                   </optgroup>
                                 </select>
                               </div>
+                            </div>
+                          </div>
+                        )}
+                        {metadata.isPlaylist && metadata.entries && (
+                          <div className="mt-4 p-3 rounded-lg border border-[var(--color-surface-border)]" style={{ background: 'var(--color-surface-light)' }}>
+                            <div className="flex items-center justify-between mb-2">
+                              <span className="text-xs font-bold" style={{ color: 'var(--text-primary)' }}>
+                                📑 Select Playlist Videos ({Object.values(selectedPlaylistIndices).filter(Boolean).length}/{metadata.entries.length})
+                              </span>
+                              <div className="flex gap-2">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    const next: Record<number, boolean> = {}
+                                    metadata.entries!.forEach((_, i) => { next[i + 1] = true })
+                                    setSelectedPlaylistIndices(next)
+                                  }}
+                                  className="text-[10px] text-accent hover:underline font-semibold"
+                                >
+                                  Select All
+                                </button>
+                                <span className="text-[10px]" style={{ color: 'var(--text-muted)' }}>|</span>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setSelectedPlaylistIndices({})
+                                  }}
+                                  className="text-[10px] text-accent hover:underline font-semibold"
+                                >
+                                  Deselect All
+                                </button>
+                              </div>
+                            </div>
+                            <div className="space-y-1 max-h-[160px] overflow-y-auto pr-1.5 custom-scrollbar">
+                              {metadata.entries.map((entry, idx) => {
+                                const index = idx + 1;
+                                const isChecked = !!selectedPlaylistIndices[index];
+                                return (
+                                  <label
+                                    key={entry.id || idx}
+                                    className="flex items-center gap-2 p-1.5 rounded hover:bg-[var(--color-surface-lighter)] cursor-pointer text-xs select-none transition-colors"
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isChecked}
+                                      onChange={(e) => {
+                                        setSelectedPlaylistIndices((prev) => ({
+                                          ...prev,
+                                          [index]: e.target.checked,
+                                        }))
+                                      }}
+                                      className="rounded border-[var(--color-surface-border)] text-accent focus:ring-accent"
+                                    />
+                                    <span className="font-mono text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                                      {index}.
+                                    </span>
+                                    <span className="truncate flex-1" style={{ color: isChecked ? 'var(--text-primary)' : 'var(--text-muted)' }}>
+                                      {entry.title || `Video ${index}`}
+                                    </span>
+                                  </label>
+                                );
+                              })}
                             </div>
                           </div>
                         )}
@@ -1514,6 +2089,7 @@ const fmtTime = useCallback((t: string): string => {
                         statusColors={statusColors}
                         tt={tt}
                         t={t}
+                        speedHistory={progressHistoryRef.current[item.id]}
                       />
                     ))}
                   </div>
@@ -1612,13 +2188,13 @@ const fmtTime = useCallback((t: string): string => {
               <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <h3 className="text-sm font-medium mb-3" style={{ color: 'var(--text-secondary)' }} title={tt('themeDark')}>{t('settings.appearance')}</h3>
                 <div className="flex gap-3">
-                  {(['dark', 'light'] as const).map((themeOption) => (
+                  {(['dark', 'light', 'system'] as const).map((themeOption) => (
                     <button
                       key={themeOption}
                       onClick={() => handleThemeChange(themeOption)}
-                      className="flex-1 rounded-lg py-3 px-4 text-sm font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-                      title={themeOption === 'dark' ? tt('themeDark') : tt('themeLight')}
-                      aria-label={themeOption === 'dark' ? tt('themeDark') : tt('themeLight')}
+                      className="flex-1 rounded-lg py-3 px-4 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                      title={themeOption === 'dark' ? tt('themeDark') : (themeOption === 'light' ? tt('themeLight') : tt('themeSystem'))}
+                      aria-label={themeOption === 'dark' ? tt('themeDark') : (themeOption === 'light' ? tt('themeLight') : tt('themeSystem'))}
                       aria-pressed={theme === themeOption}
                       style={{
                         background: theme === themeOption ? 'color-mix(in srgb, var(--color-accent) 20%, transparent)' : 'var(--color-surface-lighter)',
@@ -1626,7 +2202,7 @@ const fmtTime = useCallback((t: string): string => {
                         color: theme === themeOption ? 'var(--color-accent)' : 'var(--text-secondary)',
                       }}
                     >
-                      {themeOption === 'dark' ? `🌙 ${t('settings.themeDark')}` : `☀ ${t('settings.themeLight')}`}
+                      {themeOption === 'dark' ? `🌙 ${t('settings.themeDark')}` : (themeOption === 'light' ? `☀ ${t('settings.themeLight')}` : `⚙ ${t('settings.themeSystem')}`)}
                     </button>
                   ))}
                 </div>
@@ -1729,6 +2305,36 @@ const fmtTime = useCallback((t: string): string => {
                     title={t('settings.speedLimitLabel')}
                     aria-label={t('settings.speedLimitLabel')}
                   />
+                </div>
+              </section>
+
+              {/* SponsorBlock */}
+              <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-sm font-medium" style={{ color: 'var(--text-secondary)' }} title={tt('sponsorBlockTitle')}>{t('settings.sponsorBlockTitle')}</h3>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }} title={tt('sponsorBlockTitle')}>{t('settings.sponsorBlockDescription')}</p>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={sponsorBlockEnabled}
+                    onClick={async () => {
+                      const next = !sponsorBlockEnabled
+                      setSponsorBlockEnabled(next)
+                      try { await saveSettings({ sponsorBlockEnabled: next }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                    }}
+                    className="relative w-10 h-5 rounded-full transition-colors shrink-0 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
+                    style={{
+                      background: sponsorBlockEnabled ? 'var(--color-accent)' : 'var(--color-surface-border)',
+                    }}
+                    title={tt('sponsorBlockTitle')}
+                    aria-label={tt('sponsorBlockTitle')}
+                  >
+                    <span
+                      className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform"
+                      style={{ left: '2px', transform: sponsorBlockEnabled ? 'translateX(20px)' : 'translateX(0)' }}
+                    />
+                  </button>
                 </div>
               </section>
 

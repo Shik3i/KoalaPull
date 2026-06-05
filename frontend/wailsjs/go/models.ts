@@ -53,6 +53,7 @@ export namespace main {
 	    startTime: any;
 	    // Go type: time
 	    endTime: any;
+	    outputPath: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new HistoryEntry(source);
@@ -70,6 +71,7 @@ export namespace main {
 	        this.errorMsg = source["errorMsg"];
 	        this.startTime = this.convertValues(source["startTime"], null);
 	        this.endTime = this.convertValues(source["endTime"], null);
+	        this.outputPath = source["outputPath"];
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
@@ -107,6 +109,7 @@ export namespace main {
 	    rateLimitValue: string;
 	    customArgs: string;
 	    ffmpegPath: string;
+	    sponsorBlockEnabled: boolean;
 	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
@@ -130,6 +133,7 @@ export namespace main {
 	        this.rateLimitValue = source["rateLimitValue"];
 	        this.customArgs = source["customArgs"];
 	        this.ffmpegPath = source["ffmpegPath"];
+	        this.sponsorBlockEnabled = source["sponsorBlockEnabled"];
 	    }
 	}
 	export class UpdateInfo {
@@ -170,6 +174,20 @@ export namespace main {
 	        this.app = source["app"];
 	    }
 	}
+	export class PlaylistEntry {
+	    id: string;
+	    title: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PlaylistEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	    }
+	}
 	export class VideoMetadata {
 	    id: string;
 	    title: string;
@@ -179,6 +197,7 @@ export namespace main {
 	    formats: FormatInfo[];
 	    isPlaylist: boolean;
 	    entryCount: number;
+	    entries?: PlaylistEntry[];
 	
 	    static createFrom(source: any = {}) {
 	        return new VideoMetadata(source);
@@ -194,6 +213,7 @@ export namespace main {
 	        this.formats = this.convertValues(source["formats"], FormatInfo);
 	        this.isPlaylist = source["isPlaylist"];
 	        this.entryCount = source["entryCount"];
+	        this.entries = this.convertValues(source["entries"], PlaylistEntry);
 	    }
 	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {

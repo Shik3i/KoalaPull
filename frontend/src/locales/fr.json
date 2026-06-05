@@ -30,7 +30,9 @@
     "openOutputFolder": "Ouvrir le dossier de sortie",
     "deleteEntry": "Supprimer l'entrée",
     "useAgain": "Réutiliser l'URL",
-    "viewAllSites": "Voir les 1000+ sites pris en charge"
+    "viewAllSites": "Voir les 1000+ sites pris en charge",
+    "playFile": "Lire le fichier",
+    "showFile": "Afficher dans le dossier"
   },
   "common": {
     "loading": "Chargement...",
@@ -56,6 +58,11 @@
     "emptyTitle": "Aucun téléchargement pour le moment",
     "emptyText": "Collez une URL ci-dessus pour commencer",
     "eta": "ETA : {eta}",
+    "dropToImport": "Déposer l'URL pour importer & récupérer",
+    "singleTab": "URL unique",
+    "batchTab": "Import groupé",
+    "batchPlaceholder": "Collez les URL ici, une par ligne...",
+    "addBatchToQueue": "Ajouter le lot à la file",
     "status": {
       "downloading": "Téléchargement - {percent}%",
       "starting": "Démarrage...",
@@ -84,6 +91,7 @@
     "appearance": "Apparence",
     "themeDark": "Sombre",
     "themeLight": "Clair",
+    "themeSystem": "Système",
     "language": "Langue",
     "languageEnglish": "English",
     "languageGerman": "Deutsch",
@@ -120,7 +128,9 @@
     "hideAdvanced": "Simple",
     "ffmpegPathTitle": "Chemin FFmpeg personnalisé",
     "ffmpegPathDescription": "Laissez vide pour utiliser le ffmpeg intégré. Indiquez un exécutable ffmpeg personnalisé pour le remplacer.",
-    "ffmpegPathPlaceholder": "Chemin vers l'exécutable ffmpeg..."
+    "ffmpegPathPlaceholder": "Chemin vers l'exécutable ffmpeg...",
+    "sponsorBlockTitle": "Intégration SponsorBlock",
+    "sponsorBlockDescription": "Passer automatiquement les segments de sponsor, intros, outros et pubs dans les vidéos YouTube"
   },
   "updates": {
     "koalaAvailable": "KoalaPull {version} disponible",
@@ -196,7 +206,9 @@
     "dependencyInstallFailed": "Échec de l'installation des dépendances",
     "downloadFailed": "Échec du téléchargement",
     "startDownloadFailed": "Impossible de démarrer le téléchargement",
-    "updateFailed": "Échec de la mise à jour"
+    "updateFailed": "Échec de la mise à jour",
+    "noValidUrls": "Aucune URL valide trouvée",
+    "noPlaylistItemsSelected": "Veuillez sélectionner au moins un élément à télécharger"
   },
   "tooltips": {
     "tabs": {
@@ -221,6 +233,7 @@
     "deleteHistoryEntry": "Supprime cette entrée d'historique de l'application.",
     "themeDark": "Bascule l'application vers le thème sombre.",
     "themeLight": "Bascule l'application vers le thème clair.",
+    "themeSystem": "Suit le schéma de couleurs du système d'exploitation.",
     "languageSelect": "Choisissez la langue d'affichage que KoalaPull doit utiliser dans l'interface.",
     "downloadLocation": "Affiche le dossier dans lequel les nouveaux téléchargements seront enregistrés.",
     "changeFolder": "Choisissez un autre dossier de téléchargement par défaut.",
@@ -240,6 +253,7 @@
     "supportedSites": "Exemple de sites et services pris en charge via yt-dlp.",
     "viewAllSites": "Ouvre dans le navigateur la liste complète des sites pris en charge par yt-dlp.",
     "openSite": "Ouvre le site web de {site} dans votre navigateur.",
-    "underTheHood": "Informations de fond sur KoalaPull, yt-dlp, FFmpeg et les licences."
+    "underTheHood": "Informations de fond sur KoalaPull, yt-dlp, FFmpeg et les licences.",
+    "sponsorBlockTitle": "Activer/désactiver le saut automatique des segments sponsorisés/publicitaires avec SponsorBlock."
   }
 }

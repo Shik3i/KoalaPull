@@ -81,15 +81,21 @@ type FormatInfo struct {
 	FormatNote string `json:"formatNote"`
 }
 
+type PlaylistEntry struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
+}
+
 type VideoMetadata struct {
-	ID         string       `json:"id"`
-	Title      string       `json:"title"`
-	Thumbnail  string       `json:"thumbnail"`
-	Uploader   string       `json:"uploader"`
-	Duration   float64      `json:"duration"`
-	Formats    []FormatInfo `json:"formats"`
-	IsPlaylist bool         `json:"isPlaylist"`
-	EntryCount int          `json:"entryCount"`
+	ID         string          `json:"id"`
+	Title      string          `json:"title"`
+	Thumbnail  string          `json:"thumbnail"`
+	Uploader   string          `json:"uploader"`
+	Duration   float64         `json:"duration"`
+	Formats    []FormatInfo    `json:"formats"`
+	IsPlaylist bool            `json:"isPlaylist"`
+	EntryCount int             `json:"entryCount"`
+	Entries    []PlaylistEntry `json:"entries,omitempty"`
 }
 
 type DownloadProgress struct {
@@ -101,25 +107,28 @@ type DownloadProgress struct {
 	Status         string  `json:"status"`
 	Error          string  `json:"error,omitempty"`
 	PlaylistStatus string  `json:"playlistStatus,omitempty"`
+	OutputPath     string  `json:"outputPath,omitempty"`
+	Title          string  `json:"title,omitempty"`
 }
 
 type Settings struct {
-	DefaultOutputDir string `json:"defaultOutputDir"`
-	Theme            string `json:"theme"`
-	MaxConcurrency   int    `json:"maxConcurrency"`
-	AutoPasteURL     bool   `json:"autoPasteURL"`
-	Language         string `json:"language"`
-	DownloadPreset   string `json:"downloadPreset"`
-	CustomFormatID   string `json:"customFormatId"`
-	CustomContainer  string `json:"customContainer"`
-	CustomSubtitle   string `json:"customSubtitle"`
-	CookieSource     string `json:"cookieSource"`
-	CookieBrowser    string `json:"cookieBrowser"`
-	CookieFilePath   string `json:"cookieFilePath"`
-	RateLimitEnabled bool   `json:"rateLimitEnabled"`
-	RateLimitValue   string `json:"rateLimitValue"`
-	CustomArgs       string `json:"customArgs"`
-	FfmpegPath       string `json:"ffmpegPath"`
+	DefaultOutputDir    string `json:"defaultOutputDir"`
+	Theme               string `json:"theme"`
+	MaxConcurrency      int    `json:"maxConcurrency"`
+	AutoPasteURL        bool   `json:"autoPasteURL"`
+	Language            string `json:"language"`
+	DownloadPreset      string `json:"downloadPreset"`
+	CustomFormatID      string `json:"customFormatId"`
+	CustomContainer     string `json:"customContainer"`
+	CustomSubtitle      string `json:"customSubtitle"`
+	CookieSource        string `json:"cookieSource"`
+	CookieBrowser       string `json:"cookieBrowser"`
+	CookieFilePath      string `json:"cookieFilePath"`
+	RateLimitEnabled    bool   `json:"rateLimitEnabled"`
+	RateLimitValue      string `json:"rateLimitValue"`
+	CustomArgs          string `json:"customArgs"`
+	FfmpegPath          string `json:"ffmpegPath"`
+	SponsorBlockEnabled bool   `json:"sponsorBlockEnabled"`
 }
 
 type HistoryEntry struct {
@@ -133,6 +142,7 @@ type HistoryEntry struct {
 	ErrorMsg   string    `json:"errorMsg,omitempty"`
 	StartTime  time.Time `json:"startTime"`
 	EndTime    time.Time `json:"endTime"`
+	OutputPath string    `json:"outputPath,omitempty"`
 }
 
 type VersionInfo struct {
@@ -155,6 +165,26 @@ var progressRegex = regexp.MustCompile(`\[download\]\s+([\d.]+)%\s+of\s+~?([\d.]
 var sizeLineRegex = regexp.MustCompile(`\[download\]\s+100%\s+of\s+~?([\d.]+\S+)`)
 
 var playlistItemRegex = regexp.MustCompile(`\[download\]\s+Downloading\s+(video|item)\s+(\d+)\s+of\s+(\d+)`)
+
+var destinationRegexes = []*regexp.Regexp{
+	regexp.MustCompile(`\[download\]\s+Destination:\s+(.+)`),
+	regexp.MustCompile(`\[download\]\s+(.+)\s+has already been downloaded`),
+	regexp.MustCompile(`\[Merger\]\s+Merging\s+formats\s+into\s+(.+)`),
+	regexp.MustCompile(`\[ExtractAudio\]\s+Destination:\s+(.+)`),
+	regexp.MustCompile(`\[VideoConvertor\]\s+Converting\s+video\s+from\s+.+;\s+output is\s+(.+)`),
+	regexp.MustCompile(`\[FixupM3u8\]\s+Correcting\s+container\s+in\s+(.+)`),
+}
+
+func parseDestinationPath(line string) string {
+	for _, re := range destinationRegexes {
+		if m := re.FindStringSubmatch(line); m != nil {
+			path := strings.TrimSpace(m[1])
+			path = strings.Trim(path, `"'`)
+			return path
+		}
+	}
+	return ""
+}
 
 const (
 	defaultMaxConcurrency  = 3
@@ -386,22 +416,23 @@ func (a *App) loadSettings() {
 		}
 	}
 	s := validateSettings(Settings{
-		DefaultOutputDir: defaultOutputDir(),
-		Theme:            "dark",
-		MaxConcurrency:   defaultMaxConcurrency,
-		AutoPasteURL:     false,
-		Language:         "en",
-		DownloadPreset:   defaultDownloadPreset,
-		CustomFormatID:   defaultCustomFormatID,
-		CustomContainer:  defaultCustomContainer,
-		CustomSubtitle:   defaultCustomSubtitle,
-		CookieSource:     "none",
-		CookieBrowser:    "chrome",
-		CookieFilePath:   "",
-		RateLimitEnabled: false,
-		RateLimitValue:   "1",
-		CustomArgs:       "",
-		FfmpegPath:       "",
+		DefaultOutputDir:    defaultOutputDir(),
+		Theme:               "dark",
+		MaxConcurrency:      defaultMaxConcurrency,
+		AutoPasteURL:        false,
+		Language:            "en",
+		DownloadPreset:      defaultDownloadPreset,
+		CustomFormatID:      defaultCustomFormatID,
+		CustomContainer:     defaultCustomContainer,
+		CustomSubtitle:      defaultCustomSubtitle,
+		CookieSource:        "none",
+		CookieBrowser:       "chrome",
+		CookieFilePath:      "",
+		RateLimitEnabled:    false,
+		RateLimitValue:      "1",
+		CustomArgs:          "",
+		FfmpegPath:          "",
+		SponsorBlockEnabled: false,
 	})
 	a.cachedSettings = s
 	if err := a.writeSettingsLocked(s); err != nil {
@@ -1230,7 +1261,7 @@ func (a *App) emitProgress(dep string, pct int, status, errMsg string) {
 	wailsRuntime.EventsEmit(a.appContext(), "dependency-progress", ev)
 }
 
-func (a *App) emitDownloadProgress(downloadID string, percent float64, speed, eta, fileSize, status, errMsg, playlistStatus string) {
+func (a *App) emitDownloadProgress(downloadID string, percent float64, speed, eta, fileSize, status, errMsg, playlistStatus, outputPath, title string) {
 	if isTesting {
 		return
 	}
@@ -1245,6 +1276,8 @@ func (a *App) emitDownloadProgress(downloadID string, percent float64, speed, et
 		FileSize:       fileSize,
 		Status:         status,
 		PlaylistStatus: playlistStatus,
+		OutputPath:     outputPath,
+		Title:          title,
 	}
 	if errMsg != "" {
 		ev.Error = errMsg
@@ -1568,6 +1601,13 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	}
 
 	if raw.Type == "playlist" {
+		entries := make([]PlaylistEntry, 0, len(raw.Entries))
+		for _, e := range raw.Entries {
+			entries = append(entries, PlaylistEntry{
+				ID:    e.ID,
+				Title: e.Title,
+			})
+		}
 		meta := &VideoMetadata{
 			ID:         raw.ID,
 			Title:      raw.Title,
@@ -1576,6 +1616,7 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 			IsPlaylist: true,
 			EntryCount: len(raw.Entries),
 			Formats:    make([]FormatInfo, 0),
+			Entries:    entries,
 		}
 		return meta, nil
 	}
@@ -1609,10 +1650,10 @@ const maxErrLines = 20
 const maxQueueLimit = 100
 
 func (a *App) StartDownload(url, formatID, outputDir, container, subtitle, title string) (string, error) {
-	return a.StartDownloadWithPreset(url, formatID, outputDir, container, subtitle, title, defaultDownloadPreset)
+	return a.StartDownloadWithPreset(url, formatID, outputDir, container, subtitle, title, defaultDownloadPreset, "")
 }
 
-func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subtitle, title, preset string) (string, error) {
+func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subtitle, title, preset, playlistItems string) (string, error) {
 	if url == "" || formatID == "" {
 		return "", fmt.Errorf("url and formatID are required")
 	}
@@ -1645,6 +1686,9 @@ func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subti
 	}
 	settings := a.GetSettings()
 	args = append(args, a.getCookieArgs(settings)...)
+	if settings.SponsorBlockEnabled {
+		args = append(args, "--sponsorblock-remove", "all")
+	}
 	if settings.RateLimitEnabled {
 		limitBytes := parseRateLimitToBytes(settings.RateLimitValue)
 		if limitBytes > 0 {
@@ -1653,6 +1697,9 @@ func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subti
 	}
 	if settings.CustomArgs != "" {
 		args = append(args, parseCustomArgs(settings.CustomArgs)...)
+	}
+	if playlistItems != "" {
+		args = append(args, "--playlist-items", playlistItems)
 	}
 	args = append(args, downloadPostProcessingArgs(preset, container, subtitle)...)
 	args = append(args, "--", url)
@@ -1729,13 +1776,13 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 	}()
 
 	if !a.semAcquire(ctx) {
-		a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
+		a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "", "", title)
 		return
 	}
 	defer a.semRelease()
 
 	startTime := time.Now()
-	a.emitDownloadProgress(downloadID, 0, "", "", "", "starting", "", "")
+	a.emitDownloadProgress(downloadID, 0, "", "", "", "starting", "", "", "", title)
 
 	var lastProgress atomic.Value
 	lastProgress.Store(time.Now())
@@ -1744,15 +1791,15 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 		if attempt > 0 {
 			if ctx.Err() != nil {
 				_ = a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "cancelled", StartTime: startTime, EndTime: time.Now()})
-				a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
+				a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "", "", title)
 				return
 			}
-			a.emitDownloadProgress(downloadID, 0, "", "", "", "retrying", "", "")
+			a.emitDownloadProgress(downloadID, 0, "", "", "", "retrying", "", "", "", title)
 			select {
 			case <-time.After(2 * time.Second):
 			case <-ctx.Done():
 				_ = a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "cancelled", StartTime: startTime, EndTime: time.Now()})
-				a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
+				a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "", "", title)
 				return
 			}
 			lastProgress.Store(time.Now())
@@ -1787,14 +1834,14 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 			stderr, err := cmd.StderrPipe()
 			if err != nil {
 				a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: fmt.Sprintf("stderr pipe: %v", err), StartTime: startTime, EndTime: time.Now()})
-				a.emitDownloadProgress(downloadID, 0, "", "", "", "error", fmt.Sprintf("stderr pipe: %v", err), "")
+				a.emitDownloadProgress(downloadID, 0, "", "", "", "error", fmt.Sprintf("stderr pipe: %v", err), "", "", title)
 				return
 			}
 
 			stdout, err := cmd.StdoutPipe()
 			if err != nil {
 				a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: fmt.Sprintf("stdout pipe: %v", err), StartTime: startTime, EndTime: time.Now()})
-				a.emitDownloadProgress(downloadID, 0, "", "", "", "error", fmt.Sprintf("stdout pipe: %v", err), "")
+				a.emitDownloadProgress(downloadID, 0, "", "", "", "error", fmt.Sprintf("stdout pipe: %v", err), "", "", title)
 				return
 			}
 
@@ -1802,11 +1849,11 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 			if err != nil {
 				if ctx.Err() == context.Canceled {
 					a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "cancelled", StartTime: startTime, EndTime: time.Now()})
-					a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
+					a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "", "", title)
 					return
 				}
 				a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: fmt.Sprintf("start command: %v", err), StartTime: startTime, EndTime: time.Now()})
-				a.emitDownloadProgress(downloadID, 0, "", "", "", "error", fmt.Sprintf("start command: %v", err), "")
+				a.emitDownloadProgress(downloadID, 0, "", "", "", "error", fmt.Sprintf("start command: %v", err), "", "", title)
 				return
 			}
 			defer cleanup()
@@ -1849,6 +1896,7 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 			lastSpeed := ""
 			lastETA := ""
 			lastFileSz := ""
+			detectedOutputPath := ""
 			errLines := make([]string, 0, maxErrLines)
 			var stdoutScanErr error
 			var stderrScanErr error
@@ -1870,6 +1918,13 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 					} else {
 						errLines = append(errLines, line)
 					}
+				} else {
+					if path := parseDestinationPath(line); path != "" {
+						detectedOutputPath = path
+						if clean := cleanTitleFromPath(path); clean != "" {
+							title = clean
+						}
+					}
 				}
 				now := time.Now()
 				if matches := sizeLineRegex.FindStringSubmatch(line); matches != nil {
@@ -1879,13 +1934,13 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 					lastPct, lastSpeed, lastETA, lastFileSz = pct, speed, eta, fileSz
 					if now.Sub(lastEmitTime) > 150*time.Millisecond || pct == 100 {
 						lastEmitTime = now
-						a.emitDownloadProgress(downloadID, pct, speed, eta, fileSz, "downloading", "", currentPS)
+						a.emitDownloadProgress(downloadID, pct, speed, eta, fileSz, "downloading", "", currentPS, detectedOutputPath, title)
 					}
 				} else if ps := parsePlaylistStatus(line); ps != "" {
 					currentPS = ps
 					if now.Sub(lastEmitTime) > 150*time.Millisecond {
 						lastEmitTime = now
-						a.emitDownloadProgress(downloadID, lastPct, lastSpeed, lastETA, lastFileSz, "downloading", "", currentPS)
+						a.emitDownloadProgress(downloadID, lastPct, lastSpeed, lastETA, lastFileSz, "downloading", "", currentPS, detectedOutputPath, title)
 					}
 				}
 			}
@@ -1900,7 +1955,7 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 			if err != nil {
 				if ctx.Err() == context.Canceled {
 					a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "cancelled", StartTime: startTime, EndTime: endTime})
-					a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "")
+					a.emitDownloadProgress(downloadID, 0, "", "", "", "cancelled", "", "", "", title)
 					return
 				}
 				suppress, normalizedErr := normalizeDownloadAttemptError(attempt, idleTimedOut.Load(), err)
@@ -1912,15 +1967,15 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 					errMsg = normalizedErr.Error()
 				}
 				a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, Status: "error", ErrorMsg: errMsg, StartTime: startTime, EndTime: endTime})
-				a.emitDownloadProgress(downloadID, 0, "", "", "", "error", errMsg, "")
+				a.emitDownloadProgress(downloadID, 0, "", "", "", "error", errMsg, "", "", title)
 				return
 			}
 
 			var errText string
-			if historyErr := a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, FileSize: lastFileSz, AvgSpeed: lastSpeed, Status: "completed", StartTime: startTime, EndTime: endTime}); historyErr != nil {
+			if historyErr := a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, FileSize: lastFileSz, AvgSpeed: lastSpeed, Status: "completed", StartTime: startTime, EndTime: endTime, OutputPath: detectedOutputPath}); historyErr != nil {
 				errText = fmt.Sprintf("History error: %v", historyErr)
 			}
-			a.emitDownloadProgress(downloadID, 100, "", "", lastFileSz, "completed", errText, "")
+			a.emitDownloadProgress(downloadID, 100, "", "", lastFileSz, "completed", errText, "", detectedOutputPath, title)
 		}()
 
 		attemptCancel()
@@ -1965,4 +2020,70 @@ func parsePlaylistStatus(line string) string {
 		return ""
 	}
 	return fmt.Sprintf("%s %s of %s", matches[1], matches[2], matches[3])
+}
+
+func (a *App) PlayFile(filePath string) error {
+	if filePath == "" {
+		return errors.New("file path is empty")
+	}
+	cleaned := filepath.Clean(filePath)
+	if !filepath.IsAbs(cleaned) {
+		return errors.New("file path must be absolute")
+	}
+	info, err := os.Stat(cleaned)
+	if err != nil {
+		return fmt.Errorf("file error: %w", err)
+	}
+	if info.IsDir() {
+		return errors.New("path is a directory, not a file")
+	}
+
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = command("cmd.exe", "/c", "start", "", cleaned)
+	case "darwin":
+		cmd = command("open", cleaned)
+	default:
+		cmd = command("xdg-open", cleaned)
+	}
+	return cmd.Start()
+}
+
+func (a *App) ShowFileInFolder(filePath string) error {
+	if filePath == "" {
+		return errors.New("file path is empty")
+	}
+	cleaned := filepath.Clean(filePath)
+	if !filepath.IsAbs(cleaned) {
+		return errors.New("file path must be absolute")
+	}
+	_, err := os.Stat(cleaned)
+	if err != nil {
+		return fmt.Errorf("file error: %w", err)
+	}
+
+	var cmd *exec.Cmd
+	switch runtime.GOOS {
+	case "windows":
+		cmd = command("explorer.exe", "/select,", cleaned)
+	case "darwin":
+		cmd = command("open", "-R", cleaned)
+	default:
+		cmd = command("xdg-open", filepath.Dir(cleaned))
+	}
+	return cmd.Start()
+}
+
+var ytIDSuffixRegex = regexp.MustCompile(`\s+\[[A-Za-z0-9_-]{11}\]$`)
+
+func cleanTitleFromPath(path string) string {
+	if path == "" {
+		return ""
+	}
+	base := filepath.Base(path)
+	ext := filepath.Ext(base)
+	name := strings.TrimSuffix(base, ext)
+	name = ytIDSuffixRegex.ReplaceAllString(name, "")
+	return name
 }

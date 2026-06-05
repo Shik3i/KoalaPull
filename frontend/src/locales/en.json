@@ -30,7 +30,9 @@
     "openOutputFolder": "Open output folder",
     "deleteEntry": "Delete entry",
     "useAgain": "Use URL again",
-    "viewAllSites": "View all 1000+ supported sites"
+    "viewAllSites": "View all 1000+ supported sites",
+    "playFile": "Play file",
+    "showFile": "Reveal in folder"
   },
   "common": {
     "loading": "Loading...",
@@ -56,6 +58,11 @@
     "emptyTitle": "No downloads yet",
     "emptyText": "Paste a URL above to get started",
     "eta": "ETA: {eta}",
+    "dropToImport": "Drop URL to Import & Fetch",
+    "singleTab": "Single URL",
+    "batchTab": "Batch Import",
+    "batchPlaceholder": "Paste URLs here, one per line...",
+    "addBatchToQueue": "Add Batch to Queue",
     "status": {
       "downloading": "Downloading - {percent}%",
       "starting": "Starting...",
@@ -84,6 +91,7 @@
     "appearance": "Appearance",
     "themeDark": "Dark",
     "themeLight": "Light",
+    "themeSystem": "System",
     "language": "Language",
     "languageEnglish": "English",
     "languageGerman": "Deutsch",
@@ -120,7 +128,9 @@
     "hideAdvanced": "Basic",
     "ffmpegPathTitle": "Custom FFmpeg Path",
     "ffmpegPathDescription": "Leave empty to use the bundled ffmpeg. Point to a custom ffmpeg executable to override.",
-    "ffmpegPathPlaceholder": "Path to ffmpeg executable..."
+    "ffmpegPathPlaceholder": "Path to ffmpeg executable...",
+    "sponsorBlockTitle": "SponsorBlock Integration",
+    "sponsorBlockDescription": "Automatically skip sponsor segments, intros, outros, and ads in YouTube videos"
   },
   "updates": {
     "koalaAvailable": "KoalaPull {version} available",
@@ -196,7 +206,9 @@
     "dependencyInstallFailed": "Dependency installation failed",
     "downloadFailed": "Download failed",
     "startDownloadFailed": "Failed to start download",
-    "updateFailed": "Update failed"
+    "updateFailed": "Update failed",
+    "noValidUrls": "No valid URLs found",
+    "noPlaylistItemsSelected": "Please select at least one item to download"
   },
   "tooltips": {
     "tabs": {
@@ -221,6 +233,7 @@
     "deleteHistoryEntry": "Delete this single history entry from the app.",
     "themeDark": "Switch the app to the dark color theme.",
     "themeLight": "Switch the app to the light color theme.",
+    "themeSystem": "Follow the operating system color scheme.",
     "languageSelect": "Choose which display language KoalaPull should use across the interface.",
     "downloadLocation": "Shows the folder where new downloads will be saved.",
     "changeFolder": "Choose a different default download folder.",
@@ -240,6 +253,7 @@
     "supportedSites": "A sample of sites and services supported through yt-dlp.",
     "viewAllSites": "Open the full yt-dlp supported-sites list in your browser.",
     "openSite": "Open the website for {site} in your browser.",
-    "underTheHood": "Background information about KoalaPull, yt-dlp, FFmpeg, and licensing."
+    "underTheHood": "Background information about KoalaPull, yt-dlp, FFmpeg, and licensing.",
+    "sponsorBlockTitle": "Toggle automatic skipping of sponsor/ad segments using SponsorBlock."
   }
 }

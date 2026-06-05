@@ -90,8 +90,8 @@ export function StartDownload(arg1, arg2, arg3, arg4, arg5, arg6) {
   return window['go']['main']['App']['StartDownload'](arg1, arg2, arg3, arg4, arg5, arg6);
 }
 
-export function StartDownloadWithPreset(arg1, arg2, arg3, arg4, arg5, arg6, arg7) {
-  return window['go']['main']['App']['StartDownloadWithPreset'](arg1, arg2, arg3, arg4, arg5, arg6, arg7);
+export function StartDownloadWithPreset(arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8) {
+  return window['go']['main']['App']['StartDownloadWithPreset'](arg1, arg2, arg3, arg4, arg5, arg6, arg7, arg8);
 }
 
 export function UpdateDependencies() {
@@ -100,4 +100,12 @@ export function UpdateDependencies() {
 
 export function UpdateSettings(arg1) {
   return window['go']['main']['App']['UpdateSettings'](arg1);
+}
+
+export function PlayFile(arg1) {
+  return window['go']['main']['App']['PlayFile'](arg1);
+}
+
+export function ShowFileInFolder(arg1) {
+  return window['go']['main']['App']['ShowFileInFolder'](arg1);
 }
