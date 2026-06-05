@@ -5,7 +5,9 @@ import { fileURLToPath } from "node:url"
 const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..")
 const frontendDir = resolve(repoRoot, "frontend")
 const websiteDir = resolve(repoRoot, "website")
+const goCacheDir = resolve(repoRoot, "tmp", "gocache-verify")
 const isWindows = process.platform === "win32"
+process.env.GOCACHE ||= goCacheDir
 
 function invocation(name, args) {
   if (isWindows && (name === "npm" || name === "npx")) {
@@ -51,6 +53,8 @@ function commandWorks(name, args = ["--version"]) {
   return !result.error && result.status === 0
 }
 
+const runWailsBuild = process.env.KOALAPULL_VERIFY_WAILS_BUILD !== "0"
+
 run("npm", ["ci", "--include=optional"], { cwd: frontendDir })
 run("npm", ["run", "test"], { cwd: frontendDir })
 run("npx", ["tsc", "--noEmit"], { cwd: frontendDir })
@@ -78,3 +82,15 @@ run("go", [
   ".github/workflows/ci.yml",
   ".github/workflows/release.yml",
 ])
+
+if (runWailsBuild) {
+  if (!commandWorks("wails", ["version"])) {
+    run("go", ["install", "github.com/wailsapp/wails/v2/cmd/wails@v2.12.0"])
+  }
+  const wailsArgs = ["build", "-clean"]
+  if (goos === "linux") {
+    wailsArgs.push("-tags", "webkit2_41")
+  }
+  wailsArgs.push("-platform", `${goos}/amd64`, "-ldflags", "-X main.AppVersion=verify")
+  run("wails", wailsArgs)
+}

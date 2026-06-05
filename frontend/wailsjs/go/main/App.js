@@ -74,6 +74,10 @@ export function OpenOutputDir(arg1) {
   return window['go']['main']['App']['OpenOutputDir'](arg1);
 }
 
+export function PlayFile(arg1) {
+  return window['go']['main']['App']['PlayFile'](arg1);
+}
+
 export function SelectCookieFile() {
   return window['go']['main']['App']['SelectCookieFile']();
 }
@@ -84,6 +88,10 @@ export function SelectDirectory() {
 
 export function SelectFfmpegPath() {
   return window['go']['main']['App']['SelectFfmpegPath']();
+}
+
+export function ShowFileInFolder(arg1) {
+  return window['go']['main']['App']['ShowFileInFolder'](arg1);
 }
 
 export function StartDownload(arg1, arg2, arg3, arg4, arg5, arg6) {
@@ -100,12 +108,4 @@ export function UpdateDependencies() {
 
 export function UpdateSettings(arg1) {
   return window['go']['main']['App']['UpdateSettings'](arg1);
-}
-
-export function PlayFile(arg1) {
-  return window['go']['main']['App']['PlayFile'](arg1);
-}
-
-export function ShowFileInFolder(arg1) {
-  return window['go']['main']['App']['ShowFileInFolder'](arg1);
 }

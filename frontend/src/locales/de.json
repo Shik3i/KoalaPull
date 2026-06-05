@@ -71,7 +71,11 @@
       "completed": "Abgeschlossen",
       "error": "Fehler",
       "cancelled": "Abgebrochen"
-    }
+    },
+    "selectPreset": "Download-Voreinstellung",
+    "presetBest": "Beste Qualität",
+    "presetCompatible": "MP4-Video",
+    "presetAudio": "MP3-Audio"
   },
   "history": {
     "title": "Download-Verlauf",
@@ -119,7 +123,7 @@
     "speedLimitLabel": "Max. Geschw. (MB/s)",
     "customArgsTitle": "Benutzerdefinierte yt-dlp Argumente",
     "customArgsDescription": "Zusätzliche yt-dlp-Befehlszeilenoptionen hinzufügen. Fügen Sie eine Option pro Zeile oder durch Leerzeichen getrennt ein.",
-    "customArgsPlaceholder": "z.B. --proxy socks5://127.0.0.1:1080",
+    "customArgsPlaceholder": "z.B. --user-agent KoalaPull",
     "versions": "Versionen",
     "openBinFolder": "Programmordner öffnen",
     "updates": "Updates",
@@ -208,7 +212,8 @@
     "startDownloadFailed": "Download konnte nicht gestartet werden",
     "updateFailed": "Update fehlgeschlagen",
     "noValidUrls": "Keine gültigen URLs gefunden",
-    "noPlaylistItemsSelected": "Bitte wähle mindestens ein Video zum Herunterladen aus"
+    "noPlaylistItemsSelected": "Bitte wähle mindestens ein Video zum Herunterladen aus",
+    "batchLimit": "Füge höchstens {count} URLs auf einmal hinzu"
   },
   "tooltips": {
     "tabs": {

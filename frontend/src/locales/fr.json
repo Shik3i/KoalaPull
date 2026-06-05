@@ -71,7 +71,11 @@
       "completed": "Terminé",
       "error": "Erreur",
       "cancelled": "Annulé"
-    }
+    },
+    "selectPreset": "Préréglage de téléchargement",
+    "presetBest": "Meilleure qualité",
+    "presetCompatible": "Vidéo MP4",
+    "presetAudio": "Audio MP3"
   },
   "history": {
     "title": "Historique des téléchargements",
@@ -119,7 +123,7 @@
     "speedLimitLabel": "Vitesse max (Mo/s)",
     "customArgsTitle": "Arguments yt-dlp personnalisés",
     "customArgsDescription": "Ajouter des options de ligne de commande yt-dlp supplémentaires. Collez une option par ligne ou séparée par des espaces.",
-    "customArgsPlaceholder": "ex. --proxy socks5://127.0.0.1:1080",
+    "customArgsPlaceholder": "ex. --user-agent KoalaPull",
     "versions": "Versions",
     "openBinFolder": "Ouvrir le dossier des exécutables",
     "updates": "Mises à jour",
@@ -208,7 +212,8 @@
     "startDownloadFailed": "Impossible de démarrer le téléchargement",
     "updateFailed": "Échec de la mise à jour",
     "noValidUrls": "Aucune URL valide trouvée",
-    "noPlaylistItemsSelected": "Veuillez sélectionner au moins un élément à télécharger"
+    "noPlaylistItemsSelected": "Veuillez sélectionner au moins un élément à télécharger",
+    "batchLimit": "Ajoutez {count} URL ou moins à la fois"
   },
   "tooltips": {
     "tabs": {

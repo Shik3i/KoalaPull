@@ -77,6 +77,7 @@ interface SupportedSite {
 type Tab = 'downloads' | 'history' | 'settings' | 'help'
 
 const maxVisibleHistoryEntries = 500
+const maxBatchUrls = 25
 
 const supportedSites: SupportedSite[] = [
   { name: 'YouTube', blurbKey: 'supportedSites.youtube', href: 'https://www.youtube.com' },
@@ -390,7 +391,7 @@ const HistoryRow = memo(({ entry, onDelete, onReuse, fmtTime, t }: { entry: main
         {entry.status === 'completed' && entry.outputPath && (
           <>
             <button
-              onClick={() => PlayFile(entry.outputPath)}
+              onClick={() => entry.outputPath && PlayFile(entry.outputPath)}
               className="icon-button"
               style={{ color: 'var(--color-accent)' }}
               title={t('actions.playFile')}
@@ -401,7 +402,7 @@ const HistoryRow = memo(({ entry, onDelete, onReuse, fmtTime, t }: { entry: main
               </svg>
             </button>
             <button
-              onClick={() => ShowFileInFolder(entry.outputPath)}
+              onClick={() => entry.outputPath && ShowFileInFolder(entry.outputPath)}
               className="icon-button"
               style={{ color: 'var(--text-secondary)' }}
               title={t('actions.showFile')}
@@ -1287,6 +1288,11 @@ function App() {
       setBatchAdding(false)
       return
     }
+    if (lines.length > maxBatchUrls) {
+      setAddQueueError(t('errors.batchLimit', { count: maxBatchUrls }) || `Add ${maxBatchUrls} URLs or fewer at once`)
+      setBatchAdding(false)
+      return
+    }
     const choice = resolveDownloadChoice(selectedPreset, selectedFormat, selectedContainer, selectedSubs)
     for (const targetUrl of lines) {
       try {
@@ -1651,18 +1657,18 @@ const fmtTime = useCallback((t: string): string => {
                   {/* Batch Download Preset Selector */}
                   <div className="p-3 rounded-lg border border-[var(--color-surface-border)]" style={{ background: 'var(--color-surface-light)' }}>
                     <span className="block text-xs font-semibold mb-2" style={{ color: 'var(--text-secondary)' }}>
-                      Select Download Preset
+                      {t('downloads.selectPreset')}
                     </span>
                     <div className="grid grid-cols-3 gap-2.5">
                       {(['best', 'compatible', 'audio'] as const).map((presetOption) => {
                         const isSelected = selectedPreset === presetOption;
                         let title = '';
                         if (presetOption === 'best') {
-                          title = 'Best Quality';
+                          title = t('downloads.presetBest');
                         } else if (presetOption === 'compatible') {
-                          title = 'MP4 Video';
+                          title = t('downloads.presetCompatible');
                         } else if (presetOption === 'audio') {
-                          title = 'MP3 Audio';
+                          title = t('downloads.presetAudio');
                         }
                         
                         return (
@@ -1700,7 +1706,7 @@ const fmtTime = useCallback((t: string): string => {
                         <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                       </svg> {t('common.loading') || 'Processing...'}</>
                     ) : (
-                      <>🗂️ {t('downloads.addBatchToQueue') || 'Add Batch to Queue'}</>
+                      <>{t('downloads.addBatchToQueue') || 'Add Batch to Queue'}</>
                     )}
                   </button>
                 </div>
@@ -2571,7 +2577,6 @@ const fmtTime = useCallback((t: string): string => {
                     title={tt('openBinFolder')}
                     aria-label={tt('openBinFolder')}
                   >
-                    <span>📂</span>
                     <span>{t('settings.openBinFolder')}</span>
                   </button>
                 </div>

@@ -53,7 +53,7 @@ export namespace main {
 	    startTime: any;
 	    // Go type: time
 	    endTime: any;
-	    outputPath: string;
+	    outputPath?: string;
 	
 	    static createFrom(source: any = {}) {
 	        return new HistoryEntry(source);
@@ -91,6 +91,20 @@ export namespace main {
 		    }
 		    return a;
 		}
+	}
+	export class PlaylistEntry {
+	    id: string;
+	    title: string;
+	
+	    static createFrom(source: any = {}) {
+	        return new PlaylistEntry(source);
+	    }
+	
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.title = source["title"];
+	    }
 	}
 	export class Settings {
 	    defaultOutputDir: string;
@@ -172,20 +186,6 @@ export namespace main {
 	        this.ytdlp = source["ytdlp"];
 	        this.ffmpeg = source["ffmpeg"];
 	        this.app = source["app"];
-	    }
-	}
-	export class PlaylistEntry {
-	    id: string;
-	    title: string;
-	
-	    static createFrom(source: any = {}) {
-	        return new PlaylistEntry(source);
-	    }
-	
-	    constructor(source: any = {}) {
-	        if ('string' === typeof source) source = JSON.parse(source);
-	        this.id = source["id"];
-	        this.title = source["title"];
 	    }
 	}
 	export class VideoMetadata {

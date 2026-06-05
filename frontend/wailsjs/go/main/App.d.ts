@@ -38,11 +38,15 @@ export function OpenExternalLink(arg1:string):Promise<void>;
 
 export function OpenOutputDir(arg1:string):Promise<void>;
 
+export function PlayFile(arg1:string):Promise<void>;
+
 export function SelectCookieFile():Promise<string>;
 
 export function SelectDirectory():Promise<string>;
 
 export function SelectFfmpegPath():Promise<string>;
+
+export function ShowFileInFolder(arg1:string):Promise<void>;
 
 export function StartDownload(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<string>;
 
@@ -51,7 +55,3 @@ export function StartDownloadWithPreset(arg1:string,arg2:string,arg3:string,arg4
 export function UpdateDependencies():Promise<void>;
 
 export function UpdateSettings(arg1:main.Settings):Promise<void>;
-
-export function PlayFile(arg1:string):Promise<void>;
-
-export function ShowFileInFolder(arg1:string):Promise<void>;
