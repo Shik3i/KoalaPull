@@ -84,6 +84,15 @@ func TestDependencyArtifactsRequireIntegrityVerification(t *testing.T) {
 			t.Fatalf("%s artifact has no integrity verification", goos)
 		}
 	}
+	for _, goarch := range []string{"amd64", "arm64"} {
+		artifact := ffmpegArtifactForPlatform("darwin", goarch)
+		if !strings.Contains(artifact.URL, "/macos/"+goarch+"/") {
+			t.Fatalf("darwin/%s URL = %q", goarch, artifact.URL)
+		}
+		if artifact.FFprobeURL == "" || artifact.FFprobeChecksumURL == "" {
+			t.Fatalf("darwin/%s missing ffprobe artifact: %#v", goarch, artifact)
+		}
+	}
 }
 
 func TestDownloadFileRejectsOversizedContentLengthAndRemovesPartialFile(t *testing.T) {
@@ -562,6 +571,13 @@ func TestTrustedDependencyURLRejectsUntrustedHosts(t *testing.T) {
 	if !isTrustedDependencyURL(trusted) {
 		t.Fatal("github.com dependency URL rejected")
 	}
+	macTrusted, err := url.Parse("https://ffmpeg.martin-riedl.de/redirect/latest/macos/arm64/release/ffmpeg.zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !isTrustedDependencyURL(macTrusted) {
+		t.Fatal("Martin Riedl dependency URL rejected")
+	}
 
 	untrusted, err := url.Parse("https://evil.example/yt-dlp")
 	if err != nil {
@@ -569,6 +585,29 @@ func TestTrustedDependencyURLRejectsUntrustedHosts(t *testing.T) {
 	}
 	if isTrustedDependencyURL(untrusted) {
 		t.Fatal("untrusted dependency URL accepted")
+	}
+	evermeet, err := url.Parse("https://evermeet.cx/ffmpeg/get/zip")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if isTrustedDependencyURL(evermeet) {
+		t.Fatal("retired evermeet dependency URL accepted")
+	}
+}
+
+func TestFetchChecksumForAssetAcceptsSingleHashResponse(t *testing.T) {
+	body := strings.Repeat("a", sha256.Size*2) + "\n"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, body)
+	}))
+	defer server.Close()
+
+	got, err := fetchChecksumForAsset(context.Background(), server.URL, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != strings.TrimSpace(body) {
+		t.Fatalf("checksum = %q, want %q", got, strings.TrimSpace(body))
 	}
 }
 
@@ -676,8 +715,8 @@ func TestDownloadPostProcessingArgsByPreset(t *testing.T) {
 
 func TestHistoryHelpersPreserveFileOrder(t *testing.T) {
 	entries := []HistoryEntry{
-		{DownloadID: "old", Title: "first"},
-		{DownloadID: "new", Title: "second"},
+		{DownloadID: "old", Title: "first", StartTime: time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)},
+		{DownloadID: "new", Title: "second", EndTime: time.Date(2026, 1, 2, 3, 4, 6, 7, time.UTC)},
 	}
 	path := filepath.Join(t.TempDir(), "history.json")
 
@@ -704,6 +743,33 @@ func TestHistoryHelpersPreserveFileOrder(t *testing.T) {
 	}
 	if reversed[0].DownloadID != "new" || reversed[1].DownloadID != "old" {
 		t.Fatalf("reverseHistoryEntries returned %#v", reversed)
+	}
+
+	view := historyEntryView(entries[0])
+	if view.StartTime != "2026-01-02T03:04:05.000000006Z" {
+		t.Fatalf("HistoryEntryView StartTime = %q", view.StartTime)
+	}
+}
+
+func TestGetHistoryReturnsAllEntriesAsDTO(t *testing.T) {
+	app := NewApp()
+	app.historyLoaded = true
+	for i := 0; i < 501; i++ {
+		app.historyCache = append(app.historyCache, HistoryEntry{
+			DownloadID: fmt.Sprintf("%d", i),
+			StartTime:  time.Date(2026, 1, 1, 0, 0, i%60, 0, time.UTC),
+		})
+	}
+
+	got, err := app.GetHistory()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 501 {
+		t.Fatalf("GetHistory length = %d, want 501", len(got))
+	}
+	if got[0].DownloadID != "500" || got[0].StartTime == "" {
+		t.Fatalf("GetHistory first entry = %#v", got[0])
 	}
 }
 
@@ -1016,6 +1082,11 @@ func TestSanitizeCustomArgsRejectsDangerousOptions(t *testing.T) {
 		"--ffmpeg-location /tmp/fake",
 		"--output=%(title)s",
 		"--proxy socks5://127.0.0.1:1080",
+		"--add-header Authorization:Bearer-secret",
+		"--user-agent KoalaPull",
+		"--concurrent-fragments 999",
+		"--sleep-requests 999",
+		"--geo-bypass-country USA",
 		"--unknown-option",
 		"stray-value",
 	} {
@@ -1024,8 +1095,21 @@ func TestSanitizeCustomArgsRejectsDangerousOptions(t *testing.T) {
 		}
 	}
 
-	if got, err := sanitizeCustomArgs(parseCustomArgs("--user-agent KoalaPull --geo-bypass")); err != nil || len(got) != 3 {
+	if got, err := sanitizeCustomArgs(parseCustomArgs("--concurrent-fragments 4 --geo-bypass --sleep-requests=2")); err != nil || len(got) != 4 {
 		t.Fatalf("safe custom args rejected: got %#v err %v", got, err)
+	}
+}
+
+func TestAllowedSourceHostLimitsDownloadTargets(t *testing.T) {
+	for _, host := range []string{"youtube.com", "www.youtube.com", "youtu.be", "ardmediathek.de"} {
+		if !isAllowedSourceHost(host) {
+			t.Fatalf("supported host %q rejected", host)
+		}
+	}
+	for _, host := range []string{"example.com", "youtube.com.evil.example", "localhost"} {
+		if isAllowedSourceHost(host) {
+			t.Fatalf("unsupported host %q accepted", host)
+		}
 	}
 }
 

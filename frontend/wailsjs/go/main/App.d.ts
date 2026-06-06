@@ -20,7 +20,7 @@ export function GetAppVersion():Promise<string>;
 
 export function GetFfmpegVersion():Promise<string>;
 
-export function GetHistory():Promise<Array<main.HistoryEntry>>;
+export function GetHistory():Promise<Array<main.HistoryEntryView>>;
 
 export function GetSettings():Promise<main.Settings>;
 

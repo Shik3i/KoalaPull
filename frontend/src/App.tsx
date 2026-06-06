@@ -204,21 +204,14 @@ function formatAppVersionLabel(version: string): string {
   return `v${version}`
 }
 
-function siteLogoUrl(site: SupportedSite): string {
-  if (site.name === 'Niconico') return 'https://www.nicovideo.jp/favicon.ico'
-  try {
-    const hostname = new URL(site.href).hostname
-    return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(hostname)}&sz=64`
-  } catch { return '' }
-}
-
 function SiteMark({ site }: { site: SupportedSite }) {
+  const initials = site.name.replace(/\s*\(.+\)\s*/g, '').slice(0, 2).toUpperCase()
   return (
     <div
       className="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center overflow-hidden"
-      style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}
+      style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)', color: 'var(--color-accent)' }}
     >
-      <img src={siteLogoUrl(site)} alt="" className="w-7 h-7 object-contain" loading="lazy" />
+      <span className="text-xs font-bold" aria-hidden="true">{initials}</span>
     </div>
   )
 }
@@ -340,7 +333,7 @@ function combineFormatIds(videoId: string, audioId: string): string {
   return `${videoId}+${audioId}`
 }
 
-function HistoryEntries({ entries, search, onDelete, onReuse, fmtTime, t }: { entries: main.HistoryEntry[]; search: string; onDelete: (id: string) => void; onReuse: (url: string) => void; fmtTime: (t: string) => string; t: (key: string, params?: Record<string, string | number>) => string }) {
+function HistoryEntries({ entries, search, onDelete, onReuse, fmtTime, t }: { entries: main.HistoryEntryView[]; search: string; onDelete: (id: string) => void; onReuse: (url: string) => void; fmtTime: (t: string) => string; t: (key: string, params?: Record<string, string | number>) => string }) {
   const filtered = useMemo(() => {
     if (!search) return entries
     const q = search.toLowerCase()
@@ -368,7 +361,7 @@ function HistoryEntries({ entries, search, onDelete, onReuse, fmtTime, t }: { en
   )
 }
 
-const HistoryRow = memo(({ entry, onDelete, onReuse, fmtTime, t }: { entry: main.HistoryEntry; onDelete: (id: string) => void; onReuse: (url: string) => void; fmtTime: (t: string) => string; t: (key: string, params?: Record<string, string | number>) => string }) => {
+const HistoryRow = memo(({ entry, onDelete, onReuse, fmtTime, t }: { entry: main.HistoryEntryView; onDelete: (id: string) => void; onReuse: (url: string) => void; fmtTime: (t: string) => string; t: (key: string, params?: Record<string, string | number>) => string }) => {
   const statusKey = `downloads.status.${entry.status}`
   return (
     <div className="rounded-lg p-3.5 lg:p-4 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
@@ -479,7 +472,7 @@ const QueueRow = memo(({
     <div className="rounded-lg p-3 lg:p-4 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
       <div className="w-16 h-10 rounded shrink-0 flex items-center justify-center overflow-hidden" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}>
         {item.thumbnail ? (
-          <img src={item.thumbnail} alt="" loading="lazy" className="w-full h-full object-cover" />
+          <img src={appIcon} alt="" loading="lazy" className="w-full h-full object-cover" />
         ) : (
           <svg className="w-5 h-5" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
@@ -709,7 +702,7 @@ function App() {
   const [browserError, setBrowserError] = useState('')
   const [settingsError, setSettingsError] = useState('')
 
-  const [history, setHistory] = useState<main.HistoryEntry[]>([])
+  const [history, setHistory] = useState<main.HistoryEntryView[]>([])
   const [historySearch, setHistorySearch] = useState('')
   const [historyLoading, setHistoryLoading] = useState(false)
   const [historyError, setHistoryError] = useState('')
@@ -1723,7 +1716,7 @@ const fmtTime = useCallback((t: string): string => {
                 <div className="rounded-lg overflow-hidden" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
                   <div className="flex flex-col sm:flex-row gap-4 p-4">
                     {metadata.thumbnail ? (
-                      <img src={metadata.thumbnail} alt={metadata.title} loading="lazy" className="w-36 lg:w-52 h-20 lg:h-28 rounded-md object-cover shrink-0" style={{ background: 'var(--color-surface-lighter)' }} />
+                      <img src={appIcon} alt={metadata.title} loading="lazy" className="w-36 lg:w-52 h-20 lg:h-28 rounded-md object-cover shrink-0" style={{ background: 'var(--color-surface-lighter)' }} />
                     ) : (
                       <div className="w-36 lg:w-52 h-20 lg:h-28 rounded-md shrink-0 flex items-center justify-center" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}>
                         <svg className="w-8 h-8" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">

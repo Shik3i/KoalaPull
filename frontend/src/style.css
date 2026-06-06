@@ -64,7 +64,7 @@
   --color-accent-text: #000000;
   --text-primary: #e5e7eb;
   --text-secondary: #9ca3af;
-  --text-muted: #6b7280;
+  --text-muted: #9ca3af;
 }
 
 [data-theme="light"] {

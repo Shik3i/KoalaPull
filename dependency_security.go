@@ -26,11 +26,15 @@ const (
 )
 
 type dependencyArtifact struct {
-	URL          string
-	AssetName    string
-	ChecksumURL  string
-	SignatureURL string
-	MaxBytes     int64
+	URL                 string
+	AssetName           string
+	ChecksumURL         string
+	SignatureURL        string
+	FFprobeURL          string
+	FFprobeAssetName    string
+	FFprobeChecksumURL  string
+	FFprobeSignatureURL string
+	MaxBytes            int64
 }
 
 func trustedDependencyHTTPClient() *http.Client {
@@ -54,13 +58,17 @@ func isTrustedDependencyURL(u *url.URL) bool {
 	}
 	host := strings.TrimSuffix(strings.ToLower(u.Hostname()), ".")
 	switch host {
-	case "github.com", "objects.githubusercontent.com", "evermeet.cx", "www.evermeet.cx":
+	case "github.com", "objects.githubusercontent.com", "ffmpeg.martin-riedl.de":
 		return true
 	}
 	return strings.HasSuffix(host, ".githubusercontent.com")
 }
 
 func ffmpegArtifactFor(goos string) dependencyArtifact {
+	return ffmpegArtifactForPlatform(goos, runtime.GOARCH)
+}
+
+func ffmpegArtifactForPlatform(goos, goarch string) dependencyArtifact {
 	switch goos {
 	case "windows":
 		const name = "ffmpeg-master-latest-win64-gpl.zip"
@@ -71,11 +79,17 @@ func ffmpegArtifactFor(goos string) dependencyArtifact {
 			MaxBytes:    maxFFmpegDownloadBytes,
 		}
 	case "darwin":
-		const url = "https://evermeet.cx/ffmpeg/get/zip"
+		arch := "amd64"
+		if goarch == "arm64" {
+			arch = "arm64"
+		}
+		base := "https://ffmpeg.martin-riedl.de/redirect/latest/macos/" + arch + "/release"
 		return dependencyArtifact{
-			URL:         url,
-			ChecksumURL: url + "/sha256",
-			MaxBytes:    maxFFmpegDownloadBytes,
+			URL:                base + "/ffmpeg.zip",
+			ChecksumURL:        base + "/ffmpeg.zip.sha256",
+			FFprobeURL:         base + "/ffprobe.zip",
+			FFprobeChecksumURL: base + "/ffprobe.zip.sha256",
+			MaxBytes:           maxFFmpegDownloadBytes,
 		}
 	default:
 		const name = "ffmpeg-master-latest-linux64-gpl.tar.xz"
@@ -91,11 +105,7 @@ func ffmpegArtifactFor(goos string) dependencyArtifact {
 func verifyFFmpegArchive(ctx context.Context, archivePath string, artifact dependencyArtifact) error {
 	switch {
 	case artifact.ChecksumURL != "":
-		expected, err := fetchChecksumForAsset(ctx, artifact.ChecksumURL, artifact.AssetName)
-		if err != nil {
-			return fmt.Errorf("fetch ffmpeg checksum: %w", err)
-		}
-		return verifyFileChecksum(archivePath, expected, "ffmpeg")
+		return verifyFileChecksumFromURL(ctx, archivePath, artifact.ChecksumURL, artifact.AssetName, "ffmpeg")
 	default:
 		return errors.New("ffmpeg artifact has no integrity verification")
 	}
@@ -117,7 +127,10 @@ func fetchLimitedBytes(ctx context.Context, rawURL string, maxBytes int64) ([]by
 	if err != nil {
 		return nil, err
 	}
-	resp, err := http.DefaultClient.Do(req)
+	if !isTesting && !isTrustedDependencyURL(req.URL) {
+		return nil, fmt.Errorf("untrusted dependency host: %s", req.URL.Hostname())
+	}
+	resp, err := trustedDependencyHTTPClient().Do(req)
 	if err != nil {
 		return nil, err
 	}

@@ -285,6 +285,30 @@ func TestFrontendShowsStartDownloadErrors(t *testing.T) {
 	}
 }
 
+func TestFrontendCSPBlocksInlineScriptsAndRemoteImages(t *testing.T) {
+	data := mustReadRepoFile(t, "frontend", "index.html")
+	if strings.Contains(data, "script-src 'self' 'unsafe-inline'") {
+		t.Fatal("frontend CSP must not allow inline scripts")
+	}
+	if !strings.Contains(data, "script-src 'self'") || !strings.Contains(data, "img-src 'self' data:") {
+		t.Fatal("frontend CSP must restrict scripts and images")
+	}
+}
+
+func TestFrontendAvoidsRemoteThumbnailAndFaviconRendering(t *testing.T) {
+	data := mustReadRepoFile(t, "frontend", "src", "App.tsx")
+	for _, forbidden := range []string{
+		"google.com/s2/favicons",
+		"siteLogoUrl",
+		"<img src={metadata.thumbnail}",
+		"<img src={item.thumbnail}",
+	} {
+		if strings.Contains(data, forbidden) {
+			t.Fatalf("frontend still renders remote media marker %q", forbidden)
+		}
+	}
+}
+
 func TestAgentsDefinesNoPushWithoutVerification(t *testing.T) {
 	data := mustReadRepoFile(t, "AGENTS.md")
 	for _, want := range []string{

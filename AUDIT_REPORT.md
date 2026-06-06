@@ -1,106 +1,51 @@
 # KoalaPull Audit Remediation Report
 
-## Fixed Real Findings
+Date: 2026-06-06
 
-### Red - Local/Private Network URL Exposure
+## Reverified Findings
+
+### SSRF guard after preflight
 **Severity:** HIGH  
 **Domain:** Backend  
-**Location:** `app.go:FetchMetadata`, `app.go:StartDownloadWithPreset`, `app.go:isAllowedDownloadURL`
+**Status:** Fixed by narrowing accepted download hosts to the app's supported public site allowlist before launching `yt-dlp`. The original risk existed because only the submitted hostname was resolved before `yt-dlp` handled later network behavior.
 
-**Status:** Fixed with hostname resolution checks before launching `yt-dlp`, existing literal IP blocking, and thumbnail URL sanitization.  
-**Residual:** Redirects and extractor-discovered media URLs are still ultimately handled inside `yt-dlp`; a full network sandbox/proxy would be the stronger long-term control.
+### Mutable dependency binary trust
+**Severity:** HIGH
+**Domain:** Infrastructure
+**Status:** Partly mitigated. Managed downloads now enforce trusted hosts at initial request and redirect time, bounded reads, and checksums. macOS moved off the retired Evermeet URL and installs both `ffmpeg` and `ffprobe` from the same checked channel. Full upstream-compromise protection still requires signed metadata/TUF/Sigstore support from the chosen distributors.
 
-**Proof of Fix:**
-```go
-if err := validateDownloadURLForLaunch(a.appContext(), url); err != nil {
-    return nil, err
-}
-```
-
-### Red - Unsafe File Launch Through PlayFile
-**Severity:** HIGH  
-**Domain:** Backend  
-**Location:** `app.go:PlayFile`
-
-**Status:** Fixed. `PlayFile` now allows only media extensions and rejects executable/script/link-style files.
-
-**Proof of Fix:**
-```go
-if !isSafePlayableFile(cleaned) {
-    return errors.New("file type is not safe to play from KoalaPull")
-}
-```
-
-### Yellow - Custom yt-dlp Argument Blocklist
+### Advanced custom argument abuse
 **Severity:** MEDIUM  
 **Domain:** Backend  
-**Location:** `app.go:sanitizeCustomArgs`
+**Status:** Fixed. Header and user-agent passthrough were removed, value-bearing options now have bounded validators, and tests cover rejected abuse values.
 
-**Status:** Fixed. Dangerous and unknown options are rejected; supported advanced args now use an allowlist.
+### Wails CSP too permissive
+**Severity:** MEDIUM
+**Domain:** Frontend
+**Status:** Fixed for script and remote image execution surface. `script-src` no longer allows inline scripts, and `img-src` is limited to `self data:`. Inline styles remain allowed because the current UI uses React style attributes extensively.
 
-**Proof of Fix:**
-```go
-requiresValue, allowed := allowedCustomArgNames[name]
-if !allowed {
-    return nil, fmt.Errorf("custom argument %q is not supported", name)
-}
-```
-
-### Yellow - External Link Bridge Too Broad
-**Severity:** MEDIUM  
-**Domain:** Backend  
-**Location:** `app.go:OpenExternalLink`
-
-**Status:** Fixed. Browser-open bridge now restricts links to known project/tool hosts.
-
-**Proof of Fix:**
-```go
-if !isAllowedExternalLinkHost(url) {
-    return errors.New("external link host is not allowed")
-}
-```
-
-### Yellow - Large Batch Import Burst
+### Remote thumbnail/favicons privacy surface
 **Severity:** MEDIUM  
 **Domain:** Full-Stack  
-**Location:** `frontend/src/App.tsx`, `app.go:validatePlaylistItems`
+**Status:** Fixed. Backend no longer returns remote thumbnails to the UI, metadata/queue thumbnails render local imagery only, and supported-site badges no longer fetch Google favicon URLs.
 
-**Status:** Fixed. Batch URL import and playlist item selection are capped at 25 items per action.
+### Browser termination too broad
+**Severity:** LOW
+**Domain:** Backend / UX
+**Status:** Fixed at the backend boundary. `KillBrowser` now refuses automatic process termination for known browsers and tells the user to close the browser manually.
 
-**Proof of Fix:**
-```tsx
-if (lines.length > maxBatchUrls) {
-  setAddQueueError(t('errors.batchLimit', { count: maxBatchUrls }))
-}
-```
-
-### Blue - UI Text, Mojibake, and Contrast
+### Muted text contrast
 **Severity:** LOW  
 **Domain:** Frontend  
-**Location:** `frontend/src/App.tsx`, locale JSON, `frontend/src/style.css`
+**Status:** Fixed. Dark-mode muted text was raised from `#6b7280` to `#9ca3af`.
 
-**Status:** Fixed for the audited UI areas. Hardcoded batch preset labels moved to locales, broken glyph buttons removed, and light muted text contrast improved.
+## Regression Coverage
 
-**Proof of Fix:**
-```css
---text-muted: #64748b;
-```
-
-## Verified Not a Code Bug
-
-### Dependency Integrity Uses Upstream Checksums
-**Severity:** INFO  
-**Domain:** Infrastructure  
-**Location:** `dependency_security.go`, `app.go:downloadYtdlp`, `app.go:downloadFfmpeg`
-
-**Status:** Reclassified. Current implementation already enforces HTTPS, bounded downloads, checksum verification, private file modes, and bounded archive extraction. A fully signed or pinned supply-chain model would be stronger, but the original finding was overstated as an app vulnerability.
-
-### Website Robots Allows Crawling
-**Severity:** INFO  
-**Domain:** Infrastructure  
-**Location:** `website/robots.txt`
-
-**Status:** Reclassified. This is a public marketing website SEO choice, not an application security bug. Real bot/DDoS controls belong at CDN/WAF/hosting level.
+- Custom `yt-dlp` argument validation tests.
+- Supported download-host allowlist tests.
+- CSP regression test for inline script and remote image restrictions.
+- Frontend regression test blocking remote thumbnail/favicon render paths.
+- Existing dependency integrity and bounded extraction tests still pass.
 
 ## Verification
 
@@ -108,3 +53,5 @@ if (lines.length > maxBatchUrls) {
 - `go vet ./...` passed.
 - `npm run test` in `frontend/` passed.
 - `npm run build` in `frontend/` passed.
+- `npm audit --audit-level=moderate` in repo root passed.
+- `npm audit --audit-level=moderate` in `frontend/` passed.

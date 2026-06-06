@@ -203,6 +203,13 @@ func (a *App) isWindowsProcessRunning(proc string) (bool, error) {
 }
 
 func (a *App) KillBrowser(browser string) error {
+	if _, ok := browserProcessNames[strings.ToLower(browser)]; !ok {
+		return fmt.Errorf("unknown browser: %s", browser)
+	}
+	return errors.New("automatic browser termination is disabled; close the browser manually")
+}
+
+func (a *App) killBrowserForTests(browser string) error {
 	processes, ok := browserProcessNames[strings.ToLower(browser)]
 	if !ok {
 		return fmt.Errorf("unknown browser: %s", browser)

@@ -146,6 +146,20 @@ type HistoryEntry struct {
 	OutputPath string    `json:"outputPath,omitempty"`
 }
 
+type HistoryEntryView struct {
+	DownloadID string `json:"downloadId"`
+	URL        string `json:"url"`
+	Title      string `json:"title"`
+	FormatID   string `json:"formatId"`
+	FileSize   string `json:"fileSize"`
+	AvgSpeed   string `json:"avgSpeed"`
+	Status     string `json:"status"`
+	ErrorMsg   string `json:"errorMsg,omitempty"`
+	StartTime  string `json:"startTime"`
+	EndTime    string `json:"endTime"`
+	OutputPath string `json:"outputPath,omitempty"`
+}
+
 type VersionInfo struct {
 	Ytdlp  string `json:"ytdlp"`
 	Ffmpeg string `json:"ffmpeg"`
@@ -298,9 +312,15 @@ func (a *App) cleanupStaleTempFiles() {
 		return
 	}
 	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".tmp") {
-			if err := os.Remove(filepath.Join(a.binDir, e.Name())); err != nil {
+		name := e.Name()
+		path := filepath.Join(a.binDir, name)
+		if strings.HasSuffix(name, ".tmp") {
+			if err := os.Remove(path); err != nil {
 				log.Printf("cleanup stale tmp: %v", err)
+			}
+		} else if strings.HasPrefix(name, ".koalapull-ffmpeg-") {
+			if err := os.RemoveAll(path); err != nil {
+				log.Printf("cleanup stale temp dir: %v", err)
 			}
 		}
 	}
@@ -662,39 +682,41 @@ var blockedCustomArgNames = map[string]struct{}{
 	"--ffmpeg-location":          {},
 }
 
-var allowedCustomArgNames = map[string]bool{
-	"--add-header":           true,
-	"--concurrent-fragments": true,
-	"--convert-thumbnails":   true,
-	"--embed-metadata":       false,
-	"--embed-thumbnail":      false,
-	"--extractor-retries":    true,
-	"--force-ipv4":           false,
-	"--force-ipv6":           false,
-	"--fragment-retries":     true,
-	"--geo-bypass":           false,
-	"--geo-bypass-country":   true,
-	"--geo-bypass-ip-block":  true,
-	"--max-sleep-interval":   true,
-	"--no-mtime":             false,
-	"--no-part":              false,
-	"--referer":              true,
-	"--restrict-filenames":   false,
-	"--retries":              true,
-	"--retry-sleep":          true,
-	"--sleep-interval":       true,
-	"--sleep-requests":       true,
-	"--sub-langs":            true,
-	"--trim-filenames":       true,
-	"--user-agent":           true,
-	"--windows-filenames":    false,
-	"--write-auto-subs":      false,
-	"--write-subs":           false,
-	"--write-thumbnail":      false,
+type customArgSpec struct {
+	requiresValue bool
+	validator     func(string) error
+}
+
+var allowedCustomArgNames = map[string]customArgSpec{
+	"--concurrent-fragments": {requiresValue: true, validator: validateSmallPositiveIntArg(1, 16)},
+	"--convert-thumbnails":   {requiresValue: true, validator: validateEnumArg("jpg", "png", "webp")},
+	"--embed-metadata":       {},
+	"--embed-thumbnail":      {},
+	"--extractor-retries":    {requiresValue: true, validator: validateSmallPositiveIntArg(0, 10)},
+	"--force-ipv4":           {},
+	"--force-ipv6":           {},
+	"--fragment-retries":     {requiresValue: true, validator: validateSmallPositiveIntArg(0, 25)},
+	"--geo-bypass":           {},
+	"--geo-bypass-country":   {requiresValue: true, validator: validateCountryArg},
+	"--max-sleep-interval":   {requiresValue: true, validator: validateSmallPositiveFloatArg(0, 60)},
+	"--no-mtime":             {},
+	"--no-part":              {},
+	"--restrict-filenames":   {},
+	"--retries":              {requiresValue: true, validator: validateSmallPositiveIntArg(0, 25)},
+	"--retry-sleep":          {requiresValue: true, validator: validateRetrySleepArg},
+	"--sleep-interval":       {requiresValue: true, validator: validateSmallPositiveFloatArg(0, 60)},
+	"--sleep-requests":       {requiresValue: true, validator: validateSmallPositiveFloatArg(0, 10)},
+	"--sub-langs":            {requiresValue: true, validator: validateSubLangsArg},
+	"--trim-filenames":       {requiresValue: true, validator: validateSmallPositiveIntArg(16, 255)},
+	"--windows-filenames":    {},
+	"--write-auto-subs":      {},
+	"--write-subs":           {},
+	"--write-thumbnail":      {},
 }
 
 func sanitizeCustomArgs(raw []string) ([]string, error) {
 	expectingValueFor := ""
+	var expectingValidator func(string) error
 	for _, arg := range raw {
 		if arg == "" {
 			continue
@@ -703,31 +725,107 @@ func sanitizeCustomArgs(raw []string) ([]string, error) {
 			if strings.HasPrefix(arg, "-") {
 				return nil, fmt.Errorf("custom argument %q requires a value", expectingValueFor)
 			}
+			if expectingValidator != nil {
+				if err := expectingValidator(arg); err != nil {
+					return nil, fmt.Errorf("custom argument %q has invalid value: %w", expectingValueFor, err)
+				}
+			}
 			expectingValueFor = ""
+			expectingValidator = nil
 			continue
 		}
 		if !strings.HasPrefix(arg, "-") {
 			return nil, fmt.Errorf("custom argument value %q has no option", arg)
 		}
 		name := arg
+		value := ""
 		if idx := strings.Index(name, "="); idx >= 0 {
+			value = name[idx+1:]
 			name = name[:idx]
 		}
 		if _, blocked := blockedCustomArgNames[name]; blocked {
 			return nil, fmt.Errorf("custom argument %q is not allowed", name)
 		}
-		requiresValue, allowed := allowedCustomArgNames[name]
+		spec, allowed := allowedCustomArgNames[name]
 		if !allowed {
 			return nil, fmt.Errorf("custom argument %q is not supported", name)
 		}
-		if requiresValue && !strings.Contains(arg, "=") {
+		if spec.requiresValue && !strings.Contains(arg, "=") {
 			expectingValueFor = name
+			expectingValidator = spec.validator
+			continue
+		}
+		if spec.requiresValue && spec.validator != nil {
+			if err := spec.validator(value); err != nil {
+				return nil, fmt.Errorf("custom argument %q has invalid value: %w", name, err)
+			}
+		}
+		if !spec.requiresValue && strings.Contains(arg, "=") {
+			return nil, fmt.Errorf("custom argument %q does not accept a value", name)
 		}
 	}
 	if expectingValueFor != "" {
 		return nil, fmt.Errorf("custom argument %q requires a value", expectingValueFor)
 	}
 	return raw, nil
+}
+
+func validateSmallPositiveIntArg(min, max int) func(string) error {
+	return func(raw string) error {
+		v, err := strconv.Atoi(strings.TrimSpace(raw))
+		if err != nil || v < min || v > max {
+			return fmt.Errorf("must be an integer from %d to %d", min, max)
+		}
+		return nil
+	}
+}
+
+func validateSmallPositiveFloatArg(min, max float64) func(string) error {
+	return func(raw string) error {
+		v, err := strconv.ParseFloat(strings.TrimSpace(raw), 64)
+		if err != nil || v < min || v > max {
+			return fmt.Errorf("must be a number from %.0f to %.0f", min, max)
+		}
+		return nil
+	}
+}
+
+func validateEnumArg(allowed ...string) func(string) error {
+	return func(raw string) error {
+		for _, value := range allowed {
+			if raw == value {
+				return nil
+			}
+		}
+		return fmt.Errorf("unsupported value")
+	}
+}
+
+func validateCountryArg(raw string) error {
+	if regexp.MustCompile(`^[A-Za-z]{2}$`).MatchString(raw) {
+		return nil
+	}
+	return errors.New("must be a two-letter country code")
+}
+
+func validateSubLangsArg(raw string) error {
+	if len(raw) > 128 {
+		return errors.New("too long")
+	}
+	if regexp.MustCompile(`^[A-Za-z0-9_*,-]+$`).MatchString(raw) {
+		return nil
+	}
+	return errors.New("contains unsupported characters")
+}
+
+func validateRetrySleepArg(raw string) error {
+	if len(raw) > 64 {
+		return errors.New("too long")
+	}
+	if regexp.MustCompile(`^((linear|exp)=)?[0-9]+(\.[0-9]+)?(:[0-9]+(\.[0-9]+)?)?$`).MatchString(raw) {
+		return nil
+	}
+	return errors.New("unsupported retry sleep format")
 }
 
 func truncateToValidUTF8Prefix(s string, maxBytes int) string {
@@ -971,13 +1069,41 @@ func reverseHistoryEntries(entries []HistoryEntry) []HistoryEntry {
 	return out
 }
 
-func (a *App) GetHistory() ([]HistoryEntry, error) {
+func (a *App) GetHistory() ([]HistoryEntryView, error) {
 	a.historyMu.Lock()
 	defer a.historyMu.Unlock()
 	if err := a.ensureHistoryLoadedLocked(); err != nil {
 		return nil, fmt.Errorf("load history: %w", err)
 	}
-	return reverseHistoryEntries(a.historyCache), nil
+	reversed := reverseHistoryEntries(a.historyCache)
+	out := make([]HistoryEntryView, 0, len(reversed))
+	for _, entry := range reversed {
+		out = append(out, historyEntryView(entry))
+	}
+	return out, nil
+}
+
+func historyEntryView(entry HistoryEntry) HistoryEntryView {
+	return HistoryEntryView{
+		DownloadID: entry.DownloadID,
+		URL:        entry.URL,
+		Title:      entry.Title,
+		FormatID:   entry.FormatID,
+		FileSize:   entry.FileSize,
+		AvgSpeed:   entry.AvgSpeed,
+		Status:     entry.Status,
+		ErrorMsg:   entry.ErrorMsg,
+		StartTime:  formatHistoryTime(entry.StartTime),
+		EndTime:    formatHistoryTime(entry.EndTime),
+		OutputPath: entry.OutputPath,
+	}
+}
+
+func formatHistoryTime(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	return t.Format(time.RFC3339Nano)
 }
 
 func (a *App) isKnownHistoryOutputFile(path string) bool {
@@ -1574,6 +1700,25 @@ func (a *App) downloadFfmpeg(force bool) error {
 			return fmt.Errorf("replace ffprobe: %w", err)
 		}
 	}
+	if runtime.GOOS == "darwin" && artifact.FFprobeURL != "" {
+		ffprobeArchivePath := filepath.Join(tmpDir, "ffprobe-archive")
+		ffprobeExtractedPath := filepath.Join(tmpDir, "ffprobe-extracted")
+		if err := a.downloadFile(dlCtx, artifact.FFprobeURL, ffprobeArchivePath, "ffprobe", artifact.MaxBytes); err != nil {
+			return fmt.Errorf("ffprobe download failed: %w", err)
+		}
+		if err := verifyFileChecksumFromURL(dlCtx, ffprobeArchivePath, artifact.FFprobeChecksumURL, artifact.FFprobeAssetName, "ffprobe"); err != nil {
+			return err
+		}
+		if err := extractZipBinaryBounded(dlCtx, ffprobeArchivePath, ffprobeExtractedPath, "ffprobe"); err != nil {
+			return fmt.Errorf("ffprobe extraction failed: %w", err)
+		}
+		if err := os.Chmod(ffprobeExtractedPath, privateDirMode); err != nil {
+			return fmt.Errorf("chmod ffprobe failed: %w", err)
+		}
+		if err := replaceFilePreservingOld(ffprobeExtractedPath, a.ffprobePath()); err != nil {
+			return fmt.Errorf("replace ffprobe: %w", err)
+		}
+	}
 	if err := replaceFilePreservingOld(extractedPath, destPath); err != nil {
 		return fmt.Errorf("replace ffmpeg: %w", err)
 	}
@@ -1597,6 +1742,9 @@ func (a *App) downloadFile(ctx context.Context, url, destPath, depName string, m
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return fmt.Errorf("http request failed: %w", err)
+	}
+	if !isTesting && !isTrustedDependencyURL(req.URL) {
+		return fmt.Errorf("untrusted dependency host: %s", req.URL.Hostname())
 	}
 	resp, err := trustedDependencyHTTPClient().Do(req)
 	if err != nil {
@@ -1653,10 +1801,24 @@ func verifyYtdlpChecksum(ctx context.Context, filePath, assetName string) error 
 	return verifyFileChecksum(filePath, expected, "yt-dlp")
 }
 
+func verifyFileChecksumFromURL(ctx context.Context, filePath, checksumURL, assetName, label string) error {
+	if checksumURL == "" {
+		return fmt.Errorf("%s artifact has no checksum URL", label)
+	}
+	expected, err := fetchChecksumForAsset(ctx, checksumURL, assetName)
+	if err != nil {
+		return fmt.Errorf("fetch %s checksum: %w", label, err)
+	}
+	return verifyFileChecksum(filePath, expected, label)
+}
+
 func fetchChecksumForAsset(ctx context.Context, checksumURL, assetName string) (string, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, checksumURL, nil)
 	if err != nil {
 		return "", err
+	}
+	if !isTesting && !isTrustedDependencyURL(req.URL) {
+		return "", fmt.Errorf("untrusted checksum host: %s", req.URL.Hostname())
 	}
 	resp, err := trustedDependencyHTTPClient().Do(req)
 	if err != nil {
@@ -1671,14 +1833,26 @@ func fetchChecksumForAsset(ctx context.Context, checksumURL, assetName string) (
 	}
 	scanner := bufio.NewScanner(io.LimitReader(resp.Body, maxChecksumDownloadBytes+1))
 	scanner.Buffer(make([]byte, 0, 64*1024), int(maxChecksumDownloadBytes))
+	firstValidChecksum := ""
 	for scanner.Scan() {
 		fields := strings.Fields(scanner.Text())
+		if len(fields) < 1 {
+			continue
+		}
+		sum := strings.ToLower(fields[0])
+		if len(sum) == sha256.Size*2 {
+			if _, err := hex.DecodeString(sum); err == nil && firstValidChecksum == "" {
+				firstValidChecksum = sum
+			}
+		}
+		if assetName == "" {
+			continue
+		}
 		if len(fields) < 2 {
 			continue
 		}
 		name := strings.TrimPrefix(fields[len(fields)-1], "./")
 		if filepath.Base(name) == assetName {
-			sum := strings.ToLower(fields[0])
 			if len(sum) != sha256.Size*2 {
 				return "", fmt.Errorf("invalid checksum length for %s", assetName)
 			}
@@ -1690,6 +1864,9 @@ func fetchChecksumForAsset(ctx context.Context, checksumURL, assetName string) (
 	}
 	if err := scanner.Err(); err != nil {
 		return "", err
+	}
+	if assetName == "" && firstValidChecksum != "" {
+		return firstValidChecksum, nil
 	}
 	return "", fmt.Errorf("checksum for %s not found", assetName)
 }
@@ -1810,7 +1987,7 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 		meta := &VideoMetadata{
 			ID:         raw.ID,
 			Title:      raw.Title,
-			Thumbnail:  sanitizeRemoteMediaURLWithResolver(ctx, raw.Thumbnail),
+			Thumbnail:  "",
 			Uploader:   raw.Uploader,
 			IsPlaylist: true,
 			EntryCount: len(raw.Entries),
@@ -1823,7 +2000,7 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	meta := &VideoMetadata{
 		ID:        raw.ID,
 		Title:     raw.Title,
-		Thumbnail: sanitizeRemoteMediaURLWithResolver(ctx, raw.Thumbnail),
+		Thumbnail: "",
 		Uploader:  raw.Uploader,
 		Duration:  raw.Duration,
 		Formats:   make([]FormatInfo, 0, len(raw.Formats)),
@@ -2059,6 +2236,9 @@ func validateDownloadURLForLaunch(ctx context.Context, raw string) error {
 		return fmt.Errorf("invalid url")
 	}
 	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
+	if !isAllowedSourceHost(host) {
+		return errors.New("url host is not in the supported public site allowlist")
+	}
 	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
 	if err != nil {
 		return fmt.Errorf("resolve url host: %w", err)
@@ -2072,6 +2252,23 @@ func validateDownloadURLForLaunch(ctx context.Context, raw string) error {
 		}
 	}
 	return nil
+}
+
+var allowedSourceHosts = []string{
+	"youtube.com", "youtu.be", "vimeo.com", "dailymotion.com", "twitch.tv", "tiktok.com", "x.com", "twitter.com",
+	"instagram.com", "facebook.com", "reddit.com", "ardmediathek.de", "zdf.de", "arte.tv", "3sat.de", "ndr.de",
+	"bbc.com", "ted.com", "cnn.com", "discovery.com", "bilibili.com", "nicovideo.jp", "rumble.com", "odysee.com",
+	"soundcloud.com", "bandcamp.com",
+}
+
+func isAllowedSourceHost(host string) bool {
+	host = strings.TrimSuffix(strings.ToLower(host), ".")
+	for _, allowed := range allowedSourceHosts {
+		if host == allowed || strings.HasSuffix(host, "."+allowed) {
+			return true
+		}
+	}
+	return false
 }
 
 func isAllowedRemoteIP(ip net.IP) bool {
