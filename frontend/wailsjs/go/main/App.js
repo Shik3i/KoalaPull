@@ -78,8 +78,16 @@ export function OpenOutputDir(arg1) {
   return window['go']['main']['App']['OpenOutputDir'](arg1);
 }
 
+export function PauseDownload(arg1) {
+  return window['go']['main']['App']['PauseDownload'](arg1);
+}
+
 export function PlayFile(arg1) {
   return window['go']['main']['App']['PlayFile'](arg1);
+}
+
+export function ResumeDownload(arg1) {
+  return window['go']['main']['App']['ResumeDownload'](arg1);
 }
 
 export function SelectCookieFile() {

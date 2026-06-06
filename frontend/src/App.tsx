@@ -2,6 +2,7 @@ import { useRef, useState, useEffect, useMemo, useCallback, Component, memo } fr
 import {
   CheckDependencies, DownloadDependencies,
   FetchMetadata, StartDownloadWithPreset, CancelDownload,
+  PauseDownload, ResumeDownload,
   GetSettings, UpdateSettings, SelectDirectory,
   GetAppVersion, GetVersionInfo, GetHistory,
   ClearHistory, DeleteHistoryEntry,
@@ -13,6 +14,7 @@ import { EventsOn, ClipboardGetText } from "../wailsjs/runtime/runtime"
 import type { main } from "../wailsjs/go/models"
 import { createLatestSerializedWriter, startSerialPoll, type LatestSerializedWriter } from "./lib/asyncControl"
 import { formatTotalEta, parseBytes, parseSpeed, parseEta, formatSpeed, formatEta, formatBytes } from "./lib/downloadMetrics"
+import { countDuplicateUrls } from "./lib/duplicateWarnings"
 import { createTranslator, getLanguageLocale, isSupportedLanguage, type LanguageCode } from "./lib/i18n"
 import appIcon from './assets/images/app-icon.png'
 import './style.css'
@@ -34,7 +36,7 @@ interface VideoMetadata {
 
 interface QueueItem {
   id: string; title: string; thumbnail: string; status: string
-  progress: number; speed: string; eta: string; fileSize: string; errorMsg: string; playlistStatus: string; outputDir: string; outputPath?: string
+  progress: number; speed: string; eta: string; fileSize: string; errorMsg: string; playlistStatus: string; outputDir: string; url?: string; formatId?: string; container?: string; subtitle?: string; preset?: DownloadPreset; playlistItems?: string; outputPath?: string
 }
 
 interface DepProgress {
@@ -66,6 +68,7 @@ interface AppSettings {
   cookieCacheUpdated: string
   rateLimitEnabled: boolean
   rateLimitValue: string
+  safeModeEnabled: boolean
   customArgs: string
   ffmpegPath: string
   sponsorBlockEnabled: boolean
@@ -131,6 +134,7 @@ const defaultAppSettings: AppSettings = {
   cookieCacheUpdated: '',
   rateLimitEnabled: false,
   rateLimitValue: '1',
+  safeModeEnabled: false,
   customArgs: '',
   ffmpegPath: '',
   sponsorBlockEnabled: false,
@@ -170,6 +174,7 @@ function normalizeAppSettings(settings: main.Settings): AppSettings {
     cookieCacheUpdated: settings.cookieCacheUpdated || '',
     rateLimitEnabled: !!settings.rateLimitEnabled,
     rateLimitValue: settings.rateLimitValue || '1',
+    safeModeEnabled: !!settings.safeModeEnabled,
     customArgs: settings.customArgs || '',
     ffmpegPath: settings.ffmpegPath || '',
     sponsorBlockEnabled: !!settings.sponsorBlockEnabled,
@@ -178,6 +183,88 @@ function normalizeAppSettings(settings: main.Settings): AppSettings {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function buildDuplicateWarningMessage(
+  t: (key: string, params?: Record<string, string | number>) => string,
+  queueCount: number,
+  historyCount: number,
+): string {
+  const parts: string[] = [t('downloads.duplicateWarningIntro')]
+  if (queueCount > 0) parts.push(t('downloads.duplicateWarningQueue', { count: queueCount }))
+  if (historyCount > 0) parts.push(t('downloads.duplicateWarningHistory', { count: historyCount }))
+  parts.push("")
+  parts.push(t('downloads.duplicateWarningReason'))
+  parts.push("")
+  parts.push(t('downloads.duplicateWarningConfirm'))
+  return parts.join("\n")
+}
+
+function createQueueItemFromPending(
+  downloadId: string,
+  pending: Partial<DownloadProgress> | undefined,
+  base: Omit<QueueItem, 'id' | 'status' | 'progress' | 'speed' | 'eta' | 'fileSize' | 'errorMsg' | 'playlistStatus'>
+): QueueItem {
+  return {
+    id: downloadId,
+    title: base.title,
+    thumbnail: base.thumbnail,
+    status: pending?.status || 'queued',
+    progress: pending ? Math.round(pending.percent || 0) : 0,
+    speed: pending?.speed || '',
+    eta: pending?.eta || '',
+    fileSize: pending?.fileSize || '',
+    errorMsg: pending?.error || '',
+    playlistStatus: pending?.playlistStatus || '',
+    outputDir: base.outputDir,
+    url: base.url,
+    formatId: base.formatId,
+    container: base.container,
+    subtitle: base.subtitle,
+    preset: base.preset,
+    playlistItems: base.playlistItems,
+    outputPath: pending?.outputPath || base.outputPath,
+  }
+}
+
+function findQueuedSwapIndex(items: QueueItem[], id: string, direction: 'up' | 'down'): number {
+  const index = items.findIndex((item) => item.id === id)
+  if (index === -1) return -1
+  const step = direction === 'up' ? -1 : 1
+  for (let cursor = index + step; cursor >= 0 && cursor < items.length; cursor += step) {
+    if (items[cursor].status === 'queued') return cursor
+  }
+  return -1
+}
+
+function moveQueuedItemInVisibleOrder(items: QueueItem[], id: string, direction: 'up' | 'down'): QueueItem[] {
+  const visibleItems = [...items].reverse()
+  const index = visibleItems.findIndex((item) => item.id === id)
+  if (index === -1 || visibleItems[index].status !== 'queued') return items
+  const swapIndex = findQueuedSwapIndex(visibleItems, id, direction)
+  if (swapIndex === -1) return items
+  ;[visibleItems[index], visibleItems[swapIndex]] = [visibleItems[swapIndex], visibleItems[index]]
+  return visibleItems.reverse()
+}
+
+function moveQueuedItemToEdgeInVisibleOrder(items: QueueItem[], id: string, edge: 'top' | 'bottom'): QueueItem[] {
+  const visibleItems = [...items].reverse()
+  const index = visibleItems.findIndex((item) => item.id === id)
+  if (index === -1 || visibleItems[index].status !== 'queued') return items
+
+  const queuedItems = visibleItems.filter((item) => item.status === 'queued')
+  const target = visibleItems[index]
+  const remainingQueued = queuedItems.filter((item) => item.id !== id)
+  const reorderedQueued = edge === 'top' ? [target, ...remainingQueued] : [...remainingQueued, target]
+
+  let queuedCursor = 0
+  const nextVisibleItems = visibleItems.map((item) => {
+    if (item.status !== 'queued') return item
+    const nextItem = reorderedQueued[queuedCursor]
+    queuedCursor += 1
+    return nextItem
+  })
+  return nextVisibleItems.reverse()
 }
 
 function resolveDownloadChoice(
@@ -463,6 +550,15 @@ const SpeedSparkline = ({ history }: { history?: Array<{ speed: number }> }) => 
 const QueueRow = memo(({
   item,
   onCancel,
+  onRetry,
+  onPause,
+  onResume,
+  onMove,
+  onMoveToEdge,
+  canMoveUp,
+  canMoveDown,
+  canMoveTop,
+  canMoveBottom,
   onOpenFolder,
   statusColors,
   tt,
@@ -471,6 +567,15 @@ const QueueRow = memo(({
 }: {
   item: QueueItem
   onCancel: (id: string) => void
+  onRetry: (item: QueueItem) => void
+  onPause: (id: string) => void
+  onResume: (id: string) => void
+  onMove: (id: string, direction: 'up' | 'down') => void
+  onMoveToEdge: (id: string, edge: 'top' | 'bottom') => void
+  canMoveUp: boolean
+  canMoveDown: boolean
+  canMoveTop: boolean
+  canMoveBottom: boolean
   onOpenFolder: (outputDir: string) => void
   statusColors: Record<string, string>
   tt: (key: string) => string
@@ -500,6 +605,7 @@ const QueueRow = memo(({
             {item.status === 'completed' && t('downloads.status.completed')}
             {item.status === 'error' && t('downloads.status.error')}
             {item.status === 'cancelled' && t('downloads.status.cancelled')}
+            {item.status === 'paused' && t('downloads.status.paused')}
           </span>
           {item.speed && (
             <span style={{ color: 'var(--text-muted)' }} className="inline-flex items-center">
@@ -510,7 +616,7 @@ const QueueRow = memo(({
           {item.eta && <span style={{ color: 'var(--text-muted)' }}>{t('downloads.eta', { eta: item.eta })}</span>}
           {item.playlistStatus && <span style={{ color: 'var(--text-muted)' }}>{item.playlistStatus}</span>}
         </div>
-        {(item.status === 'downloading' || item.status === 'starting' || item.status === 'retrying') && (
+        {(item.status === 'downloading' || item.status === 'starting' || item.status === 'retrying' || item.status === 'paused') && (
           <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
             <div className="h-full rounded-full transition-all duration-300 ease-out" style={{ width: `${Math.max(item.progress, 2)}%`, background: 'var(--color-accent)' }} />
           </div>
@@ -580,6 +686,25 @@ const QueueRow = memo(({
           <svg className="w-5 h-5 animate-pulse shrink-0" style={{ color: 'var(--color-accent)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 14l-7 7m0 0l-7-7m7 7V3" />
           </svg>
+          <button onClick={() => onPause(item.id)} className="icon-button" style={{ color: 'var(--text-secondary)' }} title={t('actions.pauseDownload')} aria-label={t('actions.pauseDownload')}>
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5h3v14H8zM13 5h3v14h-3z" />
+            </svg>
+          </button>
+          <button onClick={() => onCancel(item.id)} className="icon-button" style={{ color: 'var(--text-muted)' }} title={tt('cancelDownload')} aria-label={tt('cancelDownload')}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
+      )}
+      {item.status === 'paused' && (
+        <div className="flex items-center gap-1">
+          <button onClick={() => onResume(item.id)} className="icon-button" style={{ color: 'var(--color-accent)' }} title={t('actions.resumeDownload')} aria-label={t('actions.resumeDownload')}>
+            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M8 5v14l11-7z" />
+            </svg>
+          </button>
           <button onClick={() => onCancel(item.id)} className="icon-button" style={{ color: 'var(--text-muted)' }} title={tt('cancelDownload')} aria-label={tt('cancelDownload')}>
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -588,21 +713,59 @@ const QueueRow = memo(({
         </div>
       )}
       {item.status === 'queued' && (
-        <button onClick={() => onCancel(item.id)} className="icon-button shrink-0" style={{ color: 'var(--text-muted)' }} title={tt('cancelDownload')} aria-label={tt('cancelDownload')}>
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
+        <div className="flex items-center gap-1 shrink-0">
+          <button onClick={() => onMoveToEdge(item.id, 'top')} disabled={!canMoveTop} className="icon-button" style={{ color: canMoveTop ? 'var(--text-secondary)' : 'var(--text-muted)' }} title={t('actions.moveToTop')} aria-label={t('actions.moveToTop')}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 10l7-7 7 7M5 21l7-7 7 7" />
+            </svg>
+          </button>
+          <button onClick={() => onMove(item.id, 'up')} disabled={!canMoveUp} className="icon-button" style={{ color: canMoveUp ? 'var(--text-secondary)' : 'var(--text-muted)' }} title={t('actions.moveUp')} aria-label={t('actions.moveUp')}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+            </svg>
+          </button>
+          <button onClick={() => onMove(item.id, 'down')} disabled={!canMoveDown} className="icon-button" style={{ color: canMoveDown ? 'var(--text-secondary)' : 'var(--text-muted)' }} title={t('actions.moveDown')} aria-label={t('actions.moveDown')}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          <button onClick={() => onMoveToEdge(item.id, 'bottom')} disabled={!canMoveBottom} className="icon-button" style={{ color: canMoveBottom ? 'var(--text-secondary)' : 'var(--text-muted)' }} title={t('actions.moveToBottom')} aria-label={t('actions.moveToBottom')}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3l7 7 7-7M5 14l7 7 7-7" />
+            </svg>
+          </button>
+          <button onClick={() => onCancel(item.id)} className="icon-button" style={{ color: 'var(--text-muted)' }} title={tt('cancelDownload')} aria-label={tt('cancelDownload')}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        </div>
       )}
       {item.status === 'error' && (
-        <svg className="w-5 h-5 shrink-0" style={{ color: '#ef4444' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-        </svg>
+        <div className="flex items-center gap-1">
+          <button onClick={() => onRetry(item)} className="icon-button" style={{ color: 'var(--color-accent)' }} title={t('actions.retryDownload')} aria-label={t('actions.retryDownload')}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5M20 20v-5h-5" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 9a8 8 0 00-13.657-5.657L4 5m16 14l-2.343-2.343A8 8 0 014 15" />
+            </svg>
+          </button>
+          <svg className="w-5 h-5 shrink-0" style={{ color: '#ef4444' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+        </div>
       )}
       {item.status === 'cancelled' && (
-        <svg className="w-5 h-5 shrink-0" style={{ color: '#eab308' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-        </svg>
+        <div className="flex items-center gap-1">
+          <button onClick={() => onRetry(item)} className="icon-button" style={{ color: 'var(--color-accent)' }} title={t('actions.retryDownload')} aria-label={t('actions.retryDownload')}>
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h5M20 20v-5h-5" />
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 9a8 8 0 00-13.657-5.657L4 5m16 14l-2.343-2.343A8 8 0 014 15" />
+            </svg>
+          </button>
+          <svg className="w-5 h-5 shrink-0" style={{ color: '#eab308' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </div>
       )}
     </div>
   )
@@ -629,6 +792,7 @@ export class ErrorBoundary extends Component<{ children: React.ReactNode }, { ha
 
 const statusColors: Record<string, string> = {
   downloading: 'text-accent', starting: 'text-accent', retrying: 'text-accent',
+  paused: 'text-yellow-400',
   queued: 'text-gray-400', completed: 'text-green-400',
   error: 'text-red-400', cancelled: 'text-yellow-400',
 }
@@ -701,6 +865,7 @@ function App() {
   const [cookieFilePath, setCookieFilePath] = useState<string>('')
   const [rateLimitEnabled, setRateLimitEnabled] = useState(defaultAppSettings.rateLimitEnabled)
   const [rateLimitValue, setRateLimitValue] = useState(defaultAppSettings.rateLimitValue)
+  const [safeModeEnabled, setSafeModeEnabled] = useState(defaultAppSettings.safeModeEnabled)
   const [customArgs, setCustomArgs] = useState(defaultAppSettings.customArgs)
   const [ffmpegPath, setFfmpegPath] = useState(defaultAppSettings.ffmpegPath)
   const [sponsorBlockEnabled, setSponsorBlockEnabled] = useState(defaultAppSettings.sponsorBlockEnabled)
@@ -744,6 +909,7 @@ function App() {
     setCookieFilePath(settings.cookieFilePath)
     setRateLimitEnabled(settings.rateLimitEnabled)
     setRateLimitValue(settings.rateLimitValue)
+    setSafeModeEnabled(settings.safeModeEnabled)
     setCustomArgs(settings.customArgs)
     setFfmpegPath(settings.ffmpegPath)
     setSponsorBlockEnabled(settings.sponsorBlockEnabled)
@@ -882,26 +1048,15 @@ function App() {
       const isRunning = await IsBrowserRunning(cookieBrowser)
       if (!isRunning) return true
       
-      let confirmMsg = ""
-      if (language === 'de') {
-        confirmMsg = t('settings.cookiesBrowserRunningWarning') + "\n\n" +
-          "Möchtest du, dass KoalaPull " + cookieBrowser + " jetzt automatisch schließt? Klicke auf OK, um den Browser zu schließen, oder auf Abbrechen, um es trotzdem zu versuchen (kann fehlschlagen)."
-      } else if (language === 'fr') {
-        confirmMsg = t('settings.cookiesBrowserRunningWarning') + "\n\n" +
-          "Voulez-vous que KoalaPull ferme " + cookieBrowser + " automatiquement maintenant ? Cliquez sur OK pour le fermer, ou sur Annuler pour continuer quand même (ce qui peut échouer)."
-      } else {
-        confirmMsg = t('settings.cookiesBrowserRunningWarning') + "\n\n" +
-          "Do you want KoalaPull to close " + cookieBrowser + " automatically now? Click OK to close it, or Cancel to continue anyway (which may fail)."
-      }
+      const confirmMsg = t('settings.cookiesBrowserRunningWarning') + "\n\n" +
+        t('settings.cookiesCloseConfirm', { browser: cookieBrowser })
 
       if (window.confirm(confirmMsg)) {
         await KillBrowser(cookieBrowser)
         await new Promise((resolve) => setTimeout(resolve, 1000))
         const stillRunning = await IsBrowserRunning(cookieBrowser)
         if (stillRunning) {
-          alert(language === 'de' ? "Der Browser konnte nicht geschlossen werden. Bitte schließe ihn manuell." :
-                language === 'fr' ? "Impossible de fermer le navigateur. Veuillez le fermer manuellement." :
-                "Could not close the browser automatically. Please close it manually.")
+          alert(t('settings.cookiesCloseFailed'))
           return false
         }
       }
@@ -1256,6 +1411,10 @@ function App() {
     if (!metadata || addingToQueue) return
     const proceed = await checkBrowserClosedForCookies()
     if (!proceed) return
+    const duplicateCounts = countDuplicateUrls(lastFetchedUrlRef.current, queue, history)
+    if ((duplicateCounts.queueCount > 0 || duplicateCounts.historyCount > 0) && !window.confirm(buildDuplicateWarningMessage(t, duplicateCounts.queueCount, duplicateCounts.historyCount))) {
+      return
+    }
     setAddingToQueue(true)
     setAddQueueError('')
     try {
@@ -1275,19 +1434,18 @@ function App() {
       const downloadId = await StartDownloadWithPreset(lastFetchedUrlRef.current, choice.formatId, defaultOutputDir, choice.container, choice.subtitle, metadata.title, selectedPreset, playlistItems)
       setQueue((prev) => {
         const pending = pendingProgressRef.current[downloadId]
-        const newItem: QueueItem = {
-          id: downloadId,
+        const newItem = createQueueItemFromPending(downloadId, pending, {
           title: metadata.title,
           thumbnail: metadata.thumbnail,
-          status: pending ? pending.status : 'queued',
-          progress: pending ? Math.round(pending.percent) : 0,
-          speed: pending ? pending.speed : '',
-          eta: pending ? pending.eta : '',
-          fileSize: pending ? pending.fileSize : '',
-          errorMsg: pending ? (pending.error || '') : '',
-          playlistStatus: pending ? (pending.playlistStatus || '') : '',
           outputDir: defaultOutputDir,
-        }
+          url: lastFetchedUrlRef.current,
+          formatId: choice.formatId,
+          container: choice.container,
+          subtitle: choice.subtitle,
+          preset: selectedPreset,
+          playlistItems,
+          outputPath: undefined,
+        })
         delete pendingProgressRef.current[downloadId]
         return [
           ...prev,
@@ -1323,6 +1481,14 @@ function App() {
       return
     }
     const choice = resolveDownloadChoice(selectedPreset, selectedFormat, selectedContainer, selectedSubs)
+    const duplicateUrlCount = lines.reduce((count, targetUrl) => {
+      const duplicateCounts = countDuplicateUrls(targetUrl, queue, history)
+      return count + ((duplicateCounts.queueCount > 0 || duplicateCounts.historyCount > 0) ? 1 : 0)
+    }, 0)
+    if (duplicateUrlCount > 0 && !window.confirm(t('downloads.batchDuplicateWarning', { count: duplicateUrlCount }))) {
+      setBatchAdding(false)
+      return
+    }
     for (const targetUrl of lines) {
       try {
         const downloadId = await StartDownloadWithPreset(
@@ -1337,19 +1503,18 @@ function App() {
         )
         setQueue((prev) => {
           const pending = pendingProgressRef.current[downloadId]
-          const newItem: QueueItem = {
-            id: downloadId,
+          const newItem = createQueueItemFromPending(downloadId, pending, {
             title: targetUrl,
             thumbnail: '',
-            status: pending ? pending.status : 'queued',
-            progress: pending ? Math.round(pending.percent) : 0,
-            speed: pending ? pending.speed : '',
-            eta: pending ? pending.eta : '',
-            fileSize: pending ? pending.fileSize : '',
-            errorMsg: pending ? (pending.error || '') : '',
-            playlistStatus: pending ? (pending.playlistStatus || '') : '',
             outputDir: defaultOutputDir,
-          }
+            url: targetUrl,
+            formatId: choice.formatId,
+            container: choice.container,
+            subtitle: choice.subtitle,
+            preset: selectedPreset,
+            playlistItems: '',
+            outputPath: undefined,
+          })
           delete pendingProgressRef.current[downloadId]
           return [...prev, newItem]
         })
@@ -1370,6 +1535,12 @@ function App() {
             errorMsg: err?.message || 'Failed to start download',
             playlistStatus: '',
             outputDir: defaultOutputDir,
+            url: targetUrl,
+            formatId: choice.formatId,
+            container: choice.container,
+            subtitle: choice.subtitle,
+            preset: selectedPreset,
+            playlistItems: '',
           }
         ])
       }
@@ -1386,9 +1557,84 @@ function App() {
     OpenOutputDir(outputDir).catch((err) => { console.warn('OpenOutputDir failed:', err) })
   }, [])
 
+  const handleRetryQueueItem = useCallback(async (item: QueueItem) => {
+    if (!item.url || !item.formatId || !item.container || !item.subtitle || !item.preset) return
+    try {
+      const downloadId = await StartDownloadWithPreset(
+        item.url,
+        item.formatId,
+        item.outputDir,
+        item.container,
+        item.subtitle,
+        item.title,
+        item.preset,
+        item.playlistItems || '',
+      )
+      setQueue((prev) => prev.map((current) => {
+        if (current.id !== item.id) return current
+        const pending = pendingProgressRef.current[downloadId]
+        const nextItem = createQueueItemFromPending(downloadId, pending, {
+          title: item.title,
+          thumbnail: item.thumbnail,
+          outputDir: item.outputDir,
+          url: item.url,
+          formatId: item.formatId,
+          container: item.container,
+          subtitle: item.subtitle,
+          preset: item.preset,
+          playlistItems: item.playlistItems,
+          outputPath: undefined,
+        })
+        delete pendingProgressRef.current[downloadId]
+        return nextItem
+      }))
+    } catch (err: any) {
+      setQueue((prev) => prev.map((current) => current.id === item.id ? { ...current, errorMsg: err?.message || t('errors.startDownloadFailed'), status: 'error' } : current))
+    }
+  }, [t])
+
   const handleClearCompleted = () => {
     setQueue((prev) => prev.filter((item) => !['completed', 'error', 'cancelled'].includes(item.status)))
   }
+
+  const handleClearFailed = () => {
+    setQueue((prev) => prev.filter((item) => item.status !== 'error' && item.status !== 'cancelled'))
+  }
+
+  const handleRetryFailed = useCallback(async () => {
+    const retryItems = queue.filter((item) => item.status === 'error' || item.status === 'cancelled')
+    for (const item of retryItems) {
+      await handleRetryQueueItem(item)
+    }
+  }, [handleRetryQueueItem, queue])
+
+  const handleMoveQueueItem = useCallback((id: string, direction: 'up' | 'down') => {
+    setQueue((prev) => moveQueuedItemInVisibleOrder(prev, id, direction))
+  }, [])
+
+  const handleMoveQueueItemToEdge = useCallback((id: string, edge: 'top' | 'bottom') => {
+    setQueue((prev) => moveQueuedItemToEdgeInVisibleOrder(prev, id, edge))
+  }, [])
+
+  const handlePauseQueueItem = useCallback((id: string) => {
+    PauseDownload(id)
+      .then(() => {
+        setQueue((prev) => prev.map((item) => item.id === id ? { ...item, status: 'paused' } : item))
+      })
+      .catch((err) => {
+        setQueue((prev) => prev.map((item) => item.id === id ? { ...item, errorMsg: errorMessage(err) } : item))
+      })
+  }, [])
+
+  const handleResumeQueueItem = useCallback((id: string) => {
+    ResumeDownload(id)
+      .then(() => {
+        setQueue((prev) => prev.map((item) => item.id === id ? { ...item, status: 'downloading' } : item))
+      })
+      .catch((err) => {
+        setQueue((prev) => prev.map((item) => item.id === id ? { ...item, errorMsg: errorMessage(err) } : item))
+      })
+  }, [])
 
   const handleChangeFolder = async () => {
     try {
@@ -2101,9 +2347,17 @@ const fmtTime = useCallback((t: string): string => {
                       )}
                     </h3>
                   </div>
-                  {queue.some((i) => ['completed', 'error', 'cancelled'].includes(i.status)) && (
-                    <button onClick={handleClearCompleted} className="text-xs transition-colors shrink-0" style={{ color: 'var(--text-muted)' }} title={tt('clearCompleted')} aria-label={tt('clearCompleted')}>{t('actions.clearCompleted')}</button>
-                  )}
+                  <div className="flex items-center gap-3 shrink-0">
+                    {queue.some((i) => i.status === 'error' || i.status === 'cancelled') && (
+                      <>
+                        <button onClick={() => { void handleRetryFailed() }} className="text-xs transition-colors" style={{ color: 'var(--color-accent)' }} title={t('actions.retryFailed')} aria-label={t('actions.retryFailed')}>{t('actions.retryFailed')}</button>
+                        <button onClick={handleClearFailed} className="text-xs transition-colors" style={{ color: 'var(--text-muted)' }} title={t('actions.clearFailed')} aria-label={t('actions.clearFailed')}>{t('actions.clearFailed')}</button>
+                      </>
+                    )}
+                    {queue.some((i) => ['completed', 'error', 'cancelled'].includes(i.status)) && (
+                      <button onClick={handleClearCompleted} className="text-xs transition-colors" style={{ color: 'var(--text-muted)' }} title={tt('clearCompleted')} aria-label={tt('clearCompleted')}>{t('actions.clearCompleted')}</button>
+                    )}
+                  </div>
                 </div>
                 {queue.length === 0 ? (
                   <div className="flex flex-col items-center justify-center py-12" style={{ color: 'var(--text-muted)' }}>
@@ -2112,20 +2366,59 @@ const fmtTime = useCallback((t: string): string => {
                     </svg>
                     <p className="text-sm">{t('downloads.emptyTitle')}</p>
                     <p className="text-xs mt-1">{t('downloads.emptyText')}</p>
+                    <div className="mt-5 w-full max-w-md rounded-xl p-4 text-left" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
+                      <p className="text-sm font-medium" style={{ color: 'var(--text-primary)' }}>{t('downloads.emptyHelperTitle')}</p>
+                      <p className="text-xs mt-1 leading-5" style={{ color: 'var(--text-muted)' }}>{t('downloads.emptyHelperText')}</p>
+                      <div className="mt-3 flex flex-wrap gap-2">
+                        <button
+                          onClick={() => {
+                            setDownloadMode('single')
+                            requestAnimationFrame(() => urlInputRef.current?.focus())
+                          }}
+                          className="btn-primary text-xs px-3 py-1.5"
+                        >
+                          {t('downloads.emptyHelperSingleCta')}
+                        </button>
+                        <button
+                          onClick={() => setDownloadMode('batch')}
+                          className="text-xs px-3 py-1.5 rounded-md transition-colors"
+                          style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)', color: 'var(--text-secondary)' }}
+                        >
+                          {t('downloads.emptyHelperBatchCta')}
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div className="space-y-2">
                     {reversedQueue.map((item) => (
+                      (() => {
+                        const canMoveUp = item.status === 'queued' && findQueuedSwapIndex(reversedQueue, item.id, 'up') !== -1
+                        const canMoveDown = item.status === 'queued' && findQueuedSwapIndex(reversedQueue, item.id, 'down') !== -1
+                        const canMoveTop = item.status === 'queued' && reversedQueue.find((entry) => entry.status === 'queued')?.id !== item.id
+                        const canMoveBottom = item.status === 'queued' && [...reversedQueue].reverse().find((entry) => entry.status === 'queued')?.id !== item.id
+                        return (
                       <QueueRow
                         key={item.id}
                         item={item}
                         onCancel={handleCancel}
+                        onRetry={handleRetryQueueItem}
+                        onPause={handlePauseQueueItem}
+                        onResume={handleResumeQueueItem}
+                        onMove={handleMoveQueueItem}
+                        onMoveToEdge={handleMoveQueueItemToEdge}
+                        canMoveUp={canMoveUp}
+                        canMoveDown={canMoveDown}
+                        canMoveTop={canMoveTop}
+                        canMoveBottom={canMoveBottom}
                         onOpenFolder={handleOpenFolder}
                         statusColors={statusColors}
                         tt={tt}
                         t={t}
                         speedHistory={progressHistoryRef.current[item.id]}
                       />
+                        )
+                      })()
                     ))}
                   </div>
                 )}
@@ -2589,6 +2882,32 @@ const fmtTime = useCallback((t: string): string => {
               <section className="rounded-xl p-4 border md:col-span-2 xl:col-span-3" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
                 <h3 className="text-sm font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>{t('settings.customArgsTitle')}</h3>
                 <p className="text-xs mb-3" style={{ color: 'var(--text-muted)' }}>{t('settings.customArgsDescription')}</p>
+                <div className="flex items-center justify-between mb-3 gap-3 rounded-lg px-3 py-2" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}>
+                  <div>
+                    <p className="text-xs font-medium" style={{ color: 'var(--text-secondary)' }}>{t('settings.safeModeTitle')}</p>
+                    <p className="text-xs mt-0.5" style={{ color: 'var(--text-muted)' }}>{t('settings.safeModeDescription')}</p>
+                  </div>
+                  <button
+                    role="switch"
+                    aria-checked={safeModeEnabled}
+                    onClick={async () => {
+                      const next = !safeModeEnabled
+                      setSafeModeEnabled(next)
+                      try { await saveSettings({ safeModeEnabled: next }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+                    }}
+                    className="relative w-10 h-5 rounded-full transition-colors shrink-0"
+                    style={{
+                      background: safeModeEnabled ? 'var(--color-accent)' : 'var(--color-surface-border)',
+                    }}
+                    title={t('settings.safeModeTitle')}
+                    aria-label={t('settings.safeModeTitle')}
+                  >
+                    <span
+                      className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform"
+                      style={{ left: '2px', transform: safeModeEnabled ? 'translateX(20px)' : 'translateX(0)' }}
+                    />
+                  </button>
+                </div>
                 <textarea
                   id="customArgsInput"
                   value={customArgs}

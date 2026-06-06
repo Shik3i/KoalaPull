@@ -40,7 +40,11 @@ export function OpenExternalLink(arg1:string):Promise<void>;
 
 export function OpenOutputDir(arg1:string):Promise<void>;
 
+export function PauseDownload(arg1:string):Promise<void>;
+
 export function PlayFile(arg1:string):Promise<void>;
+
+export function ResumeDownload(arg1:string):Promise<void>;
 
 export function SelectCookieFile():Promise<string>;
 

@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"strings"
@@ -155,4 +156,18 @@ func (a *App) killBrowserForTests(browser string) error {
 		}
 	}
 	return errors.Join(killErrors...)
+}
+
+func suspendProcess(process *os.Process) error {
+	if process == nil {
+		return errors.New("process is nil")
+	}
+	return syscall.Kill(-process.Pid, syscall.SIGSTOP)
+}
+
+func resumeProcess(process *os.Process) error {
+	if process == nil {
+		return errors.New("process is nil")
+	}
+	return syscall.Kill(-process.Pid, syscall.SIGCONT)
 }

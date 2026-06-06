@@ -104,6 +104,7 @@ export namespace main {
 	    cookieCacheUpdated: string;
 	    rateLimitEnabled: boolean;
 	    rateLimitValue: string;
+	    safeModeEnabled: boolean;
 	    customArgs: string;
 	    ffmpegPath: string;
 	    sponsorBlockEnabled: boolean;
@@ -131,6 +132,7 @@ export namespace main {
 	        this.cookieCacheUpdated = source["cookieCacheUpdated"];
 	        this.rateLimitEnabled = source["rateLimitEnabled"];
 	        this.rateLimitValue = source["rateLimitValue"];
+	        this.safeModeEnabled = source["safeModeEnabled"];
 	        this.customArgs = source["customArgs"];
 	        this.ffmpegPath = source["ffmpegPath"];
 	        this.sponsorBlockEnabled = source["sponsorBlockEnabled"];
@@ -222,4 +224,3 @@ export namespace main {
 	}
 
 }
-

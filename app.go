@@ -49,7 +49,7 @@ type App struct {
 	dependencyMu     sync.Mutex
 	dlMu             sync.Mutex
 	dlCounter        int
-	activeDownloads  map[string]context.CancelFunc
+	activeDownloads  map[string]*activeDownload
 	adMu             sync.Mutex
 	semCount         atomic.Int32
 	semLimit         atomic.Int32
@@ -58,6 +58,12 @@ type App struct {
 	historyCache     []HistoryEntry
 	historyLoaded    bool
 	cachedSettings   Settings
+}
+
+type activeDownload struct {
+	cancel  context.CancelFunc
+	process *os.Process
+	paused  bool
 }
 
 type DependencyStatus struct {
@@ -131,6 +137,7 @@ type Settings struct {
 	CookieCacheUpdated  string `json:"cookieCacheUpdated"`
 	RateLimitEnabled    bool   `json:"rateLimitEnabled"`
 	RateLimitValue      string `json:"rateLimitValue"`
+	SafeModeEnabled     bool   `json:"safeModeEnabled"`
 	CustomArgs          string `json:"customArgs"`
 	FfmpegPath          string `json:"ffmpegPath"`
 	SponsorBlockEnabled bool   `json:"sponsorBlockEnabled"`
@@ -226,7 +233,7 @@ const (
 
 func NewApp() *App {
 	a := &App{
-		activeDownloads: make(map[string]context.CancelFunc),
+		activeDownloads: make(map[string]*activeDownload),
 		semWake:         make(chan struct{}, maxMaxConcurrency),
 	}
 	a.semLimit.Store(defaultMaxConcurrency)
@@ -298,7 +305,7 @@ func (a *App) startup(ctx context.Context) {
 		a.startupErr = fmt.Errorf("create bin directory: %w", err)
 		log.Printf("create bin directory: %v", err)
 	}
-	a.activeDownloads = make(map[string]context.CancelFunc)
+	a.activeDownloads = make(map[string]*activeDownload)
 	a.loadSettings()
 	a.initSemaphore()
 	if err := a.migrateHistoryIfNeeded(); err != nil {
@@ -463,6 +470,7 @@ func (a *App) loadSettings() {
 		CookieCacheUpdated:  "",
 		RateLimitEnabled:    false,
 		RateLimitValue:      "1",
+		SafeModeEnabled:     false,
 		CustomArgs:          "",
 		FfmpegPath:          "",
 		SponsorBlockEnabled: false,
@@ -719,6 +727,17 @@ var blockedCustomArgNames = map[string]struct{}{
 	"--ffmpeg-location":          {},
 }
 
+var safeModeBlockedCustomArgNames = map[string]struct{}{
+	"--force-ipv4":         {},
+	"--force-ipv6":         {},
+	"--geo-bypass":         {},
+	"--geo-bypass-country": {},
+	"--max-sleep-interval": {},
+	"--retry-sleep":        {},
+	"--sleep-interval":     {},
+	"--sleep-requests":     {},
+}
+
 type customArgSpec struct {
 	requiresValue bool
 	validator     func(string) error
@@ -751,7 +770,7 @@ var allowedCustomArgNames = map[string]customArgSpec{
 	"--write-thumbnail":      {},
 }
 
-func sanitizeCustomArgs(raw []string) ([]string, error) {
+func sanitizeCustomArgs(raw []string, safeModeEnabled bool) ([]string, error) {
 	expectingValueFor := ""
 	var expectingValidator func(string) error
 	for _, arg := range raw {
@@ -782,6 +801,11 @@ func sanitizeCustomArgs(raw []string) ([]string, error) {
 		}
 		if _, blocked := blockedCustomArgNames[name]; blocked {
 			return nil, fmt.Errorf("custom argument %q is not allowed", name)
+		}
+		if safeModeEnabled {
+			if _, blocked := safeModeBlockedCustomArgNames[name]; blocked {
+				return nil, fmt.Errorf("custom argument %q is blocked by safe mode", name)
+			}
 		}
 		spec, allowed := allowedCustomArgNames[name]
 		if !allowed {
@@ -1733,6 +1757,56 @@ func (a *App) DownloadDependencies() error {
 	return nil
 }
 
+func createRollbackBackup(path, tmpDir string) (string, error) {
+	if !fileExists(path) {
+		return "", nil
+	}
+	backupPath := filepath.Join(tmpDir, filepath.Base(path)+".bak")
+	src, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer src.Close()
+	info, err := src.Stat()
+	if err != nil {
+		return "", err
+	}
+	dst, err := os.OpenFile(backupPath, os.O_CREATE|os.O_EXCL|os.O_WRONLY, info.Mode())
+	if err != nil {
+		return "", err
+	}
+	if _, err := io.Copy(dst, src); err != nil {
+		dst.Close()
+		_ = os.Remove(backupPath)
+		return "", err
+	}
+	if err := dst.Sync(); err != nil {
+		dst.Close()
+		_ = os.Remove(backupPath)
+		return "", err
+	}
+	if err := dst.Close(); err != nil {
+		_ = os.Remove(backupPath)
+		return "", err
+	}
+	return backupPath, nil
+}
+
+func restoreRollbackBackup(backupPath, destPath string) error {
+	if backupPath == "" {
+		return nil
+	}
+	return replaceFilePreservingOld(backupPath, destPath)
+}
+
+func verifyManagedBinary(ctx context.Context, path string, args ...string) error {
+	if !fileExists(path) {
+		return errors.New("binary missing after install")
+	}
+	_, err := commandOutputLimited(ctx, maxCommandOutputBytes, path, args...)
+	return err
+}
+
 func (a *App) downloadYtdlp(force bool) error {
 	a.emitProgress("yt-dlp", 0, "downloading", "")
 	destPath := a.ytdlpPath()
@@ -1744,6 +1818,11 @@ func (a *App) downloadYtdlp(force bool) error {
 	tmpPath := destPath + ".tmp"
 	dlCtx, cancel := context.WithTimeout(a.appContext(), 10*time.Minute)
 	defer cancel()
+	tmpDir, err := os.MkdirTemp(a.binDir, ".koalapull-ytdlp-rollback-*")
+	if err != nil {
+		return fmt.Errorf("rollback temp dir failed: %w", err)
+	}
+	defer os.RemoveAll(tmpDir)
 	if err := a.downloadFile(dlCtx, url, tmpPath, "yt-dlp", maxYtdlpDownloadBytes); err != nil {
 		os.Remove(tmpPath)
 		return err
@@ -1758,6 +1837,11 @@ func (a *App) downloadYtdlp(force bool) error {
 			return fmt.Errorf("chmod failed: %w", err)
 		}
 	}
+	backupPath, err := createRollbackBackup(destPath, tmpDir)
+	if err != nil {
+		os.Remove(tmpPath)
+		return fmt.Errorf("backup failed: %w", err)
+	}
 	if err := replaceFilePreservingOld(tmpPath, destPath); err != nil {
 		os.Remove(tmpPath)
 		return fmt.Errorf("replace failed: %w", err)
@@ -1766,6 +1850,12 @@ func (a *App) downloadYtdlp(force bool) error {
 		if err := command("xattr", "-d", "com.apple.quarantine", destPath).Run(); err != nil {
 			log.Printf("xattr warning: %v", err)
 		}
+	}
+	verifyCtx, verifyCancel := context.WithTimeout(a.appContext(), 10*time.Second)
+	defer verifyCancel()
+	if err := verifyManagedBinary(verifyCtx, destPath, "--version"); err != nil {
+		restoreErr := restoreRollbackBackup(backupPath, destPath)
+		return errors.Join(fmt.Errorf("yt-dlp verification failed: %w", err), restoreErr)
 	}
 	a.emitProgress("yt-dlp", 100, "completed", "")
 	return nil
@@ -1786,6 +1876,14 @@ func (a *App) downloadFfmpeg(force bool) error {
 	defer os.RemoveAll(tmpDir)
 	archivePath := filepath.Join(tmpDir, "ffmpeg-archive")
 	extractedPath := filepath.Join(tmpDir, "ffmpeg-extracted")
+	ffmpegBackupPath, err := createRollbackBackup(destPath, tmpDir)
+	if err != nil {
+		return fmt.Errorf("backup ffmpeg failed: %w", err)
+	}
+	ffprobeBackupPath, err := createRollbackBackup(a.ffprobePath(), tmpDir)
+	if err != nil {
+		return fmt.Errorf("backup ffprobe failed: %w", err)
+	}
 	dlCtx, cancel := context.WithTimeout(a.appContext(), 10*time.Minute)
 	defer cancel()
 	if err := a.downloadFile(dlCtx, artifact.URL, archivePath, "ffmpeg", artifact.MaxBytes); err != nil {
@@ -1834,6 +1932,22 @@ func (a *App) downloadFfmpeg(force bool) error {
 	}
 	if err := replaceFilePreservingOld(extractedPath, destPath); err != nil {
 		return fmt.Errorf("replace ffmpeg: %w", err)
+	}
+	verifyCtx, verifyCancel := context.WithTimeout(a.appContext(), 10*time.Second)
+	defer verifyCancel()
+	verifyErr := verifyManagedBinary(verifyCtx, destPath, "-version")
+	if verifyErr == nil && runtime.GOOS == "windows" {
+		verifyErr = verifyManagedBinary(verifyCtx, a.ffprobePath(), "-version")
+	}
+	if verifyErr == nil && runtime.GOOS == "darwin" && artifact.FFprobeURL != "" {
+		verifyErr = verifyManagedBinary(verifyCtx, a.ffprobePath(), "-version")
+	}
+	if verifyErr != nil {
+		restoreErr := errors.Join(
+			restoreRollbackBackup(ffmpegBackupPath, destPath),
+			restoreRollbackBackup(ffprobeBackupPath, a.ffprobePath()),
+		)
+		return errors.Join(fmt.Errorf("ffmpeg verification failed: %w", verifyErr), restoreErr)
 	}
 	a.emitProgress("ffmpeg", 100, "completed", "")
 	return nil
@@ -2065,7 +2179,7 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	settings := a.GetSettings()
 	args = append(args, a.getCookieArgs(settings)...)
 	if settings.CustomArgs != "" {
-		customArgs, err := sanitizeCustomArgs(parseCustomArgs(settings.CustomArgs))
+		customArgs, err := sanitizeCustomArgs(parseCustomArgs(settings.CustomArgs), settings.SafeModeEnabled)
 		if err != nil {
 			return nil, err
 		}
@@ -2189,7 +2303,7 @@ func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subti
 		}
 	}
 	if settings.CustomArgs != "" {
-		customArgs, err := sanitizeCustomArgs(parseCustomArgs(settings.CustomArgs))
+		customArgs, err := sanitizeCustomArgs(parseCustomArgs(settings.CustomArgs), settings.SafeModeEnabled)
 		if err != nil {
 			return "", err
 		}
@@ -2211,7 +2325,7 @@ func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subti
 		cancel()
 		return "", fmt.Errorf("download queue limit reached (%d)", maxQueueLimit)
 	}
-	a.activeDownloads[downloadID] = cancel
+	a.activeDownloads[downloadID] = &activeDownload{cancel: cancel}
 	a.adMu.Unlock()
 
 	go a.runDownload(ctx, cancel, downloadID, args, title, url, formatID)
@@ -2455,11 +2569,59 @@ func validatePlaylistItems(raw string) error {
 
 func (a *App) CancelDownload(downloadID string) {
 	a.adMu.Lock()
-	cancel, ok := a.activeDownloads[downloadID]
+	active, ok := a.activeDownloads[downloadID]
 	a.adMu.Unlock()
 	if ok {
-		cancel()
+		active.cancel()
 	}
+}
+
+func (a *App) PauseDownload(downloadID string) error {
+	a.adMu.Lock()
+	active, ok := a.activeDownloads[downloadID]
+	a.adMu.Unlock()
+	if !ok {
+		return errors.New("download not found")
+	}
+	if active.process == nil {
+		return errors.New("download process is not ready yet")
+	}
+	if active.paused {
+		return nil
+	}
+	if err := suspendProcess(active.process); err != nil {
+		return err
+	}
+	a.adMu.Lock()
+	if current, exists := a.activeDownloads[downloadID]; exists && current == active {
+		current.paused = true
+	}
+	a.adMu.Unlock()
+	return nil
+}
+
+func (a *App) ResumeDownload(downloadID string) error {
+	a.adMu.Lock()
+	active, ok := a.activeDownloads[downloadID]
+	a.adMu.Unlock()
+	if !ok {
+		return errors.New("download not found")
+	}
+	if active.process == nil {
+		return errors.New("download process is not ready yet")
+	}
+	if !active.paused {
+		return nil
+	}
+	if err := resumeProcess(active.process); err != nil {
+		return err
+	}
+	a.adMu.Lock()
+	if current, exists := a.activeDownloads[downloadID]; exists && current == active {
+		current.paused = false
+	}
+	a.adMu.Unlock()
+	return nil
 }
 
 func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downloadID string, args []string, title, url, formatID string) {
@@ -2556,6 +2718,12 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 				return
 			}
 			defer cleanup()
+			a.adMu.Lock()
+			if active, ok := a.activeDownloads[downloadID]; ok {
+				active.process = cmd.Process
+				active.paused = false
+			}
+			a.adMu.Unlock()
 
 			type downloadLine struct {
 				source string

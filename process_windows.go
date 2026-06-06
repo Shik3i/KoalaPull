@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"strings"
 	"sync"
@@ -13,6 +14,8 @@ import (
 
 	"golang.org/x/sys/windows"
 )
+
+const processSuspendResume = 0x0800
 
 func hiddenProcAttr() *syscall.SysProcAttr {
 	return &syscall.SysProcAttr{
@@ -230,4 +233,47 @@ func (a *App) killBrowserForTests(browser string) error {
 		}
 	}
 	return errors.Join(killErrors...)
+}
+
+var (
+	ntdllProcSuspend = windows.NewLazySystemDLL("ntdll.dll").NewProc("NtSuspendProcess")
+	ntdllProcResume  = windows.NewLazySystemDLL("ntdll.dll").NewProc("NtResumeProcess")
+)
+
+func suspendProcess(process *os.Process) error {
+	if process == nil {
+		return errors.New("process is nil")
+	}
+	handle, err := windows.OpenProcess(processSuspendResume|windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(process.Pid))
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(handle)
+	status, _, callErr := ntdllProcSuspend.Call(uintptr(handle))
+	if status != 0 {
+		if callErr != windows.ERROR_SUCCESS && callErr != nil {
+			return callErr
+		}
+		return fmt.Errorf("NtSuspendProcess failed: %#x", status)
+	}
+	return nil
+}
+
+func resumeProcess(process *os.Process) error {
+	if process == nil {
+		return errors.New("process is nil")
+	}
+	handle, err := windows.OpenProcess(processSuspendResume|windows.PROCESS_QUERY_LIMITED_INFORMATION, false, uint32(process.Pid))
+	if err != nil {
+		return err
+	}
+	defer windows.CloseHandle(handle)
+	status, _, callErr := ntdllProcResume.Call(uintptr(handle))
+	if status != 0 {
+		if callErr != windows.ERROR_SUCCESS && callErr != nil {
+			return callErr
+		}
+		return fmt.Errorf("NtResumeProcess failed: %#x", status)
+	}
+	return nil
 }

@@ -1173,13 +1173,22 @@ func TestSanitizeCustomArgsRejectsDangerousOptions(t *testing.T) {
 		"--unknown-option",
 		"stray-value",
 	} {
-		if _, err := sanitizeCustomArgs(parseCustomArgs(input)); err == nil {
+		if _, err := sanitizeCustomArgs(parseCustomArgs(input), false); err == nil {
 			t.Fatalf("sanitizeCustomArgs(%q) succeeded, want error", input)
 		}
 	}
 
-	if got, err := sanitizeCustomArgs(parseCustomArgs("--concurrent-fragments 4 --geo-bypass --sleep-requests=2")); err != nil || len(got) != 4 {
+	if got, err := sanitizeCustomArgs(parseCustomArgs("--concurrent-fragments 4 --geo-bypass --sleep-requests=2"), false); err != nil || len(got) != 4 {
 		t.Fatalf("safe custom args rejected: got %#v err %v", got, err)
+	}
+}
+
+func TestSafeModeBlocksRiskierCustomArgs(t *testing.T) {
+	if _, err := sanitizeCustomArgs(parseCustomArgs("--geo-bypass --sleep-requests=2"), true); err == nil || !strings.Contains(err.Error(), "blocked by safe mode") {
+		t.Fatalf("expected safe mode block error, got %v", err)
+	}
+	if got, err := sanitizeCustomArgs(parseCustomArgs("--embed-thumbnail --write-subs"), true); err != nil || len(got) != 2 {
+		t.Fatalf("expected safe args to pass in safe mode, got %#v err %v", got, err)
 	}
 }
 
@@ -1427,7 +1436,7 @@ func TestStartDownloadQueueLimit(t *testing.T) {
 	app.cachedSettings = validateSettings(Settings{DefaultOutputDir: outputDir, MaxConcurrency: 3})
 
 	for i := 0; i < maxQueueLimit; i++ {
-		app.activeDownloads[fmt.Sprintf("dl-%d", i)] = func() {}
+		app.activeDownloads[fmt.Sprintf("dl-%d", i)] = &activeDownload{cancel: func() {}}
 	}
 
 	_, err := app.StartDownloadWithPreset("https://example.com/video", "best", outputDir, "mp4", "none", "title", "best", "")
@@ -1454,7 +1463,7 @@ func TestUpdateDependenciesFailsWhenActive(t *testing.T) {
 	app.ctx = context.Background()
 	app.configDir = t.TempDir()
 
-	app.activeDownloads["dl-active"] = func() {}
+	app.activeDownloads["dl-active"] = &activeDownload{cancel: func() {}}
 
 	err := app.UpdateDependencies()
 	if err == nil || !strings.Contains(err.Error(), "downloads are in progress") {
