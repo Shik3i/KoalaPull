@@ -2,8 +2,6 @@
 
 Last updated: 2026-06-06
 
-> **Update:** KP-001, KP-002, KP-003 implemented and verified. All checks green (go test, go vet, npm test, tsc --noEmit, npm build).
-
 ## Purpose
 
 This file is the shared product roadmap for KoalaPull.
@@ -190,149 +188,6 @@ AI agents editing this file should:
 
 ## Current Approved Roadmap
 
-## KP-001 Queue Control Pack
-
-- Status: `done`
-- Priority: `P0`
-- Area: `frontend`, `backend`, `ux`
-- Effort: `4`
-- User Value: `5`
-- Error Potential: `4`
-- Depends on: `none`
-
-### Problem
-
-The current queue handles start and cancel, but it does not give users enough control once multiple downloads are queued or fail.
-This creates friction in the app's most important workflow.
-
-### Outcome
-
-Users can manage large queues safely and quickly without losing context or restarting work.
-
-### Scope
-
-- manual retry for failed and cancelled downloads
-- pause and resume controls for active downloads when technically possible
-- queue reordering for queued items
-- bulk actions for completed, failed, and cancelled items
-- warning on duplicate add when same URL is already present in queue or recent history
-- duplicate warning must allow continue because duplicate intent can be valid
-- duplicate warning copy should explain examples such as audio-only vs video download
-
-### Out of Scope
-
-- hard blocking duplicate entries
-- deep job merging logic
-- automatic dedupe across different format goals
-- sync with external download managers
-
-### Acceptance Criteria
-
-- user can retry a failed item without re-entering all download settings
-- user can move queued items up, down, top, and bottom
-- bulk clear actions exist for finished states
-- duplicate warning appears before adding when same URL already exists in active queue or recent history
-- duplicate warning allows explicit continue
-- duplicate warning does not trigger false blocking for different format intent
-- queue actions remain responsive with larger lists
-
-### Notes
-
-Pause and resume depends on what can be supported reliably through `yt-dlp` and process control.
-If true resume is unreliable per source, prefer honest UX wording and safe fallback behavior.
-
-## KP-002 Update Rollback And Safe Mode
-
-- Status: `done`
-- Priority: `P0`
-- Area: `security`, `backend`
-- Effort: `4`
-- User Value: `5`
-- Error Potential: `4`
-- Depends on: `none`
-
-### Problem
-
-Dependency updates are already hardened, but rollback and trust guarantees can still improve.
-Custom arguments also create a path for risky behavior that may surprise non-expert users.
-
-### Outcome
-
-Users get safer dependency updates, cleaner recovery when updates go bad, and an optional stricter mode for safer operation.
-
-### Scope
-
-- explicit rollback path when dependency update validation or activation fails
-- preserve last known good `yt-dlp` and `ffmpeg` install state
-- clearer update failure messaging
-- optional safe mode that blocks risky custom arguments
-- safe mode should be easy to understand and reversible
-
-### Out of Scope
-
-- full remote attestation infrastructure unless dependency sources support it cleanly
-- removal of advanced mode entirely
-- blocking benign custom arguments with low risk
-
-### Acceptance Criteria
-
-- failed dependency update cannot replace a working install with a broken one
-- user can recover to the last known good dependency state
-- safe mode clearly states what it blocks and why
-- blocked argument errors are actionable, not generic
-- regression tests cover rollback and safe-mode validation paths
-
-### Notes
-
-This item should build on the hardened dependency work already in `dependency_security.go`.
-If signed upstream metadata is available in a trustworthy way, prefer it.
-
-## KP-003 UI Polish And First-Run UX
-
-- Status: `done`
-- Priority: `P1`
-- Area: `frontend`, `ux`
-- Effort: `3`
-- User Value: `4`
-- Error Potential: `2`
-- Depends on: `none`
-
-### Problem
-
-The UI has rough edges in messaging and recovery.
-At least one cookie dialog path contains hardcoded mixed-language copy.
-First-run and failure states can be clearer.
-
-### Outcome
-
-The app feels more coherent, easier to trust, and easier to recover when something goes wrong.
-
-### Scope
-
-- remove hardcoded mixed-language cookie dialog text in `frontend/src/App.tsx`
-- improve empty states for downloads, history, and setup
-- improve inline error and recovery UX
-- clarify dependency setup and update states
-- add a first-run setup wizard with minimal steps
-
-### Out of Scope
-
-- full visual redesign
-- heavy animation work
-- broad information architecture rewrite
-
-### Acceptance Criteria
-
-- no hardcoded German or French fallback strings remain in the cookie dialog path
-- setup and error states explain next action clearly
-- first-run flow covers dependency setup and essential preferences
-- new users can reach first successful download with less confusion
-
-### Notes
-
-Keep the wizard short.
-Do not force advanced settings into first-run unless needed.
-
 ## KP-004 QoL Pack
 
 - Status: `approved`
@@ -341,7 +196,7 @@ Do not force advanced settings into first-run unless needed.
 - Effort: `4`
 - User Value: `4`
 - Error Potential: `3`
-- Depends on: `KP-001`
+- Depends on: `none`
 
 ### Problem
 
