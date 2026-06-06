@@ -99,6 +99,9 @@ export namespace main {
 	    cookieSource: string;
 	    cookieBrowser: string;
 	    cookieFilePath: string;
+	    cookieCachePath: string;
+	    cookieCacheBrowser: string;
+	    cookieCacheUpdated: string;
 	    rateLimitEnabled: boolean;
 	    rateLimitValue: string;
 	    customArgs: string;
@@ -123,6 +126,9 @@ export namespace main {
 	        this.cookieSource = source["cookieSource"];
 	        this.cookieBrowser = source["cookieBrowser"];
 	        this.cookieFilePath = source["cookieFilePath"];
+	        this.cookieCachePath = source["cookieCachePath"];
+	        this.cookieCacheBrowser = source["cookieCacheBrowser"];
+	        this.cookieCacheUpdated = source["cookieCacheUpdated"];
 	        this.rateLimitEnabled = source["rateLimitEnabled"];
 	        this.rateLimitValue = source["rateLimitValue"];
 	        this.customArgs = source["customArgs"];

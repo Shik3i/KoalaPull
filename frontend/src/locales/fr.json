@@ -118,6 +118,8 @@
     "cookiesFilePlaceholder": "Sélectionnez un fichier texte de cookies au format Netscape...",
     "cookiesBrowserRunningWarning": "Il est nécessaire de fermer le navigateur. Les navigateurs basés sur Chromium (Chrome, Edge, Brave, Vivaldi, Opera, Whale) verrouillent leur base de données de cookies lorsqu'ils sont en cours d'exécution, ce qui empêche KoalaPull/yt-dlp de les lire.",
     "cookiesCloseBrowser": "Fermer le navigateur",
+    "cookiesCloseAndFetch": "Fermer le navigateur + récupérer",
+    "cookiesCloseFailed": "Impossible de fermer le navigateur automatiquement. Veuillez le fermer manuellement.",
     "speedLimitTitle": "Limite de vitesse de téléchargement",
     "speedLimitDescription": "Limiter la vitesse maximale de téléchargement par fichier.",
     "speedLimitLabel": "Vitesse max (Mo/s)",

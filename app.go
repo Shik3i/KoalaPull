@@ -45,6 +45,7 @@ type App struct {
 	historyFilePath  string
 	startupErr       error
 	settingsMu       sync.Mutex
+	cookieCacheMu    sync.Mutex
 	dependencyMu     sync.Mutex
 	dlMu             sync.Mutex
 	dlCounter        int
@@ -125,6 +126,9 @@ type Settings struct {
 	CookieSource        string `json:"cookieSource"`
 	CookieBrowser       string `json:"cookieBrowser"`
 	CookieFilePath      string `json:"cookieFilePath"`
+	CookieCachePath     string `json:"cookieCachePath"`
+	CookieCacheBrowser  string `json:"cookieCacheBrowser"`
+	CookieCacheUpdated  string `json:"cookieCacheUpdated"`
 	RateLimitEnabled    bool   `json:"rateLimitEnabled"`
 	RateLimitValue      string `json:"rateLimitValue"`
 	CustomArgs          string `json:"customArgs"`
@@ -454,6 +458,9 @@ func (a *App) loadSettings() {
 		CookieSource:        "none",
 		CookieBrowser:       "chrome",
 		CookieFilePath:      "",
+		CookieCachePath:     "",
+		CookieCacheBrowser:  "",
+		CookieCacheUpdated:  "",
 		RateLimitEnabled:    false,
 		RateLimitValue:      "1",
 		CustomArgs:          "",
@@ -500,6 +507,14 @@ func (a *App) UpdateSettings(s Settings) error {
 	a.settingsMu.Lock()
 	defer a.settingsMu.Unlock()
 	old := a.getSettingsLocked()
+	if s.CookieCachePath == "" &&
+		old.CookieCachePath != "" &&
+		s.CookieSource == "browser" &&
+		strings.EqualFold(s.CookieBrowser, old.CookieCacheBrowser) {
+		s.CookieCachePath = old.CookieCachePath
+		s.CookieCacheBrowser = old.CookieCacheBrowser
+		s.CookieCacheUpdated = old.CookieCacheUpdated
+	}
 	if err := a.writeSettingsLocked(s); err != nil {
 		return err
 	}
@@ -578,6 +593,28 @@ func validateSettings(s Settings) Settings {
 		} else {
 			s.CookieFilePath = ""
 		}
+	}
+	if s.CookieCacheBrowser != "" {
+		if _, ok := browserProcessNames[strings.ToLower(s.CookieCacheBrowser)]; !ok {
+			s.CookieCacheBrowser = ""
+		} else {
+			s.CookieCacheBrowser = strings.ToLower(s.CookieCacheBrowser)
+		}
+	}
+	if len(s.CookieCachePath) > maxPathLength {
+		s.CookieCachePath = truncateToValidUTF8Prefix(s.CookieCachePath, maxPathLength)
+	}
+	if s.CookieCachePath != "" {
+		if cleaned, err := cleanAbsolutePath(s.CookieCachePath); err == nil && !isFilesystemRoot(cleaned) {
+			s.CookieCachePath = cleaned
+		} else {
+			s.CookieCachePath = ""
+			s.CookieCacheBrowser = ""
+			s.CookieCacheUpdated = ""
+		}
+	}
+	if len(s.CookieCacheUpdated) > 64 {
+		s.CookieCacheUpdated = truncateToValidUTF8Prefix(s.CookieCacheUpdated, 64)
 	}
 	if s.RateLimitValue == "" {
 		s.RateLimitValue = "1"
@@ -886,10 +923,86 @@ func (a *App) SelectCookieFile() (string, error) {
 	return file, nil
 }
 
+func (a *App) defaultCookieCachePath(browser string) string {
+	browser = strings.ToLower(strings.TrimSpace(browser))
+	if _, ok := browserProcessNames[browser]; !ok {
+		browser = "browser"
+	}
+	baseDir := a.configDir
+	if baseDir == "" {
+		baseDir = filepath.Dir(a.settingsPath())
+	}
+	return filepath.Join(baseDir, "cookies", browser+".txt")
+}
+
+func isUsableCookieCache(path string) bool {
+	if path == "" {
+		return false
+	}
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir() && info.Size() > 0
+}
+
+func (a *App) cookieCachePathForSettings(s Settings) string {
+	browser := strings.ToLower(s.CookieBrowser)
+	if s.CookieCachePath != "" && s.CookieCacheBrowser == browser {
+		return s.CookieCachePath
+	}
+	return a.defaultCookieCachePath(browser)
+}
+
+func (a *App) BrowserCookieCacheAvailable(browser string) (bool, error) {
+	browser = strings.ToLower(strings.TrimSpace(browser))
+	if _, ok := browserProcessNames[browser]; !ok {
+		return false, fmt.Errorf("unknown browser: %s", browser)
+	}
+	s := a.GetSettings()
+	if s.CookieSource != "browser" || strings.ToLower(s.CookieBrowser) != browser {
+		return false, nil
+	}
+	return isUsableCookieCache(a.cookieCachePathForSettings(s)), nil
+}
+
+func (a *App) persistBrowserCookieCache(s Settings) {
+	if s.CookieSource != "browser" || s.CookieBrowser == "" {
+		return
+	}
+	browser := strings.ToLower(s.CookieBrowser)
+	path := a.cookieCachePathForSettings(s)
+	if !isUsableCookieCache(path) {
+		return
+	}
+
+	a.cookieCacheMu.Lock()
+	defer a.cookieCacheMu.Unlock()
+	a.settingsMu.Lock()
+	defer a.settingsMu.Unlock()
+
+	current := a.getSettingsLocked()
+	if current.CookieSource != "browser" || strings.ToLower(current.CookieBrowser) != browser {
+		return
+	}
+	current.CookieCachePath = path
+	current.CookieCacheBrowser = browser
+	current.CookieCacheUpdated = time.Now().UTC().Format(time.RFC3339)
+	if err := a.writeSettingsLocked(current); err != nil {
+		log.Printf("persist cookie cache: %v", err)
+	}
+}
+
 func (a *App) getCookieArgs(s Settings) []string {
 	var args []string
 	if s.CookieSource == "browser" && s.CookieBrowser != "" {
-		args = append(args, "--cookies-from-browser", s.CookieBrowser)
+		browser := strings.ToLower(s.CookieBrowser)
+		cachePath := a.cookieCachePathForSettings(s)
+		if s.CookieCacheBrowser == browser && isUsableCookieCache(cachePath) {
+			return append(args, "--cookies", cachePath)
+		}
+		if err := os.MkdirAll(filepath.Dir(cachePath), privateDirMode); err != nil {
+			log.Printf("create cookie cache dir: %v", err)
+			return append(args, "--cookies-from-browser", browser)
+		}
+		return append(args, "--cookies-from-browser", browser, "--cookies", cachePath)
 	} else if s.CookieSource == "file" && s.CookieFilePath != "" {
 		args = append(args, "--cookies", s.CookieFilePath)
 	}
@@ -1971,6 +2084,7 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 		}
 		return nil, fmt.Errorf("yt-dlp exec failed: %w", err)
 	}
+	a.persistBrowserCookieCache(settings)
 	var raw rawMetadata
 	if err := json.Unmarshal(stdout, &raw); err != nil {
 		return nil, fmt.Errorf("json parse failed: %w", err)
@@ -2560,6 +2674,7 @@ func (a *App) runDownload(ctx context.Context, cancel context.CancelFunc, downlo
 			if historyErr := a.saveHistoryEntry(HistoryEntry{DownloadID: downloadID, URL: url, Title: title, FormatID: formatID, FileSize: lastFileSz, AvgSpeed: lastSpeed, Status: "completed", StartTime: startTime, EndTime: endTime, OutputPath: detectedOutputPath}); historyErr != nil {
 				errText = fmt.Sprintf("History error: %v", historyErr)
 			}
+			a.persistBrowserCookieCache(a.GetSettings())
 			a.emitDownloadProgress(downloadID, 100, "", "", lastFileSz, "completed", errText, "", detectedOutputPath, title)
 		}()
 

@@ -118,6 +118,8 @@
     "cookiesFilePlaceholder": "Select a Netscape format cookie text file...",
     "cookiesBrowserRunningWarning": "Closing the browser is required. Chromium-based browsers (Chrome, Edge, Brave, Vivaldi, Opera, Whale) lock their cookie database when running, which prevents yt-dlp from reading them.",
     "cookiesCloseBrowser": "Close Browser",
+    "cookiesCloseAndFetch": "Close Browser + Fetch Now",
+    "cookiesCloseFailed": "Could not close the browser automatically. Please close it manually.",
     "speedLimitTitle": "Download Speed Limit",
     "speedLimitDescription": "Cap maximum download speed per file.",
     "speedLimitLabel": "Max speed (MB/s)",

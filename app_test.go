@@ -713,6 +713,89 @@ func TestDownloadPostProcessingArgsByPreset(t *testing.T) {
 	}
 }
 
+func TestBrowserCookieCacheArgsPreferSavedCookieFile(t *testing.T) {
+	app := NewApp()
+	app.configDir = t.TempDir()
+	cachePath := app.defaultCookieCachePath("vivaldi")
+	if err := os.MkdirAll(filepath.Dir(cachePath), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(cachePath, []byte("# Netscape HTTP Cookie File\n"), 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	settings := validateSettings(Settings{
+		CookieSource:       "browser",
+		CookieBrowser:      "vivaldi",
+		CookieCachePath:    cachePath,
+		CookieCacheBrowser: "vivaldi",
+		CookieCacheUpdated: time.Now().UTC().Format(time.RFC3339),
+	})
+	got := app.getCookieArgs(settings)
+	want := []string{"--cookies", cachePath}
+	if strings.Join(got, "\x00") != strings.Join(want, "\x00") {
+		t.Fatalf("cookie args = %#v, want %#v", got, want)
+	}
+
+	app.cachedSettings = settings
+	ok, err := app.BrowserCookieCacheAvailable("vivaldi")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !ok {
+		t.Fatal("BrowserCookieCacheAvailable returned false for saved cookie cache")
+	}
+}
+
+func TestBrowserCookieArgsExportWhenCacheMissing(t *testing.T) {
+	app := NewApp()
+	app.configDir = t.TempDir()
+	settings := validateSettings(Settings{CookieSource: "browser", CookieBrowser: "vivaldi"})
+
+	got := app.getCookieArgs(settings)
+	if len(got) != 4 || got[0] != "--cookies-from-browser" || got[1] != "vivaldi" || got[2] != "--cookies" {
+		t.Fatalf("cookie args = %#v, want browser export args", got)
+	}
+	if !strings.HasSuffix(got[3], filepath.Join("cookies", "vivaldi.txt")) {
+		t.Fatalf("cookie cache path = %q, want vivaldi cache path", got[3])
+	}
+}
+
+func TestUpdateSettingsPreservesBrowserCookieCache(t *testing.T) {
+	app := NewApp()
+	app.settingsFilePath = filepath.Join(t.TempDir(), "settings.json")
+	cachePath := filepath.Join(t.TempDir(), "cookies.txt")
+	app.cachedSettings = validateSettings(Settings{
+		DefaultOutputDir:    t.TempDir(),
+		Theme:               "dark",
+		MaxConcurrency:      3,
+		CookieSource:        "browser",
+		CookieBrowser:       "vivaldi",
+		CookieCachePath:     cachePath,
+		CookieCacheBrowser:  "vivaldi",
+		CookieCacheUpdated:  "2026-06-06T00:00:00Z",
+		RateLimitValue:      "1",
+		CustomFormatID:      defaultCustomFormatID,
+		CustomContainer:     defaultCustomContainer,
+		CustomSubtitle:      defaultCustomSubtitle,
+		DownloadPreset:      defaultDownloadPreset,
+		SponsorBlockEnabled: false,
+	})
+
+	next := app.cachedSettings
+	next.CookieCachePath = ""
+	next.CookieCacheBrowser = ""
+	next.CookieCacheUpdated = ""
+	next.Theme = "light"
+	if err := app.UpdateSettings(next); err != nil {
+		t.Fatal(err)
+	}
+	got := app.GetSettings()
+	if got.CookieCachePath != cachePath || got.CookieCacheBrowser != "vivaldi" || got.CookieCacheUpdated == "" {
+		t.Fatalf("cookie cache not preserved: %#v", got)
+	}
+}
+
 func TestHistoryHelpersPreserveFileOrder(t *testing.T) {
 	entries := []HistoryEntry{
 		{DownloadID: "old", Title: "first", StartTime: time.Date(2026, 1, 2, 3, 4, 5, 6, time.UTC)},

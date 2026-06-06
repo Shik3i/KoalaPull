@@ -7,7 +7,7 @@ import {
   ClearHistory, DeleteHistoryEntry,
   UpdateDependencies, OpenOutputDir, CheckForUpdates, OpenExternalLink,
   SelectCookieFile, IsBrowserRunning, KillBrowser, OpenBinDir, SelectFfmpegPath,
-  PlayFile, ShowFileInFolder,
+  PlayFile, ShowFileInFolder, BrowserCookieCacheAvailable,
 } from "../wailsjs/go/main/App"
 import { EventsOn, ClipboardGetText } from "../wailsjs/runtime/runtime"
 import type { main } from "../wailsjs/go/models"
@@ -61,6 +61,9 @@ interface AppSettings {
   cookieSource: 'none' | 'browser' | 'file'
   cookieBrowser: string
   cookieFilePath: string
+  cookieCachePath: string
+  cookieCacheBrowser: string
+  cookieCacheUpdated: string
   rateLimitEnabled: boolean
   rateLimitValue: string
   customArgs: string
@@ -123,6 +126,9 @@ const defaultAppSettings: AppSettings = {
   cookieSource: 'none',
   cookieBrowser: 'chrome',
   cookieFilePath: '',
+  cookieCachePath: '',
+  cookieCacheBrowser: '',
+  cookieCacheUpdated: '',
   rateLimitEnabled: false,
   rateLimitValue: '1',
   customArgs: '',
@@ -159,6 +165,9 @@ function normalizeAppSettings(settings: main.Settings): AppSettings {
     cookieSource: isCookieSource(settings.cookieSource) ? settings.cookieSource : 'none',
     cookieBrowser: settings.cookieBrowser || 'chrome',
     cookieFilePath: settings.cookieFilePath || '',
+    cookieCachePath: settings.cookieCachePath || '',
+    cookieCacheBrowser: settings.cookieCacheBrowser || '',
+    cookieCacheUpdated: settings.cookieCacheUpdated || '',
     rateLimitEnabled: !!settings.rateLimitEnabled,
     rateLimitValue: settings.rateLimitValue || '1',
     customArgs: settings.customArgs || '',
@@ -868,6 +877,8 @@ function App() {
     if (!isChromiumBrowser(cookieBrowser)) return true
     setBrowserError('')
     try {
+      const hasCache = await BrowserCookieCacheAvailable(cookieBrowser)
+      if (hasCache) return true
       const isRunning = await IsBrowserRunning(cookieBrowser)
       if (!isRunning) return true
       
@@ -984,6 +995,31 @@ function App() {
 
   const handleFetch = async () => {
     await triggerFetch(url)
+  }
+
+  const handleCloseBrowserAndFetch = async () => {
+    if (isCheckingBrowser || fetching) return
+    setIsCheckingBrowser(true)
+    setBrowserError('')
+    try {
+      await KillBrowser(cookieBrowser)
+      await new Promise((resolve) => setTimeout(resolve, 1000))
+      const isRunning = await IsBrowserRunning(cookieBrowser)
+      setBrowserRunning(isRunning)
+      if (isRunning) {
+        setBrowserError(t('settings.cookiesCloseFailed'))
+        return
+      }
+      const trimmed = url.trim()
+      if (trimmed) {
+        setActiveTab('downloads')
+        void triggerFetch(trimmed)
+      }
+    } catch (err) {
+      setBrowserError(errorMessage(err))
+    } finally {
+      setIsCheckingBrowser(false)
+    }
   }
 
   useEffect(() => {
@@ -2459,7 +2495,7 @@ const fmtTime = useCallback((t: string): string => {
                         <p style={{ color: 'var(--text-secondary)' }}>{t('settings.cookiesBrowserRunningWarning')}</p>
                         {browserError && <p role="alert" className="text-red-400">{browserError}</p>}
                         {browserRunning ? (
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <span className="font-semibold text-red-500">{cookieBrowser} is running</span>
                             <button
                               onClick={handleKillBrowser}
@@ -2470,6 +2506,15 @@ const fmtTime = useCallback((t: string): string => {
                               style={{ background: '#ef4444', borderColor: '#ef4444' }}
                             >
                               {isCheckingBrowser ? t('common.loading') : t('settings.cookiesCloseBrowser')}
+                            </button>
+                            <button
+                              onClick={handleCloseBrowserAndFetch}
+                              disabled={isCheckingBrowser || fetching || !url.trim()}
+                              className="btn-primary text-xs px-2.5 py-1 disabled:opacity-50 disabled:cursor-not-allowed"
+                              title={t('settings.cookiesCloseAndFetch')}
+                              aria-label={t('settings.cookiesCloseAndFetch')}
+                            >
+                              {isCheckingBrowser ? t('common.loading') : t('settings.cookiesCloseAndFetch')}
                             </button>
                           </div>
                         ) : (
