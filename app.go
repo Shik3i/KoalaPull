@@ -762,6 +762,9 @@ var allowedCustomArgNames = map[string]customArgSpec{
 	"--retry-sleep":          {requiresValue: true, validator: validateRetrySleepArg},
 	"--sleep-interval":       {requiresValue: true, validator: validateSmallPositiveFloatArg(0, 60)},
 	"--sleep-requests":       {requiresValue: true, validator: validateSmallPositiveFloatArg(0, 10)},
+	"--add-header":           {requiresValue: true, validator: validateHeaderArg},
+	"--referer":              {requiresValue: true, validator: validateURLArg},
+	"--user-agent":           {requiresValue: true, validator: validateUserAgentArg},
 	"--sub-langs":            {requiresValue: true, validator: validateSubLangsArg},
 	"--trim-filenames":       {requiresValue: true, validator: validateSmallPositiveIntArg(16, 255)},
 	"--windows-filenames":    {},
@@ -887,6 +890,33 @@ func validateRetrySleepArg(raw string) error {
 		return nil
 	}
 	return errors.New("unsupported retry sleep format")
+}
+
+func validateHeaderArg(raw string) error {
+	if len(raw) > 512 {
+		return errors.New("too long")
+	}
+	if !regexp.MustCompile(`^[A-Za-z0-9_-]+:\s?.+$`).MatchString(raw) {
+		return errors.New("must be in format HeaderName: value")
+	}
+	return nil
+}
+
+func validateURLArg(raw string) error {
+	if len(raw) > 1024 {
+		return errors.New("too long")
+	}
+	if !strings.HasPrefix(raw, "http://") && !strings.HasPrefix(raw, "https://") {
+		return errors.New("must start with http:// or https://")
+	}
+	return nil
+}
+
+func validateUserAgentArg(raw string) error {
+	if len(raw) > 256 {
+		return errors.New("too long")
+	}
+	return nil
 }
 
 func truncateToValidUTF8Prefix(s string, maxBytes int) string {
@@ -2215,7 +2245,7 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 		meta := &VideoMetadata{
 			ID:         raw.ID,
 			Title:      raw.Title,
-			Thumbnail:  "",
+			Thumbnail:  sanitizeRemoteMediaURLWithResolver(ctx, raw.Thumbnail),
 			Uploader:   raw.Uploader,
 			IsPlaylist: true,
 			EntryCount: len(raw.Entries),
@@ -2228,7 +2258,7 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	meta := &VideoMetadata{
 		ID:        raw.ID,
 		Title:     raw.Title,
-		Thumbnail: "",
+		Thumbnail: sanitizeRemoteMediaURLWithResolver(ctx, raw.Thumbnail),
 		Uploader:  raw.Uploader,
 		Duration:  raw.Duration,
 		Formats:   make([]FormatInfo, 0, len(raw.Formats)),
@@ -2464,9 +2494,6 @@ func validateDownloadURLForLaunch(ctx context.Context, raw string) error {
 		return fmt.Errorf("invalid url")
 	}
 	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
-	if !isAllowedSourceHost(host) {
-		return errors.New("url host is not in the supported public site allowlist")
-	}
 	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", host)
 	if err != nil {
 		return fmt.Errorf("resolve url host: %w", err)

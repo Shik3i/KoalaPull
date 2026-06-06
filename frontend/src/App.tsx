@@ -597,7 +597,7 @@ const QueueRow = memo(({
     <div className="rounded-lg p-3 lg:p-4 flex items-center gap-3" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
       <div className="w-16 h-10 rounded shrink-0 flex items-center justify-center overflow-hidden" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}>
         {item.thumbnail ? (
-          <img src={appIcon} alt="" loading="lazy" className="w-full h-full object-cover" />
+          <img src={item.thumbnail} alt="" loading="lazy" className="w-full h-full object-cover" />
         ) : (
           <svg className="w-5 h-5" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z" />
@@ -2009,7 +2009,7 @@ const fmtTime = useCallback((t: string): string => {
                 <div className="rounded-lg overflow-hidden" style={{ background: 'var(--color-surface-light)', border: '1px solid var(--color-surface-border)' }}>
                   <div className="flex flex-col sm:flex-row gap-4 p-4">
                     {metadata.thumbnail ? (
-                      <img src={appIcon} alt={metadata.title} loading="lazy" className="w-36 lg:w-52 h-20 lg:h-28 rounded-md object-cover shrink-0" style={{ background: 'var(--color-surface-lighter)' }} />
+                      <img src={metadata.thumbnail} alt={metadata.title} loading="lazy" className="w-36 lg:w-52 h-20 lg:h-28 rounded-md object-cover shrink-0" style={{ background: 'var(--color-surface-lighter)' }} />
                     ) : (
                       <div className="w-36 lg:w-52 h-20 lg:h-28 rounded-md shrink-0 flex items-center justify-center" style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}>
                         <svg className="w-8 h-8" style={{ color: 'var(--text-muted)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24">

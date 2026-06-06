@@ -297,19 +297,34 @@ func TestFrontendCSPBlocksInlineScriptsAndRemoteImages(t *testing.T) {
 
 func TestFrontendAvoidsRemoteThumbnailAndFaviconRendering(t *testing.T) {
 	data := mustReadRepoFile(t, "frontend", "src", "App.tsx")
+	// Remote favicon services are forbidden.
 	for _, forbidden := range []string{
 		"google.com/s2/favicons",
-		"<img src={metadata.thumbnail}",
-		"<img src={item.thumbnail}",
 	} {
 		if strings.Contains(data, forbidden) {
 			t.Fatalf("frontend still renders remote media marker %q", forbidden)
+		}
+	}
+	// Thumbnail img tags must exist (they use backend-sanitized URLs).
+	for _, required := range []string{
+		"<img src={item.thumbnail}",
+		"<img src={metadata.thumbnail}",
+	} {
+		if !strings.Contains(data, required) {
+			t.Fatalf("frontend missing expected thumbnail render %q", required)
 		}
 	}
 	// Local site favicons are allowed (from assets/images/sites/),
 	// but they must not reference remote URLs.
 	if strings.Contains(data, "siteLogoUrls") {
 		t.Fatal("frontend must not reference siteLogoUrls (plural)")
+	}
+}
+
+func TestBackendSanitizesThumbnailURLs(t *testing.T) {
+	data := mustReadRepoFile(t, "app.go")
+	if !strings.Contains(data, "sanitizeRemoteMediaURLWithResolver") {
+		t.Fatal("app.go must sanitize thumbnails via sanitizeRemoteMediaURLWithResolver")
 	}
 }
 

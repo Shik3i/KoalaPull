@@ -1165,8 +1165,6 @@ func TestSanitizeCustomArgsRejectsDangerousOptions(t *testing.T) {
 		"--ffmpeg-location /tmp/fake",
 		"--output=%(title)s",
 		"--proxy socks5://127.0.0.1:1080",
-		"--add-header Authorization:Bearer-secret",
-		"--user-agent KoalaPull",
 		"--concurrent-fragments 999",
 		"--sleep-requests 999",
 		"--geo-bypass-country USA",
@@ -1179,6 +1177,9 @@ func TestSanitizeCustomArgsRejectsDangerousOptions(t *testing.T) {
 	}
 
 	if got, err := sanitizeCustomArgs(parseCustomArgs("--concurrent-fragments 4 --geo-bypass --sleep-requests=2"), false); err != nil || len(got) != 4 {
+		t.Fatalf("safe custom args rejected: got %#v err %v", got, err)
+	}
+	if got, err := sanitizeCustomArgs(parseCustomArgs("--add-header=Authorization:Bearer-secret --user-agent=KoalaPull/1.0"), false); err != nil || len(got) != 2 {
 		t.Fatalf("safe custom args rejected: got %#v err %v", got, err)
 	}
 }
