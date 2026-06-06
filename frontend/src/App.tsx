@@ -300,14 +300,25 @@ function formatAppVersionLabel(version: string): string {
   return `v${version}`
 }
 
+const siteLogoImages = import.meta.glob('./assets/images/sites/*.png', { eager: true, query: '?url', import: 'default' }) as Record<string, string>
+
+function siteLogoUrl(site: SupportedSite): string | undefined {
+  return siteLogoImages[`./assets/images/sites/${site.blurbKey.split('.').pop()}.png`]
+}
+
 function SiteMark({ site }: { site: SupportedSite }) {
+  const logoUrl = siteLogoUrl(site)
   const initials = site.name.replace(/\s*\(.+\)\s*/g, '').slice(0, 2).toUpperCase()
   return (
     <div
       className="w-10 h-10 rounded-xl shrink-0 flex items-center justify-center overflow-hidden"
-      style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)', color: 'var(--color-accent)' }}
+      style={{ background: 'var(--color-surface-lighter)', border: '1px solid var(--color-surface-border)' }}
     >
-      <span className="text-xs font-bold" aria-hidden="true">{initials}</span>
+      {logoUrl ? (
+        <img src={logoUrl} alt="" className="w-7 h-7 object-contain" loading="lazy" />
+      ) : (
+        <span className="text-xs font-bold" style={{ color: 'var(--color-accent)' }} aria-hidden="true">{initials}</span>
+      )}
     </div>
   )
 }

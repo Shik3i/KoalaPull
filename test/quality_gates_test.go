@@ -299,13 +299,17 @@ func TestFrontendAvoidsRemoteThumbnailAndFaviconRendering(t *testing.T) {
 	data := mustReadRepoFile(t, "frontend", "src", "App.tsx")
 	for _, forbidden := range []string{
 		"google.com/s2/favicons",
-		"siteLogoUrl",
 		"<img src={metadata.thumbnail}",
 		"<img src={item.thumbnail}",
 	} {
 		if strings.Contains(data, forbidden) {
 			t.Fatalf("frontend still renders remote media marker %q", forbidden)
 		}
+	}
+	// Local site favicons are allowed (from assets/images/sites/),
+	// but they must not reference remote URLs.
+	if strings.Contains(data, "siteLogoUrls") {
+		t.Fatal("frontend must not reference siteLogoUrls (plural)")
 	}
 }
 
