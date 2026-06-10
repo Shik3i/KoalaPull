@@ -9,6 +9,15 @@ const goCacheDir = resolve(repoRoot, "tmp", "gocache-verify")
 const isWindows = process.platform === "win32"
 process.env.GOCACHE ||= goCacheDir
 
+// Add Go bin to PATH
+const goPathResult = spawnSync("go", ["env", "GOPATH"], { encoding: "utf8" })
+const goPath = goPathResult.status === 0 ? goPathResult.stdout.trim() : resolve(process.env.HOME || process.env.USERPROFILE || "", "go")
+if (goPath) {
+  const goBin = resolve(goPath, "bin")
+  const pathSep = isWindows ? ";" : ":"
+  process.env.PATH = `${goBin}${pathSep}${process.env.PATH || ""}`
+}
+
 function invocation(name, args) {
   if (isWindows && (name === "npm" || name === "npx")) {
     return {
