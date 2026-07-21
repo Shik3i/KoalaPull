@@ -36,6 +36,7 @@
     "clear": "Clear",
     "updating": "Updating...",
     "cancel": "Cancel",
+    "continue": "Continue",
     "openOutputFolder": "Open output folder",
     "deleteEntry": "Delete entry",
     "useAgain": "Use URL again",
@@ -47,7 +48,8 @@
     "loading": "Loading...",
     "unavailable": "Unavailable",
     "currentVersion": "(current: {version})",
-    "untitled": "Untitled"
+    "untitled": "Untitled",
+    "confirmTitle": "Confirm action"
   },
   "downloads": {
     "urlPlaceholder": "Paste a video or playlist URL...",
@@ -74,6 +76,7 @@
     "dropToImport": "Drop URL to Import & Fetch",
     "singleTab": "Single URL",
     "batchTab": "Batch Import",
+    "lastfmTab": "Last.fm Music",
     "batchPlaceholder": "Paste URLs here, one per line...",
     "selectPreset": "Download preset",
     "presetBest": "Best quality",
@@ -159,8 +162,24 @@
     "ffmpegPathDescription": "Leave empty to use the bundled ffmpeg. Point to a custom ffmpeg executable to override.",
     "ffmpegPathPlaceholder": "Path to ffmpeg executable...",
     "sponsorBlockTitle": "SponsorBlock Integration",
-    "sponsorBlockDescription": "Automatically skip sponsor segments, intros, outros, and ads in YouTube videos"
+    "sponsorBlockDescription": "Automatically skip sponsor segments, intros, outros, and ads in YouTube videos",
+    "notificationsTitle": "Desktop notifications",
+    "notificationsDescription": "Show a quiet notification when a download finishes or fails.",
+    "transferTitle": "Import and export",
+    "transferDescription": "Back up or move validated app settings. Temporary browser-cookie data is excluded.",
+    "export": "Export",
+    "import": "Import",
+    "recentFolders": "Recent download folders",
+    "chooseRecentFolder": "Choose a recent folder"
   },
+  "presets": {"saved": "Saved presets", "choose": "Choose a preset...", "name": "Preset name", "saveCurrent": "Save current", "deleteLast": "Delete latest"},
+  "lastfm": {
+    "title": "Import music from Last.fm", "description": "Load listening data, review every track, then match selected tracks to downloadable sources. KoalaPull never downloads silently.",
+    "username": "Last.fm username", "apiKey": "Last.fm API key", "source": "Music source", "period": "Period", "topTracks": "Top tracks", "lovedTracks": "Loved tracks", "recentTracks": "Recent tracks",
+    "week": "Last 7 days", "month": "Last month", "year": "Last year", "overall": "All time", "load": "Load tracks", "selected": "{count} tracks selected", "selectAll": "Select all", "selectNone": "Select none", "plays": "{count} plays",
+    "reviewNotice": "Review matches before downloading. Only download media you are permitted to save. Last.fm provides metadata, not music files.", "matching": "Matching {done} of {total}...", "stage": "Match and review as MP3 batch"
+  },
+  "notifications": {"completed": "{title} downloaded successfully.", "failed": "{title} failed to download."},
   "updates": {
     "koalaAvailable": "KoalaPull {version} available",
     "koalaCurrent": "KoalaPull is up to date ({version})",

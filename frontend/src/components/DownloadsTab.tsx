@@ -1,6 +1,7 @@
-import { memo } from 'react'
+import { memo, useState } from 'react'
 import { PlayFile, ShowFileInFolder } from '../../wailsjs/go/main/App'
 import type { AppSettings, DownloadPreset } from './SettingsTab'
+import { LastfmImport } from './LastfmImport'
 
 interface FormatInfo {
   formatId: string
@@ -458,8 +459,8 @@ const QueueRow = memo(
 )
 
 interface DownloadsTabProps {
-  downloadMode: 'single' | 'batch'
-  setDownloadMode: (mode: 'single' | 'batch') => void
+  downloadMode: 'single' | 'batch' | 'lastfm'
+  setDownloadMode: (mode: 'single' | 'batch' | 'lastfm') => void
   url: string
   setUrl: (url: string) => void
   fetching: boolean
@@ -472,6 +473,13 @@ interface DownloadsTabProps {
   handleFetch: () => void
   batchUrls: string
   setBatchUrls: (urls: string) => void
+  lastfmUsername: string
+  lastfmApiKey: string
+  onLastfmCredentialsChange: (username: string, apiKey: string) => Promise<void>
+  savedPresets: AppSettings['savedPresets']
+  onSavePreset: (name: string) => Promise<void>
+  onDeletePreset: (id: string) => Promise<void>
+  onApplyPreset: (id: string) => void
   selectedPreset: DownloadPreset
   setSelectedPreset: (preset: DownloadPreset) => void
   selectedFormat: string
@@ -529,6 +537,13 @@ export function DownloadsTab({
   handleFetch,
   batchUrls,
   setBatchUrls,
+  lastfmUsername,
+  lastfmApiKey,
+  onLastfmCredentialsChange,
+  savedPresets,
+  onSavePreset,
+  onDeletePreset,
+  onApplyPreset,
   selectedPreset,
   setSelectedPreset,
   selectedFormat,
@@ -570,6 +585,7 @@ export function DownloadsTab({
   t,
   tt,
 }: DownloadsTabProps) {
+  const [presetName, setPresetName] = useState('')
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       {/* Download Mode Tabs */}
@@ -597,6 +613,15 @@ export function DownloadsTab({
           }}
         >
           {t('downloads.batchTab') || 'Batch Import'}
+        </button>
+        <button
+          type="button"
+          onClick={() => setDownloadMode('lastfm')}
+          aria-pressed={downloadMode === 'lastfm'}
+          className="px-4 py-2 text-sm font-semibold transition-all border-b-2 outline-none"
+          style={{ color: downloadMode === 'lastfm' ? 'var(--color-accent)' : 'var(--text-muted)', borderColor: downloadMode === 'lastfm' ? 'var(--color-accent)' : 'transparent' }}
+        >
+          {t('downloads.lastfmTab')}
         </button>
       </div>
 
@@ -658,7 +683,7 @@ export function DownloadsTab({
               )}
             </button>
           </div>
-        ) : (
+        ) : downloadMode === 'batch' ? (
           <div className="flex flex-col gap-3">
             <div className="relative">
               <textarea
@@ -741,6 +766,18 @@ export function DownloadsTab({
               )}
             </button>
           </div>
+        ) : (
+          <LastfmImport
+            username={lastfmUsername}
+            apiKey={lastfmApiKey}
+            onCredentialsChange={onLastfmCredentialsChange}
+            onStageUrls={(urls) => {
+              setBatchUrls(urls.join('\n'))
+              setSelectedPreset('audio')
+              setDownloadMode('batch')
+            }}
+            t={t}
+          />
         )}
         {fetchError && (
           <div
@@ -757,6 +794,21 @@ export function DownloadsTab({
       </div>
 
       <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 lg:py-6 space-y-4">
+        {downloadMode === 'single' && fetched && metadata && (
+          <div className="rounded-xl border p-3 mb-4 flex flex-wrap items-end gap-2" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+            <label className="text-xs font-medium flex-1 min-w-48">{t('presets.saved')}
+              <select className="select-dark w-full mt-1" defaultValue="" onChange={(event) => { if (event.target.value) onApplyPreset(event.target.value); event.target.value = '' }}>
+                <option value="">{t('presets.choose')}</option>
+                {savedPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+              </select>
+            </label>
+            <label className="text-xs font-medium min-w-36">{t('presets.name')}
+              <input className="input-dark w-full mt-1 py-2" value={presetName} onChange={(event) => setPresetName(event.target.value)} maxLength={48} />
+            </label>
+            <button className="btn-primary text-xs px-3 py-2" disabled={!presetName.trim()} onClick={async () => { await onSavePreset(presetName.trim()); setPresetName('') }}>{t('presets.saveCurrent')}</button>
+            {savedPresets.length > 0 && <button className="text-xs px-3 py-2" style={{ color: 'var(--text-muted)' }} onClick={async () => { const id = savedPresets.at(-1)?.id; if (id) await onDeletePreset(id) }}>{t('presets.deleteLast')}</button>}
+          </div>
+        )}
         {downloadMode === 'single' && fetched && metadata && (
           <div
             className="rounded-lg overflow-hidden"
@@ -821,8 +873,8 @@ export function DownloadsTab({
                           }
                         }}
                         className="select-dark text-xs w-full"
-                        title="Download preset"
-                        aria-label="Download preset"
+                        title={t('downloads.selectPreset')}
+                        aria-label={t('downloads.selectPreset')}
                       >
                         {downloadPresetOptions.map((opt) => (
                           <option key={opt.value} value={opt.value}>

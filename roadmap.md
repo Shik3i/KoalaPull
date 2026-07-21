@@ -1,6 +1,6 @@
 # KoalaPull Roadmap
 
-Last updated: 2026-06-06
+Last updated: 2026-07-21
 
 ## Purpose
 
@@ -190,7 +190,7 @@ AI agents editing this file should:
 
 ## KP-004 QoL Pack
 
-- Status: `approved`
+- Status: `done`
 - Priority: `P1`
 - Area: `frontend`, `backend`, `ux`
 - Effort: `4`
@@ -234,6 +234,47 @@ Power users get faster repeated downloads without making the default UI heavy.
 
 Keep preset UX simple.
 Do not create a settings maze.
+
+## KP-006 Last.fm Review Import
+
+- Status: `done`
+- Priority: `P1`
+- Area: `frontend`, `backend`, `ux`
+- Effort: `4`
+- User Value: `4`
+- Error Potential: `3`
+- Depends on: `KP-004`
+
+### Problem
+
+People cannot turn their Last.fm listening history into a reviewed KoalaPull audio queue.
+Blind automatic matching would create wrong downloads and hide important rights decisions.
+
+### Outcome
+
+Users can load top, loved, or recent tracks, choose individual entries, match them to sources, and review the resulting MP3 batch before downloading.
+
+### Scope
+
+- Last.fm username and API-key setup
+- top, loved, and recent track sources
+- duplicate removal and per-track selection
+- explicit matching progress and error feedback
+- staged MP3 batch review before download
+- English, German, and French UI
+
+### Out of Scope
+
+- silent background downloads
+- claiming download rights from Last.fm metadata
+- bypassing source protections
+
+### Acceptance Criteria
+
+- credentials persist through validated local settings
+- users review tracks before matching and review URLs before queueing
+- matching errors remain visible and recoverable
+- Last.fm is clearly described as a metadata source, not a music-file host
 
 ## KP-005 Performance And Maintainability Pack
 
@@ -321,4 +362,3 @@ When editing roadmap state:
 - do not delete shipped items
 - move status forward explicitly
 - if scope changes materially, add a note under the item
-

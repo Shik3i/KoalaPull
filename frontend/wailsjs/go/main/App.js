@@ -30,6 +30,14 @@ export function DownloadDependencies() {
   return window['go']['main']['App']['DownloadDependencies']();
 }
 
+export function ExportSettings() {
+  return window['go']['main']['App']['ExportSettings']();
+}
+
+export function FetchLastfmTracks(arg1, arg2, arg3, arg4, arg5) {
+  return window['go']['main']['App']['FetchLastfmTracks'](arg1, arg2, arg3, arg4, arg5);
+}
+
 export function FetchMetadata(arg1) {
   return window['go']['main']['App']['FetchMetadata'](arg1);
 }
@@ -58,6 +66,10 @@ export function GetYtdlpVersion() {
   return window['go']['main']['App']['GetYtdlpVersion']();
 }
 
+export function ImportSettings() {
+  return window['go']['main']['App']['ImportSettings']();
+}
+
 export function IsBrowserRunning(arg1) {
   return window['go']['main']['App']['IsBrowserRunning'](arg1);
 }
@@ -84,6 +96,10 @@ export function PauseDownload(arg1) {
 
 export function PlayFile(arg1) {
   return window['go']['main']['App']['PlayFile'](arg1);
+}
+
+export function ResolveMusicTrack(arg1, arg2) {
+  return window['go']['main']['App']['ResolveMusicTrack'](arg1, arg2);
 }
 
 export function ResumeDownload(arg1) {

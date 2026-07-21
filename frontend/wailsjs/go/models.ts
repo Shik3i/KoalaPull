@@ -1,13 +1,13 @@
 export namespace main {
-	
+
 	export class DependencyStatus {
 	    ytDlpInstalled: boolean;
 	    ffmpegInstalled: boolean;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new DependencyStatus(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ytDlpInstalled = source["ytDlpInstalled"];
@@ -23,11 +23,11 @@ export namespace main {
 	    acodec: string;
 	    filesize: number;
 	    formatNote: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new FormatInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.formatId = source["formatId"];
@@ -52,11 +52,11 @@ export namespace main {
 	    startTime: string;
 	    endTime: string;
 	    outputPath?: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new HistoryEntryView(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.downloadId = source["downloadId"];
@@ -72,18 +72,56 @@ export namespace main {
 	        this.outputPath = source["outputPath"];
 	    }
 	}
+	export class LastfmTrack {
+	    artist: string;
+	    title: string;
+	    url?: string;
+	    plays?: number;
+
+	    static createFrom(source: any = {}) {
+	        return new LastfmTrack(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.artist = source["artist"];
+	        this.title = source["title"];
+	        this.url = source["url"];
+	        this.plays = source["plays"];
+	    }
+	}
 	export class PlaylistEntry {
 	    id: string;
 	    title: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new PlaylistEntry(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
 	        this.title = source["title"];
+	    }
+	}
+	export class SavedPreset {
+	    id: string;
+	    name: string;
+	    formatId: string;
+	    container: string;
+	    subtitle: string;
+
+	    static createFrom(source: any = {}) {
+	        return new SavedPreset(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.id = source["id"];
+	        this.name = source["name"];
+	        this.formatId = source["formatId"];
+	        this.container = source["container"];
+	        this.subtitle = source["subtitle"];
 	    }
 	}
 	export class Settings {
@@ -108,11 +146,16 @@ export namespace main {
 	    customArgs: string;
 	    ffmpegPath: string;
 	    sponsorBlockEnabled: boolean;
-	
+	    notificationsEnabled: boolean;
+	    recentOutputDirs?: string[];
+	    savedPresets?: SavedPreset[];
+	    lastfmApiKey?: string;
+	    lastfmUsername?: string;
+
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.defaultOutputDir = source["defaultOutputDir"];
@@ -136,7 +179,30 @@ export namespace main {
 	        this.customArgs = source["customArgs"];
 	        this.ffmpegPath = source["ffmpegPath"];
 	        this.sponsorBlockEnabled = source["sponsorBlockEnabled"];
+	        this.notificationsEnabled = source["notificationsEnabled"];
+	        this.recentOutputDirs = source["recentOutputDirs"];
+	        this.savedPresets = this.convertValues(source["savedPresets"], SavedPreset);
+	        this.lastfmApiKey = source["lastfmApiKey"];
+	        this.lastfmUsername = source["lastfmUsername"];
 	    }
+
+		convertValues(a: any, classs: any, asMap: boolean = false): any {
+		    if (!a) {
+		        return a;
+		    }
+		    if (a.slice && a.map) {
+		        return (a as any[]).map(elem => this.convertValues(elem, classs));
+		    } else if ("object" === typeof a) {
+		        if (asMap) {
+		            for (const key of Object.keys(a)) {
+		                a[key] = new classs(a[key]);
+		            }
+		            return a;
+		        }
+		        return new classs(a);
+		    }
+		    return a;
+		}
 	}
 	export class UpdateInfo {
 	    ytdlpUpdateAvailable: boolean;
@@ -145,11 +211,11 @@ export namespace main {
 	    latestKoalaPullVersion: string;
 	    ffmpegUpdateAvailable: boolean;
 	    latestFfmpegVersion: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new UpdateInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ytdlpUpdateAvailable = source["ytdlpUpdateAvailable"];
@@ -164,11 +230,11 @@ export namespace main {
 	    ytdlp: string;
 	    ffmpeg: string;
 	    app: string;
-	
+
 	    static createFrom(source: any = {}) {
 	        return new VersionInfo(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ytdlp = source["ytdlp"];
@@ -186,11 +252,11 @@ export namespace main {
 	    isPlaylist: boolean;
 	    entryCount: number;
 	    entries?: PlaylistEntry[];
-	
+
 	    static createFrom(source: any = {}) {
 	        return new VideoMetadata(source);
 	    }
-	
+
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -203,7 +269,7 @@ export namespace main {
 	        this.entryCount = source["entryCount"];
 	        this.entries = this.convertValues(source["entries"], PlaylistEntry);
 	    }
-	
+
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;

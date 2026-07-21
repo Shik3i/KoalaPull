@@ -1,6 +1,7 @@
-import { useMemo, memo } from 'react'
+import { useMemo, memo, useState } from 'react'
 import { PlayFile, ShowFileInFolder } from '../../wailsjs/go/main/App'
 import type { main } from '../../wailsjs/go/models'
+import { ConfirmDialog } from './ConfirmDialog'
 
 const maxVisibleHistoryEntries = 500
 
@@ -193,8 +194,10 @@ export function HistoryTab({
   t,
   tt,
 }: HistoryTabProps) {
+  const [confirmClear, setConfirmClear] = useState(false)
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      <ConfirmDialog open={confirmClear} title={t('common.confirmTitle')} message={t('history.clearConfirm')} confirmLabel={t('actions.clearAll')} cancelLabel={t('actions.cancel')} destructive onConfirm={() => { setConfirmClear(false); handleClearHistory() }} onCancel={() => setConfirmClear(false)} />
       <div className="flex flex-col sm:flex-row sm:items-center gap-2 px-4 lg:px-8 py-4 shrink-0">
         <div className="flex-1 text-center">
           <h2 className="text-base font-semibold inline-block" title={tt('searchHistory')}>
@@ -214,9 +217,7 @@ export function HistoryTab({
                 aria-label={tt('searchHistory')}
               />
               <button
-                onClick={() => {
-                  if (window.confirm(t('history.clearConfirm'))) handleClearHistory()
-                }}
+                onClick={() => setConfirmClear(true)}
                 className="btn-primary text-xs px-3 py-1.5"
                 title={tt('clearHistory')}
                 aria-label={tt('clearHistory')}

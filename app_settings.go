@@ -118,6 +118,59 @@ func (a *App) SelectDirectory() (string, error) {
 	return dir, nil
 }
 
+func (a *App) ExportSettings() (string, error) {
+	s := a.GetSettings()
+	path, err := wailsRuntime.SaveFileDialog(a.ctx, wailsRuntime.SaveDialogOptions{
+		DefaultFilename: "koalapull-settings.json",
+		Title:           "Export KoalaPull Settings",
+		Filters:         []wailsRuntime.FileFilter{{DisplayName: "JSON Files (*.json)", Pattern: "*.json"}},
+	})
+	if err != nil || path == "" {
+		return path, err
+	}
+	// Never export transient browser-cookie caches.
+	s.CookieCachePath = ""
+	s.CookieCacheBrowser = ""
+	s.CookieCacheUpdated = ""
+	data, err := json.MarshalIndent(s, "", "  ")
+	if err != nil {
+		return "", fmt.Errorf("marshal exported settings: %w", err)
+	}
+	if err := writeFileAtomically(path, data, privateFileMode); err != nil {
+		return "", fmt.Errorf("export settings: %w", err)
+	}
+	return path, nil
+}
+
+func (a *App) ImportSettings() (Settings, error) {
+	path, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
+		Title:   "Import KoalaPull Settings",
+		Filters: []wailsRuntime.FileFilter{{DisplayName: "JSON Files (*.json)", Pattern: "*.json"}},
+	})
+	if err != nil || path == "" {
+		return a.GetSettings(), err
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return Settings{}, fmt.Errorf("read imported settings: %w", err)
+	}
+	if len(data) > 256*1024 {
+		return Settings{}, errors.New("settings file is too large")
+	}
+	var imported Settings
+	decoder := json.NewDecoder(strings.NewReader(string(data)))
+	if err := decoder.Decode(&imported); err != nil {
+		return Settings{}, fmt.Errorf("parse imported settings: %w", err)
+	}
+	imported.CookieCachePath = ""
+	imported.CookieCacheBrowser = ""
+	imported.CookieCacheUpdated = ""
+	if err := a.UpdateSettings(imported); err != nil {
+		return Settings{}, err
+	}
+	return a.GetSettings(), nil
+}
+
 func (a *App) SelectCookieFile() (string, error) {
 	s := a.GetSettings()
 	title := "Select Cookies File"
@@ -222,7 +275,7 @@ func validateSettings(s Settings) Settings {
 	} else {
 		s.DefaultOutputDir = defaultOutputDir()
 	}
-	if s.Theme != "dark" && s.Theme != "light" {
+	if s.Theme != "dark" && s.Theme != "light" && s.Theme != "system" {
 		s.Theme = "dark"
 	}
 	if s.MaxConcurrency < 1 {
@@ -316,7 +369,57 @@ func validateSettings(s Settings) Settings {
 			s.FfmpegPath = cleaned
 		}
 	}
+	s.RecentOutputDirs = validateRecentOutputDirs(s.RecentOutputDirs, s.DefaultOutputDir)
+	s.SavedPresets = validateSavedPresets(s.SavedPresets)
+	s.LastfmAPIKey = strings.TrimSpace(truncateToValidUTF8Prefix(s.LastfmAPIKey, 128))
+	s.LastfmUsername = strings.TrimSpace(truncateToValidUTF8Prefix(s.LastfmUsername, 64))
 	return s
+}
+
+func validateRecentOutputDirs(paths []string, current string) []string {
+	result := make([]string, 0, 5)
+	seen := make(map[string]bool)
+	for _, path := range append([]string{current}, paths...) {
+		cleaned, err := cleanAbsolutePath(path)
+		if err != nil || isFilesystemRoot(cleaned) || seen[cleaned] {
+			continue
+		}
+		seen[cleaned] = true
+		result = append(result, cleaned)
+		if len(result) == 5 {
+			break
+		}
+	}
+	return result
+}
+
+func validateSavedPresets(presets []SavedPreset) []SavedPreset {
+	result := make([]SavedPreset, 0, 12)
+	seen := make(map[string]bool)
+	for _, preset := range presets {
+		preset.ID = strings.TrimSpace(truncateToValidUTF8Prefix(preset.ID, 64))
+		preset.Name = strings.TrimSpace(truncateToValidUTF8Prefix(preset.Name, 48))
+		preset.FormatID = strings.TrimSpace(truncateToValidUTF8Prefix(preset.FormatID, 256))
+		preset.Container = strings.ToLower(strings.TrimSpace(preset.Container))
+		preset.Subtitle = strings.ToLower(strings.TrimSpace(preset.Subtitle))
+		if preset.ID == "" || preset.Name == "" || preset.FormatID == "" || seen[preset.ID] {
+			continue
+		}
+		switch preset.Container {
+		case "mp4", "mkv", "webm", "mp3", "aac", "m4a", "opus", "flac", "wav":
+		default:
+			continue
+		}
+		if preset.Subtitle != "none" && preset.Subtitle != "auto" && preset.Subtitle != "embed" {
+			continue
+		}
+		seen[preset.ID] = true
+		result = append(result, preset)
+		if len(result) == 12 {
+			break
+		}
+	}
+	return result
 }
 
 func parseRateLimitToBytes(valStr string) int64 {

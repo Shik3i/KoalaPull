@@ -30,6 +30,32 @@ func init() {
 	}
 }
 
+func TestValidateSettingsKeepsQoLFieldsSafe(t *testing.T) {
+	tmp := t.TempDir()
+	s := validateSettings(Settings{
+		DefaultOutputDir: tmp,
+		Theme:            "system",
+		RecentOutputDirs: []string{tmp, tmp, "/"},
+		SavedPresets: []SavedPreset{
+			{ID: "audio", Name: "My MP3", FormatID: "bestaudio/best", Container: "mp3", Subtitle: "none"},
+			{ID: "bad", Name: "Bad", FormatID: "best", Container: "exe", Subtitle: "none"},
+		},
+		LastfmUsername: strings.Repeat("u", 80),
+	})
+	if s.Theme != "system" {
+		t.Fatalf("theme = %q", s.Theme)
+	}
+	if len(s.RecentOutputDirs) != 1 || s.RecentOutputDirs[0] != tmp {
+		t.Fatalf("recent dirs = %#v", s.RecentOutputDirs)
+	}
+	if len(s.SavedPresets) != 1 || s.SavedPresets[0].ID != "audio" {
+		t.Fatalf("saved presets = %#v", s.SavedPresets)
+	}
+	if len(s.LastfmUsername) != 64 {
+		t.Fatalf("Last.fm username length = %d", len(s.LastfmUsername))
+	}
+}
+
 func runHelperProcess() {
 	switch os.Getenv("KOALAPULL_HELPER_MODE") {
 	case "sleep-json":

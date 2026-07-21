@@ -36,6 +36,7 @@
     "clear": "Zurücksetzen",
     "updating": "Wird aktualisiert...",
     "cancel": "Abbrechen",
+    "continue": "Fortfahren",
     "openOutputFolder": "Zielordner öffnen",
     "deleteEntry": "Eintrag löschen",
     "useAgain": "URL erneut verwenden",
@@ -47,7 +48,8 @@
     "loading": "Wird geladen...",
     "unavailable": "Nicht verfügbar",
     "currentVersion": "(aktuell: {version})",
-    "untitled": "Ohne Titel"
+    "untitled": "Ohne Titel",
+    "confirmTitle": "Aktion bestätigen"
   },
   "downloads": {
     "urlPlaceholder": "Füge eine Video- oder Playlist-URL ein...",
@@ -74,6 +76,7 @@
     "dropToImport": "URL ablegen zum Importieren & Abrufen",
     "singleTab": "Einzelne URL",
     "batchTab": "Batch-Import",
+    "lastfmTab": "Last.fm-Musik",
     "batchPlaceholder": "Füge URLs hier ein (eine pro Zeile)...",
     "batchDuplicateWarning": "{count} URL(s) sind bereits in Warteschlange oder Verlauf. Trotzdem fortfahren?",
     "duplicateWarningIntro": "Diese URL existiert bereits in KoalaPull.",
@@ -159,8 +162,19 @@
     "ffmpegPathDescription": "Leer lassen, um das mitgelieferte ffmpeg zu verwenden. Gib einen benutzerdefinierten ffmpeg-Pfad an, um zu überschreiben.",
     "ffmpegPathPlaceholder": "Pfad zur ffmpeg-Datei...",
     "sponsorBlockTitle": "SponsorBlock-Integration",
-    "sponsorBlockDescription": "Sponsor-Segmente, Intros, Outros und Werbung in YouTube-Videos automatisch überspringen"
+    "sponsorBlockDescription": "Sponsor-Segmente, Intros, Outros und Werbung in YouTube-Videos automatisch überspringen",
+    "notificationsTitle": "Desktop-Benachrichtigungen", "notificationsDescription": "Eine dezente Meldung anzeigen, wenn ein Download abgeschlossen ist oder fehlschlägt.",
+    "transferTitle": "Import und Export", "transferDescription": "Geprüfte App-Einstellungen sichern oder übertragen. Temporäre Browser-Cookie-Daten werden ausgeschlossen.",
+    "export": "Exportieren", "import": "Importieren", "recentFolders": "Zuletzt verwendete Download-Ordner", "chooseRecentFolder": "Letzten Ordner auswählen"
   },
+  "presets": {"saved": "Gespeicherte Profile", "choose": "Profil auswählen...", "name": "Profilname", "saveCurrent": "Aktuelle Auswahl speichern", "deleteLast": "Neuestes löschen"},
+  "lastfm": {
+    "title": "Musik aus Last.fm importieren", "description": "Hörverlauf laden, alle Titel prüfen und ausgewählte Titel mit verfügbaren Quellen abgleichen. KoalaPull lädt nie unbemerkt herunter.",
+    "username": "Last.fm-Benutzername", "apiKey": "Last.fm-API-Schlüssel", "source": "Musikquelle", "period": "Zeitraum", "topTracks": "Top-Titel", "lovedTracks": "Lieblingstitel", "recentTracks": "Zuletzt gehört",
+    "week": "Letzte 7 Tage", "month": "Letzter Monat", "year": "Letztes Jahr", "overall": "Gesamter Zeitraum", "load": "Titel laden", "selected": "{count} Titel ausgewählt", "selectAll": "Alle auswählen", "selectNone": "Auswahl aufheben", "plays": "{count} Wiedergaben",
+    "reviewNotice": "Treffer vor dem Download prüfen. Nur Medien speichern, für die eine Berechtigung besteht. Last.fm liefert Metadaten, keine Musikdateien.", "matching": "Treffer {done} von {total}...", "stage": "Abgleichen und als MP3-Batch prüfen"
+  },
+  "notifications": {"completed": "{title} wurde erfolgreich heruntergeladen.", "failed": "{title} konnte nicht heruntergeladen werden."},
   "updates": {
     "koalaAvailable": "KoalaPull {version} verfügbar",
     "koalaCurrent": "KoalaPull ist aktuell ({version})",

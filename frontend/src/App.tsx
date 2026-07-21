@@ -24,6 +24,7 @@ import { DownloadsTab, type VideoMetadata, type QueueItem } from './components/D
 import { HistoryTab } from './components/HistoryTab'
 import { HelpTab } from './components/HelpTab'
 import { SettingsTab, type DownloadPreset, type LanguageCode, type AppSettings, type VersionInfo, type UpdateInfo } from './components/SettingsTab'
+import { ConfirmDialog } from './components/ConfirmDialog'
 
 interface FormatInfo {
   formatId: string; ext: string; width: number; height: number
@@ -72,6 +73,11 @@ const defaultAppSettings: AppSettings = {
   customArgs: '',
   ffmpegPath: '',
   sponsorBlockEnabled: false,
+  notificationsEnabled: false,
+  recentOutputDirs: [],
+  savedPresets: [],
+  lastfmApiKey: '',
+  lastfmUsername: '',
 }
 
 const downloadPresetOptions: Array<{ value: DownloadPreset; label: string; description: string }> = [
@@ -112,6 +118,11 @@ function normalizeAppSettings(settings: main.Settings): AppSettings {
     customArgs: settings.customArgs || '',
     ffmpegPath: settings.ffmpegPath || '',
     sponsorBlockEnabled: !!settings.sponsorBlockEnabled,
+    notificationsEnabled: !!settings.notificationsEnabled,
+    recentOutputDirs: settings.recentOutputDirs || [],
+    savedPresets: settings.savedPresets || [],
+    lastfmApiKey: settings.lastfmApiKey || '',
+    lastfmUsername: settings.lastfmUsername || '',
   }
 }
 
@@ -336,7 +347,7 @@ function App() {
   const historyRequestIdRef = useRef(0)
   const [activeTab, setActiveTab] = useState<Tab>('downloads')
   const [url, setUrl] = useState('')
-  const [downloadMode, setDownloadMode] = useState<'single' | 'batch'>('single')
+  const [downloadMode, setDownloadMode] = useState<'single' | 'batch' | 'lastfm'>('single')
   const [batchUrls, setBatchUrls] = useState('')
   const [batchAdding, setBatchAdding] = useState(false)
   const lastFetchedUrlRef = useRef<string>('')
@@ -402,12 +413,19 @@ function App() {
   const [customArgs, setCustomArgs] = useState(defaultAppSettings.customArgs)
   const [ffmpegPath, setFfmpegPath] = useState(defaultAppSettings.ffmpegPath)
   const [sponsorBlockEnabled, setSponsorBlockEnabled] = useState(defaultAppSettings.sponsorBlockEnabled)
+  const [notificationsEnabled, setNotificationsEnabled] = useState(defaultAppSettings.notificationsEnabled)
+  const [recentOutputDirs, setRecentOutputDirs] = useState<string[]>([])
+  const [savedPresets, setSavedPresets] = useState<AppSettings['savedPresets']>([])
+  const [lastfmApiKey, setLastfmApiKey] = useState('')
+  const [lastfmUsername, setLastfmUsername] = useState('')
   const [dragActive, setDragActive] = useState(false)
   const [showAdvanced, setShowAdvanced] = useState(false)
   const [browserRunning, setBrowserRunning] = useState<boolean>(false)
   const [isCheckingBrowser, setIsCheckingBrowser] = useState<boolean>(false)
   const [browserError, setBrowserError] = useState('')
   const [settingsError, setSettingsError] = useState('')
+  const [confirmDialog, setConfirmDialog] = useState<{ message: string; resolve: (value: boolean) => void } | null>(null)
+  const requestConfirm = useCallback((message: string) => new Promise<boolean>((resolve) => setConfirmDialog({ message, resolve })), [])
 
   const [history, setHistory] = useState<main.HistoryEntryView[]>([])
   const [historySearch, setHistorySearch] = useState('')
@@ -446,12 +464,17 @@ function App() {
     setCustomArgs(settings.customArgs)
     setFfmpegPath(settings.ffmpegPath)
     setSponsorBlockEnabled(settings.sponsorBlockEnabled)
+    setNotificationsEnabled(settings.notificationsEnabled)
+    setRecentOutputDirs(settings.recentOutputDirs)
+    setSavedPresets(settings.savedPresets)
+    setLastfmApiKey(settings.lastfmApiKey)
+    setLastfmUsername(settings.lastfmUsername)
   }, [])
   const settingsWriterRef = useRef<LatestSerializedWriter<AppSettings> | null>(null)
   if (!settingsWriterRef.current) {
-    settingsWriterRef.current = createLatestSerializedWriter(
+    settingsWriterRef.current = createLatestSerializedWriter<AppSettings>(
       defaultAppSettings,
-      UpdateSettings,
+      (settings) => UpdateSettings(settings as unknown as main.Settings),
       (persisted, error) => {
         applySettings(persisted)
         setSettingsError(errorMessage(error))
@@ -584,12 +607,12 @@ function App() {
       const confirmMsg = t('settings.cookiesBrowserRunningWarning') + "\n\n" +
         t('settings.cookiesCloseConfirm', { browser: cookieBrowser })
 
-      if (window.confirm(confirmMsg)) {
+      if (await requestConfirm(confirmMsg)) {
         await KillBrowser(cookieBrowser)
         await new Promise((resolve) => setTimeout(resolve, 1000))
         const stillRunning = await IsBrowserRunning(cookieBrowser)
         if (stillRunning) {
-          alert(t('settings.cookiesCloseFailed'))
+          setBrowserError(t('settings.cookiesCloseFailed'))
           return false
         }
       }
@@ -862,10 +885,10 @@ function App() {
         if (data.status === 'completed') {
           delete progressHistoryRef.current[data.downloadId]
           nextItem = { ...item, title: currentTitle, status: 'completed', progress: 100, errorMsg: data.error || '', playlistStatus: '', outputPath: data.outputPath || item.outputPath }
-          if ('Notification' in window && Notification.permission === 'granted') {
+          if (notificationsEnabled && 'Notification' in window && Notification.permission === 'granted') {
             try {
               new Notification('KoalaPull', {
-                body: `${currentTitle} downloaded successfully!`,
+                body: t('notifications.completed', { title: currentTitle }),
                 icon: item.thumbnail || undefined
               })
             } catch (err) {
@@ -876,6 +899,9 @@ function App() {
           delete progressHistoryRef.current[data.downloadId]
           const msg = data.error || t('errors.downloadFailed')
           nextItem = { ...item, title: currentTitle, status: 'error', progress: 0, speed: '', eta: '', fileSize: '', errorMsg: msg, playlistStatus: '' }
+          if (notificationsEnabled && 'Notification' in window && Notification.permission === 'granted') {
+            try { new Notification('KoalaPull', { body: t('notifications.failed', { title: currentTitle }) }) } catch { /* platform notification failure */ }
+          }
         } else if (data.status === 'cancelled') {
           delete progressHistoryRef.current[data.downloadId]
           nextItem = { ...item, title: currentTitle, status: 'cancelled', progress: 0, speed: '', eta: '', fileSize: '', playlistStatus: '' }
@@ -936,14 +962,14 @@ function App() {
     }
     const offDownloadProgress = EventsOn('download-progress', handleDlProgress)
     return () => { offDownloadProgress() }
-  }, [t])
+  }, [t, notificationsEnabled])
 
   const handleAddToQueue = async () => {
     if (!metadata || addingToQueue) return
     const proceed = await checkBrowserClosedForCookies()
     if (!proceed) return
     const duplicateCounts = countDuplicateUrls(lastFetchedUrlRef.current, queue, history)
-    if ((duplicateCounts.queueCount > 0 || duplicateCounts.historyCount > 0) && !window.confirm(buildDuplicateWarningMessage(t, duplicateCounts.queueCount, duplicateCounts.historyCount))) {
+    if ((duplicateCounts.queueCount > 0 || duplicateCounts.historyCount > 0) && !await requestConfirm(buildDuplicateWarningMessage(t, duplicateCounts.queueCount, duplicateCounts.historyCount))) {
       return
     }
     setAddingToQueue(true)
@@ -1016,7 +1042,7 @@ function App() {
       const duplicateCounts = countDuplicateUrls(targetUrl, queue, history)
       return count + ((duplicateCounts.queueCount > 0 || duplicateCounts.historyCount > 0) ? 1 : 0)
     }, 0)
-    if (duplicateUrlCount > 0 && !window.confirm(t('downloads.batchDuplicateWarning', { count: duplicateUrlCount }))) {
+    if (duplicateUrlCount > 0 && !await requestConfirm(t('downloads.batchDuplicateWarning', { count: duplicateUrlCount }))) {
       setBatchAdding(false)
       return
     }
@@ -1172,10 +1198,34 @@ function App() {
       const dir = await SelectDirectory()
       if (!dir) return
       setDefaultOutputDir(dir)
-      await saveSettings({ defaultOutputDir: dir })
+      const nextRecent = [dir, ...recentOutputDirs.filter((item) => item !== dir)].slice(0, 5)
+      setRecentOutputDirs(nextRecent)
+      await saveSettings({ defaultOutputDir: dir, recentOutputDirs: nextRecent })
     } catch (error) {
       setSettingsError(errorMessage(error))
     }
+  }
+
+  const handleSavePreset = async (name: string) => {
+    const preset = { id: `preset-${Date.now()}`, name, formatId: selectedFormat, container: selectedContainer, subtitle: selectedSubs }
+    const next = [...savedPresets, preset].slice(-12)
+    setSavedPresets(next)
+    await saveSettings({ savedPresets: next })
+  }
+
+  const handleDeletePreset = async (id: string) => {
+    const next = savedPresets.filter((preset) => preset.id !== id)
+    setSavedPresets(next)
+    await saveSettings({ savedPresets: next })
+  }
+
+  const handleApplyPreset = (id: string) => {
+    const preset = savedPresets.find((item) => item.id === id)
+    if (!preset) return
+    setSelectedPreset('custom')
+    setSelectedFormat(preset.formatId)
+    setSelectedContainer(preset.container)
+    setSelectedSubs(preset.subtitle)
   }
 
   const loadHistory = async () => {
@@ -1270,6 +1320,15 @@ function App() {
 
   return (
     <div className="h-screen flex" style={{ background: 'var(--color-surface)', color: 'var(--text-primary)' }}>
+      <ConfirmDialog
+        open={!!confirmDialog}
+        title={t('common.confirmTitle')}
+        message={confirmDialog?.message || ''}
+        confirmLabel={t('actions.continue')}
+        cancelLabel={t('actions.cancel')}
+        onConfirm={() => { confirmDialog?.resolve(true); setConfirmDialog(null) }}
+        onCancel={() => { confirmDialog?.resolve(false); setConfirmDialog(null) }}
+      />
       {dragActive && (
         <div 
           className="absolute inset-0 z-50 flex flex-col items-center justify-center pointer-events-none transition-all duration-200"
@@ -1349,6 +1408,17 @@ function App() {
             handleFetch={handleFetch}
             batchUrls={batchUrls}
             setBatchUrls={setBatchUrls}
+            lastfmUsername={lastfmUsername}
+            lastfmApiKey={lastfmApiKey}
+            onLastfmCredentialsChange={async (username, apiKey) => {
+              setLastfmUsername(username)
+              setLastfmApiKey(apiKey)
+              await saveSettings({ lastfmUsername: username, lastfmApiKey: apiKey })
+            }}
+            savedPresets={savedPresets}
+            onSavePreset={handleSavePreset}
+            onDeletePreset={handleDeletePreset}
+            onApplyPreset={handleApplyPreset}
             selectedPreset={selectedPreset}
             setSelectedPreset={setSelectedPreset}
             selectedFormat={selectedFormat}
@@ -1419,6 +1489,13 @@ function App() {
             handleLanguageChange={handleLanguageChange}
             defaultOutputDir={defaultOutputDir}
             handleChangeFolder={handleChangeFolder}
+            recentOutputDirs={recentOutputDirs}
+            handleSelectRecentFolder={(path) => {
+              setDefaultOutputDir(path)
+              const next = [path, ...recentOutputDirs.filter((item) => item !== path)]
+              setRecentOutputDirs(next)
+              void saveSettings({ defaultOutputDir: path, recentOutputDirs: next })
+            }}
             autoPasteEnabled={autoPasteEnabled}
             setAutoPasteEnabled={setAutoPasteEnabled}
             rateLimitEnabled={rateLimitEnabled}
@@ -1427,6 +1504,13 @@ function App() {
             setRateLimitValue={setRateLimitValue}
             sponsorBlockEnabled={sponsorBlockEnabled}
             setSponsorBlockEnabled={setSponsorBlockEnabled}
+            notificationsEnabled={notificationsEnabled}
+            setNotificationsEnabled={setNotificationsEnabled}
+            applyImportedSettings={(settings) => {
+              const normalized = normalizeAppSettings(settings)
+              settingsWriterRef.current?.initialize(normalized)
+              applySettings(normalized)
+            }}
             maxConcurrency={maxConcurrency}
             setMaxConcurrency={setMaxConcurrency}
             cookieSource={cookieSource}

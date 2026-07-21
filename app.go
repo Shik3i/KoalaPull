@@ -111,27 +111,47 @@ type DownloadProgress struct {
 }
 
 type Settings struct {
-	DefaultOutputDir    string `json:"defaultOutputDir"`
-	Theme               string `json:"theme"`
-	MaxConcurrency      int    `json:"maxConcurrency"`
-	AutoPasteURL        bool   `json:"autoPasteURL"`
-	Language            string `json:"language"`
-	DownloadPreset      string `json:"downloadPreset"`
-	CustomFormatID      string `json:"customFormatId"`
-	CustomContainer     string `json:"customContainer"`
-	CustomSubtitle      string `json:"customSubtitle"`
-	CookieSource        string `json:"cookieSource"`
-	CookieBrowser       string `json:"cookieBrowser"`
-	CookieFilePath      string `json:"cookieFilePath"`
-	CookieCachePath     string `json:"cookieCachePath"`
-	CookieCacheBrowser  string `json:"cookieCacheBrowser"`
-	CookieCacheUpdated  string `json:"cookieCacheUpdated"`
-	RateLimitEnabled    bool   `json:"rateLimitEnabled"`
-	RateLimitValue      string `json:"rateLimitValue"`
-	SafeModeEnabled     bool   `json:"safeModeEnabled"`
-	CustomArgs          string `json:"customArgs"`
-	FfmpegPath          string `json:"ffmpegPath"`
-	SponsorBlockEnabled bool   `json:"sponsorBlockEnabled"`
+	DefaultOutputDir     string        `json:"defaultOutputDir"`
+	Theme                string        `json:"theme"`
+	MaxConcurrency       int           `json:"maxConcurrency"`
+	AutoPasteURL         bool          `json:"autoPasteURL"`
+	Language             string        `json:"language"`
+	DownloadPreset       string        `json:"downloadPreset"`
+	CustomFormatID       string        `json:"customFormatId"`
+	CustomContainer      string        `json:"customContainer"`
+	CustomSubtitle       string        `json:"customSubtitle"`
+	CookieSource         string        `json:"cookieSource"`
+	CookieBrowser        string        `json:"cookieBrowser"`
+	CookieFilePath       string        `json:"cookieFilePath"`
+	CookieCachePath      string        `json:"cookieCachePath"`
+	CookieCacheBrowser   string        `json:"cookieCacheBrowser"`
+	CookieCacheUpdated   string        `json:"cookieCacheUpdated"`
+	RateLimitEnabled     bool          `json:"rateLimitEnabled"`
+	RateLimitValue       string        `json:"rateLimitValue"`
+	SafeModeEnabled      bool          `json:"safeModeEnabled"`
+	CustomArgs           string        `json:"customArgs"`
+	FfmpegPath           string        `json:"ffmpegPath"`
+	SponsorBlockEnabled  bool          `json:"sponsorBlockEnabled"`
+	NotificationsEnabled bool          `json:"notificationsEnabled"`
+	RecentOutputDirs     []string      `json:"recentOutputDirs,omitempty"`
+	SavedPresets         []SavedPreset `json:"savedPresets,omitempty"`
+	LastfmAPIKey         string        `json:"lastfmApiKey,omitempty"`
+	LastfmUsername       string        `json:"lastfmUsername,omitempty"`
+}
+
+type SavedPreset struct {
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	FormatID  string `json:"formatId"`
+	Container string `json:"container"`
+	Subtitle  string `json:"subtitle"`
+}
+
+type LastfmTrack struct {
+	Artist string `json:"artist"`
+	Title  string `json:"title"`
+	URL    string `json:"url,omitempty"`
+	Plays  int    `json:"plays,omitempty"`
 }
 
 type HistoryEntry struct {

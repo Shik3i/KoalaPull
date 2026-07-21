@@ -16,6 +16,10 @@ export function DeleteHistoryEntry(arg1:string):Promise<void>;
 
 export function DownloadDependencies():Promise<void>;
 
+export function ExportSettings():Promise<string>;
+
+export function FetchLastfmTracks(arg1:string,arg2:string,arg3:string,arg4:string,arg5:number):Promise<Array<main.LastfmTrack>>;
+
 export function FetchMetadata(arg1:string):Promise<main.VideoMetadata>;
 
 export function GetAppVersion():Promise<string>;
@@ -30,6 +34,8 @@ export function GetVersionInfo():Promise<main.VersionInfo>;
 
 export function GetYtdlpVersion():Promise<string>;
 
+export function ImportSettings():Promise<main.Settings>;
+
 export function IsBrowserRunning(arg1:string):Promise<boolean>;
 
 export function KillBrowser(arg1:string):Promise<void>;
@@ -43,6 +49,8 @@ export function OpenOutputDir(arg1:string):Promise<void>;
 export function PauseDownload(arg1:string):Promise<void>;
 
 export function PlayFile(arg1:string):Promise<void>;
+
+export function ResolveMusicTrack(arg1:string,arg2:string):Promise<string>;
 
 export function ResumeDownload(arg1:string):Promise<void>;
 
