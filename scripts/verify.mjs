@@ -64,6 +64,17 @@ function commandWorks(name, args = ["--version"]) {
 
 const runWailsBuild = process.env.KOALAPULL_VERIFY_WAILS_BUILD !== "0"
 
+const goVersion = output("go", ["version"])
+const goVersionMatch = goVersion.match(/go(\d+)\.(\d+)\.(\d+)/)
+const goVersionParts = goVersionMatch?.slice(1).map(Number) ?? []
+const goVersionSupported = goVersionParts[0] > 1
+  || (goVersionParts[0] === 1 && goVersionParts[1] > 26)
+  || (goVersionParts[0] === 1 && goVersionParts[1] === 26 && goVersionParts[2] >= 5)
+if (!goVersionSupported) {
+  console.error(`Go 1.26.5 or newer required; found ${goVersion || "unknown"}.`)
+  process.exit(1)
+}
+
 run("npm", ["ci", "--include=optional"], { cwd: frontendDir })
 run("npm", ["run", "test"], { cwd: frontendDir })
 run("npx", ["tsc", "--noEmit"], { cwd: frontendDir })

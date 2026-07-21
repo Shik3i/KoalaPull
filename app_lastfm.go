@@ -13,7 +13,7 @@ import (
 	"time"
 )
 
-const lastfmEndpoint = "https://ws.audioscrobbler.com/2.0/"
+var lastfmEndpoint = "https://ws.audioscrobbler.com/2.0/"
 
 type lastfmTrackPayload struct {
 	Name      string `json:"name"`
@@ -62,18 +62,26 @@ func (a *App) FetchLastfmTracks(username, apiKey, source, period string, limit i
 		"method": {method}, "user": {username}, "api_key": {apiKey},
 		"format": {"json"}, "limit": {strconv.Itoa(limit)}, "period": {period},
 	}
+	if source == "recent" && period != "overall" {
+		days := map[string]int{"7day": 7, "1month": 30, "3month": 90, "6month": 180, "12month": 365}[period]
+		params.Set("from", strconv.FormatInt(time.Now().AddDate(0, 0, -days).Unix(), 10))
+	}
 	ctx, cancel := context.WithTimeout(a.appContext(), 15*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, lastfmEndpoint+"?"+params.Encode(), nil)
 	if err != nil {
 		return nil, err
 	}
+	req.Header.Set("User-Agent", "KoalaPull/"+AppVersion+" (https://github.com/Shik3i/KoalaPull)")
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("Last.fm request failed: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
+		if resp.StatusCode == http.StatusForbidden {
+			return nil, errors.New("invalid Last.fm API key")
+		}
 		return nil, fmt.Errorf("Last.fm returned HTTP %d", resp.StatusCode)
 	}
 	var payload lastfmResponse
@@ -82,6 +90,15 @@ func (a *App) FetchLastfmTracks(username, apiKey, source, period string, limit i
 		return nil, fmt.Errorf("parse Last.fm response: %w", err)
 	}
 	if payload.Error != 0 {
+		if payload.Error == 10 || payload.Error == 26 {
+			return nil, errors.New("invalid or suspended Last.fm API key")
+		}
+		if payload.Error == 6 || payload.Error == 17 {
+			return nil, errors.New("Last.fm user not found or unavailable")
+		}
+		if payload.Error == 29 {
+			return nil, errors.New("Last.fm rate limit reached; try again later")
+		}
 		return nil, fmt.Errorf("Last.fm: %s", payload.Message)
 	}
 	tracks := payload.TopTracks.Track
@@ -160,8 +177,8 @@ func (a *App) ResolveMusicTracks(jobID string, tracks []LastfmTrack) ([]MusicMat
 	if jobID == "" || len(jobID) > 128 {
 		return nil, errors.New("music match job ID is required")
 	}
-	if len(tracks) == 0 || len(tracks) > 25 {
-		return nil, errors.New("select between 1 and 25 tracks")
+	if len(tracks) == 0 || len(tracks) > 50 {
+		return nil, errors.New("select between 1 and 50 tracks")
 	}
 	ctx, cancel := context.WithCancel(a.appContext())
 	a.musicMatchMu.Lock()

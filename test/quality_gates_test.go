@@ -190,7 +190,7 @@ func TestWorkflowsUsePatchedToolchains(t *testing.T) {
 	for _, wf := range []string{"release.yml", "ci.yml"} {
 		data := mustReadRepoFile(t, ".github", "workflows", wf)
 		for _, want := range []string{
-			"go-version: \"1.26.4\"",
+			"go-version: \"1.26.5\"",
 			"node-version: \"22\"",
 		} {
 			if !strings.Contains(data, want) {
@@ -225,8 +225,8 @@ func TestWorkflowsUseNode24ActionGenerations(t *testing.T) {
 
 func TestGoModuleRequiresPatchedToolchain(t *testing.T) {
 	data := mustReadRepoFile(t, "go.mod")
-	if !strings.Contains(data, "go 1.26.4") {
-		t.Fatal("go.mod must require patched Go 1.26.4 or newer")
+	if !strings.Contains(data, "go 1.26.5") {
+		t.Fatal("go.mod must require patched Go 1.26.5 or newer")
 	}
 }
 

@@ -16,6 +16,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -64,7 +65,88 @@ func TestResolveMusicTracksRejectsInvalidJobs(t *testing.T) {
 	if _, err := app.ResolveMusicTracks("job", nil); err == nil {
 		t.Fatal("empty track selection accepted")
 	}
+	if _, err := app.ResolveMusicTracks("job", make([]LastfmTrack, 51)); err == nil {
+		t.Fatal("oversized track selection accepted")
+	}
 	app.CancelMusicMatching("missing-job")
+}
+
+func TestFetchLastfmTracksUsesRangeLimitUserAgentAndDeduplicates(t *testing.T) {
+	originalEndpoint := lastfmEndpoint
+	defer func() { lastfmEndpoint = originalEndpoint }()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		query := req.URL.Query()
+		if query.Get("method") != "user.getrecenttracks" || query.Get("limit") != "50" {
+			t.Errorf("unexpected query: %s", req.URL.RawQuery)
+		}
+		from, err := strconv.ParseInt(query.Get("from"), 10, 64)
+		if err != nil || from > time.Now().AddDate(0, 0, -89).Unix() || from < time.Now().AddDate(0, 0, -91).Unix() {
+			t.Errorf("unexpected 3-month range: %q", query.Get("from"))
+		}
+		if !strings.HasPrefix(req.UserAgent(), "KoalaPull/") {
+			t.Errorf("user agent = %q", req.UserAgent())
+		}
+		_, _ = io.WriteString(w, `{"recenttracks":{"track":[{"name":"Song","artist":{"#text":"Artist"}},{"name":"song","artist":{"#text":"artist"}}]}}`)
+	}))
+	defer server.Close()
+	lastfmEndpoint = server.URL + "/"
+
+	tracks, err := NewApp().FetchLastfmTracks("listener", "api-key", "recent", "3month", 50)
+	if err != nil {
+		t.Fatalf("FetchLastfmTracks: %v", err)
+	}
+	if len(tracks) != 1 || tracks[0].Artist != "Artist" || tracks[0].Title != "Song" {
+		t.Fatalf("tracks = %#v", tracks)
+	}
+}
+
+func TestFetchLastfmTracksExplainsCredentialErrors(t *testing.T) {
+	originalEndpoint := lastfmEndpoint
+	defer func() { lastfmEndpoint = originalEndpoint }()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = io.WriteString(w, `{"error":10,"message":"Invalid API key"}`)
+	}))
+	defer server.Close()
+	lastfmEndpoint = server.URL + "/"
+
+	_, err := NewApp().FetchLastfmTracks("listener", "bad-key", "top", "1month", 25)
+	if err == nil || !strings.Contains(err.Error(), "API key") {
+		t.Fatalf("error = %v", err)
+	}
+}
+
+func TestResolveMusicTracksCanBeCancelled(t *testing.T) {
+	binDir := installFakeYtDlp(t)
+	app := NewApp()
+	app.ctx = context.Background()
+	app.binDir = binDir
+	t.Setenv("KOALAPULL_HELPER_MODE", "sleep-json")
+	t.Setenv("KOALAPULL_HELPER_DELAY_MS", "2000")
+
+	done := make(chan []MusicMatchResult, 1)
+	go func() {
+		results, _ := app.ResolveMusicTracks("cancel-job", []LastfmTrack{{Artist: "Artist", Title: "Song"}})
+		done <- results
+	}()
+	deadline := time.Now().Add(time.Second)
+	for {
+		app.musicMatchMu.Lock()
+		_, running := app.musicMatchJobs["cancel-job"]
+		app.musicMatchMu.Unlock()
+		if running || time.Now().After(deadline) {
+			break
+		}
+		time.Sleep(time.Millisecond)
+	}
+	app.CancelMusicMatching("cancel-job")
+	select {
+	case results := <-done:
+		if len(results) != 1 || results[0].Error == "" {
+			t.Fatalf("cancelled results = %#v", results)
+		}
+	case <-time.After(time.Second):
+		t.Fatal("music matching did not stop after cancellation")
+	}
 }
 
 func TestLastfmExternalLinksAreNarrowlyAllowed(t *testing.T) {

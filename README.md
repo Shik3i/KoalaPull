@@ -10,6 +10,7 @@ It downloads videos, audio, playlists, subtitles, and metadata from hundreds of 
 - Direct engine updates: update or re-install `yt-dlp` and `ffmpeg` from the Settings tab.
 - Cross-platform UI: built with Go, React, and Wails for macOS, Windows, and Linux.
 - Metadata preview: inspect thumbnails, uploader data, duration, and formats before downloading.
+- Last.fm music import: load public listening history with your own API key, review source matches, and stage selected MP3 downloads.
 - Queue and presets: parallel downloads, presets, subtitle options, and history built in.
 - Privacy-first: local-first workflow, no telemetry, no tracking, no external CDN requirement.
 
@@ -30,7 +31,7 @@ Current packaged targets:
 
 Requirements:
 
-- Go 1.26.4 or newer
+- Go 1.26.5 or newer
 - Node.js 22 or newer
 - Wails CLI v2.12.0 or newer
 - Linux only: `libgtk-3-dev`, `libwebkit2gtk-4.1-dev`, `pkg-config`
