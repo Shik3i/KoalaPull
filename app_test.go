@@ -56,6 +56,17 @@ func TestValidateSettingsKeepsQoLFieldsSafe(t *testing.T) {
 	}
 }
 
+func TestResolveMusicTracksRejectsInvalidJobs(t *testing.T) {
+	app := NewApp()
+	if _, err := app.ResolveMusicTracks("", []LastfmTrack{{Artist: "Artist", Title: "Track"}}); err == nil {
+		t.Fatal("empty job ID accepted")
+	}
+	if _, err := app.ResolveMusicTracks("job", nil); err == nil {
+		t.Fatal("empty track selection accepted")
+	}
+	app.CancelMusicMatching("missing-job")
+}
+
 func runHelperProcess() {
 	switch os.Getenv("KOALAPULL_HELPER_MODE") {
 	case "sleep-json":

@@ -163,8 +163,8 @@
     "ffmpegPathPlaceholder": "Chemin vers l'exécutable ffmpeg...",
     "sponsorBlockTitle": "Intégration SponsorBlock",
     "sponsorBlockDescription": "Passer automatiquement les segments de sponsor, intros, outros et pubs dans les vidéos YouTube",
-    "notificationsTitle": "Notifications du bureau", "notificationsDescription": "Afficher une notification discrète lorsqu'un téléchargement réussit ou échoue.",
-    "transferTitle": "Importer et exporter", "transferDescription": "Sauvegarder ou transférer des réglages validés. Les cookies temporaires du navigateur sont exclus.",
+    "notificationsTitle": "Notifications du bureau", "notificationsDescription": "Afficher une notification discrète lorsqu'un téléchargement réussit ou échoue.", "notificationsDenied": "Les notifications sont bloquées par le système ou le navigateur. Autorisez-les avant de les activer.", "notificationsUnavailable": "Les notifications du bureau ne sont pas disponibles sur ce système.",
+    "transferTitle": "Importer et exporter", "transferDescription": "Sauvegarder ou transférer des réglages validés. Les identifiants, chemins de cookies et arguments personnalisés sont exclus.",
     "export": "Exporter", "import": "Importer", "recentFolders": "Dossiers de téléchargement récents", "chooseRecentFolder": "Choisir un dossier récent"
   },
   "presets": {"saved": "Profils enregistrés", "choose": "Choisir un profil...", "name": "Nom du profil", "saveCurrent": "Enregistrer la sélection", "deleteLast": "Supprimer le dernier"},
@@ -172,7 +172,7 @@
     "title": "Importer de la musique depuis Last.fm", "description": "Chargez l'historique d'écoute, vérifiez chaque titre, puis associez les titres choisis à des sources disponibles. KoalaPull ne télécharge jamais silencieusement.",
     "username": "Nom d'utilisateur Last.fm", "apiKey": "Clé API Last.fm", "source": "Source musicale", "period": "Période", "topTracks": "Titres les plus écoutés", "lovedTracks": "Titres favoris", "recentTracks": "Écoutes récentes",
     "week": "7 derniers jours", "month": "Mois dernier", "year": "Année dernière", "overall": "Depuis toujours", "load": "Charger les titres", "selected": "{count} titres sélectionnés", "selectAll": "Tout sélectionner", "selectNone": "Tout désélectionner", "plays": "{count} écoutes",
-    "reviewNotice": "Vérifiez les correspondances avant téléchargement. Ne sauvegardez que les médias autorisés. Last.fm fournit des métadonnées, pas les fichiers musicaux.", "matching": "Association {done} sur {total}...", "stage": "Associer et vérifier en lot MP3"
+    "reviewNotice": "Vérifiez les correspondances avant téléchargement. Ne sauvegardez que les médias autorisés. Last.fm fournit des métadonnées, pas les fichiers musicaux.", "matching": "Association de {total} titres...", "stage": "Associer les titres sélectionnés", "empty": "Aucun titre trouvé pour cette source et cette période.", "matchSummary": "{matched} associés · {failed} échecs", "showFailures": "Afficher les titres en échec", "reviewMatches": "Vérifier {count} résultats en lot MP3"
   },
   "notifications": {"completed": "{title} a été téléchargé.", "failed": "Échec du téléchargement de {title}."},
   "updates": {

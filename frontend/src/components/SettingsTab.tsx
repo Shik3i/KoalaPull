@@ -5,7 +5,6 @@ import {
   OpenExternalLink,
   UpdateDependencies,
   ExportSettings,
-  ImportSettings,
 } from '../../wailsjs/go/main/App'
 import type { main } from '../../wailsjs/go/models'
 
@@ -77,8 +76,8 @@ interface SettingsTabProps {
   sponsorBlockEnabled: boolean
   setSponsorBlockEnabled: (val: boolean) => void
   notificationsEnabled: boolean
-  setNotificationsEnabled: (val: boolean) => void
-  applyImportedSettings: (settings: main.Settings) => void
+  handleNotificationsChange: (val: boolean) => Promise<void>
+  handleImportSettings: () => Promise<void>
   maxConcurrency: number
   setMaxConcurrency: (val: number) => void
   cookieSource: 'none' | 'browser' | 'file'
@@ -146,8 +145,8 @@ export function SettingsTab({
   sponsorBlockEnabled,
   setSponsorBlockEnabled,
   notificationsEnabled,
-  setNotificationsEnabled,
-  applyImportedSettings,
+  handleNotificationsChange,
+  handleImportSettings,
   maxConcurrency,
   setMaxConcurrency,
   cookieSource,
@@ -224,10 +223,7 @@ export function SettingsTab({
               role="switch"
               aria-checked={notificationsEnabled}
               onClick={async () => {
-                const next = !notificationsEnabled
-                if (next && 'Notification' in window && Notification.permission === 'default') await Notification.requestPermission()
-                setNotificationsEnabled(next)
-                await saveSettings({ notificationsEnabled: next })
+                try { await handleNotificationsChange(!notificationsEnabled) } catch { /* settings error shown above */ }
               }}
               className="relative w-10 h-5 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               style={{ background: notificationsEnabled ? 'var(--color-accent)' : 'var(--color-surface-border)' }}
@@ -242,8 +238,7 @@ export function SettingsTab({
               <button className="btn-primary text-xs px-3 py-1.5" onClick={() => ExportSettings().catch((error) => setUpdatesError(String(error)))}>{t('settings.export')}</button>
               <button className="text-xs px-3 py-1.5 rounded-md border" style={{ borderColor: 'var(--color-surface-border)' }} onClick={async () => {
                 try {
-                  const imported = await ImportSettings()
-                  applyImportedSettings(imported)
+                  await handleImportSettings()
                 } catch (error) { setUpdatesError(String(error)) }
               }}>{t('settings.import')}</button>
             </div>

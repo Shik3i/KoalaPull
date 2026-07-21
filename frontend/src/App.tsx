@@ -9,6 +9,7 @@ import {
   UpdateDependencies, OpenOutputDir, CheckForUpdates, OpenExternalLink,
   SelectCookieFile, IsBrowserRunning, KillBrowser, OpenBinDir, SelectFfmpegPath,
   PlayFile, ShowFileInFolder, BrowserCookieCacheAvailable,
+  ImportSettings,
 } from "../wailsjs/go/main/App"
 import { EventsOn, ClipboardGetText } from "../wailsjs/runtime/runtime"
 import type { main } from "../wailsjs/go/models"
@@ -96,6 +97,7 @@ function isCookieSource(value: string): value is AppSettings['cookieSource'] {
 }
 
 function normalizeAppSettings(settings: main.Settings): AppSettings {
+  const notificationsAllowed = typeof Notification !== 'undefined' && Notification.permission === 'granted'
   return {
     defaultOutputDir: settings.defaultOutputDir || '',
     theme: settings.theme || 'dark',
@@ -118,7 +120,7 @@ function normalizeAppSettings(settings: main.Settings): AppSettings {
     customArgs: settings.customArgs || '',
     ffmpegPath: settings.ffmpegPath || '',
     sponsorBlockEnabled: !!settings.sponsorBlockEnabled,
-    notificationsEnabled: !!settings.notificationsEnabled,
+    notificationsEnabled: !!settings.notificationsEnabled && notificationsAllowed,
     recentOutputDirs: settings.recentOutputDirs || [],
     savedPresets: settings.savedPresets || [],
     lastfmApiKey: settings.lastfmApiKey || '',
@@ -425,7 +427,21 @@ function App() {
   const [browserError, setBrowserError] = useState('')
   const [settingsError, setSettingsError] = useState('')
   const [confirmDialog, setConfirmDialog] = useState<{ message: string; resolve: (value: boolean) => void } | null>(null)
-  const requestConfirm = useCallback((message: string) => new Promise<boolean>((resolve) => setConfirmDialog({ message, resolve })), [])
+  const confirmDialogRef = useRef<{ message: string; resolve: (value: boolean) => void } | null>(null)
+  const requestConfirm = useCallback((message: string) => {
+    if (confirmDialogRef.current) return Promise.resolve(false)
+    return new Promise<boolean>((resolve) => {
+      const request = { message, resolve }
+      confirmDialogRef.current = request
+      setConfirmDialog(request)
+    })
+  }, [])
+  const settleConfirm = useCallback((result: boolean) => {
+    const request = confirmDialogRef.current
+    confirmDialogRef.current = null
+    setConfirmDialog(null)
+    request?.resolve(result)
+  }, [])
 
   const [history, setHistory] = useState<main.HistoryEntryView[]>([])
   const [historySearch, setHistorySearch] = useState('')
@@ -525,11 +541,7 @@ function App() {
     fmtTimeRef.current.clear()
   }, [language])
 
-  useEffect(() => {
-    if ('Notification' in window && Notification.permission === 'default') {
-      void Notification.requestPermission()
-    }
-  }, [])
+  useEffect(() => () => settleConfirm(false), [settleConfirm])
 
   useEffect(() => {
     let cancelled = false
@@ -1283,6 +1295,24 @@ function App() {
     } catch (err) { console.warn('handleLanguageChange failed:', err) }
   }
 
+  const handleNotificationsChange = async (next: boolean) => {
+    if (next) {
+      if (!('Notification' in window)) {
+        setSettingsError(t('settings.notificationsUnavailable'))
+        setNotificationsEnabled(false)
+        return
+      }
+      const permission = Notification.permission === 'default' ? await Notification.requestPermission() : Notification.permission
+      if (permission !== 'granted') {
+        setSettingsError(t('settings.notificationsDenied'))
+        setNotificationsEnabled(false)
+        return
+      }
+    }
+    setNotificationsEnabled(next)
+    await saveSettings({ notificationsEnabled: next })
+  }
+
   const handleTabSwitch = (tab: Tab) => {
     setActiveTab(tab)
     if (tab === 'history') loadHistory()
@@ -1326,8 +1356,8 @@ function App() {
         message={confirmDialog?.message || ''}
         confirmLabel={t('actions.continue')}
         cancelLabel={t('actions.cancel')}
-        onConfirm={() => { confirmDialog?.resolve(true); setConfirmDialog(null) }}
-        onCancel={() => { confirmDialog?.resolve(false); setConfirmDialog(null) }}
+        onConfirm={() => settleConfirm(true)}
+        onCancel={() => settleConfirm(false)}
       />
       {dragActive && (
         <div 
@@ -1505,10 +1535,12 @@ function App() {
             sponsorBlockEnabled={sponsorBlockEnabled}
             setSponsorBlockEnabled={setSponsorBlockEnabled}
             notificationsEnabled={notificationsEnabled}
-            setNotificationsEnabled={setNotificationsEnabled}
-            applyImportedSettings={(settings) => {
-              const normalized = normalizeAppSettings(settings)
-              settingsWriterRef.current?.initialize(normalized)
+            handleNotificationsChange={handleNotificationsChange}
+            handleImportSettings={async () => {
+              await settingsWriterRef.current!.flush()
+              const imported = await ImportSettings()
+              const normalized = normalizeAppSettings(imported)
+              settingsWriterRef.current!.rebase(normalized)
               applySettings(normalized)
             }}
             maxConcurrency={maxConcurrency}

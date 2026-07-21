@@ -6,6 +6,8 @@ export function BrowserCookieCacheAvailable(arg1:string):Promise<boolean>;
 
 export function CancelDownload(arg1:string):Promise<void>;
 
+export function CancelMusicMatching(arg1:string):Promise<void>;
+
 export function CheckDependencies():Promise<main.DependencyStatus>;
 
 export function CheckForUpdates():Promise<main.UpdateInfo>;
@@ -51,6 +53,8 @@ export function PauseDownload(arg1:string):Promise<void>;
 export function PlayFile(arg1:string):Promise<void>;
 
 export function ResolveMusicTrack(arg1:string,arg2:string):Promise<string>;
+
+export function ResolveMusicTracks(arg1:string,arg2:Array<main.LastfmTrack>):Promise<Array<main.MusicMatchResult>>;
 
 export function ResumeDownload(arg1:string):Promise<void>;
 

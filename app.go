@@ -45,6 +45,8 @@ type App struct {
 	historyCache     []HistoryEntry
 	historyLoaded    bool
 	cachedSettings   Settings
+	musicMatchMu     sync.Mutex
+	musicMatchJobs   map[string]context.CancelFunc
 }
 
 type activeDownload struct {
@@ -152,6 +154,13 @@ type LastfmTrack struct {
 	Title  string `json:"title"`
 	URL    string `json:"url,omitempty"`
 	Plays  int    `json:"plays,omitempty"`
+}
+
+type MusicMatchResult struct {
+	Artist string `json:"artist"`
+	Title  string `json:"title"`
+	URL    string `json:"url,omitempty"`
+	Error  string `json:"error,omitempty"`
 }
 
 type HistoryEntry struct {
@@ -263,6 +272,7 @@ func NewApp() *App {
 	a := &App{
 		activeDownloads: make(map[string]*activeDownload),
 		semWake:         make(chan struct{}, maxMaxConcurrency),
+		musicMatchJobs:  make(map[string]context.CancelFunc),
 	}
 	a.semLimit.Store(defaultMaxConcurrency)
 	return a
@@ -334,6 +344,9 @@ func (a *App) startup(ctx context.Context) {
 		log.Printf("create bin directory: %v", err)
 	}
 	a.activeDownloads = make(map[string]*activeDownload)
+	a.musicMatchMu.Lock()
+	a.musicMatchJobs = make(map[string]context.CancelFunc)
+	a.musicMatchMu.Unlock()
 	a.loadSettings()
 	a.initSemaphore()
 	if err := a.migrateHistoryIfNeeded(); err != nil {

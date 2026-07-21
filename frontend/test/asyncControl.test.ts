@@ -59,6 +59,29 @@ describe("createLatestSerializedWriter", () => {
     expect(writer.initialize({ theme: "dark" })).toBe(false)
     expect(writer.desired()).toEqual({ theme: "light" })
   })
+
+  it("flushes pending writes and rebases future patches after an external import", async () => {
+    let release: (() => void) | undefined
+    const writes: Array<{ theme: string; maxConcurrency: number }> = []
+    const writer = createLatestSerializedWriter(
+      { theme: "dark", maxConcurrency: 3 },
+      (value) => new Promise<void>((resolve) => { writes.push(value); release = resolve }),
+      () => undefined,
+    )
+    const pending = writer.update({ theme: "light" })
+    await Promise.resolve()
+    const flushed = writer.flush()
+    release?.()
+    await pending
+    await flushed
+
+    writer.rebase({ theme: "dark", maxConcurrency: 8 })
+    const next = writer.update({ theme: "light" })
+    await Promise.resolve()
+    expect(writes.at(-1)).toEqual({ theme: "light", maxConcurrency: 8 })
+    release?.()
+    await next
+  })
 })
 
 describe("startSerialPoll", () => {

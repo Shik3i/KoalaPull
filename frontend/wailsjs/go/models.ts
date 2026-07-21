@@ -90,6 +90,24 @@ export namespace main {
 	        this.plays = source["plays"];
 	    }
 	}
+	export class MusicMatchResult {
+	    artist: string;
+	    title: string;
+	    url?: string;
+	    error?: string;
+
+	    static createFrom(source: any = {}) {
+	        return new MusicMatchResult(source);
+	    }
+
+	    constructor(source: any = {}) {
+	        if ('string' === typeof source) source = JSON.parse(source);
+	        this.artist = source["artist"];
+	        this.title = source["title"];
+	        this.url = source["url"];
+	        this.error = source["error"];
+	    }
+	}
 	export class PlaylistEntry {
 	    id: string;
 	    title: string;

@@ -10,6 +10,10 @@ export function CancelDownload(arg1) {
   return window['go']['main']['App']['CancelDownload'](arg1);
 }
 
+export function CancelMusicMatching(arg1) {
+  return window['go']['main']['App']['CancelMusicMatching'](arg1);
+}
+
 export function CheckDependencies() {
   return window['go']['main']['App']['CheckDependencies']();
 }
@@ -100,6 +104,10 @@ export function PlayFile(arg1) {
 
 export function ResolveMusicTrack(arg1, arg2) {
   return window['go']['main']['App']['ResolveMusicTrack'](arg1, arg2);
+}
+
+export function ResolveMusicTracks(arg1, arg2) {
+  return window['go']['main']['App']['ResolveMusicTracks'](arg1, arg2);
 }
 
 export function ResumeDownload(arg1) {

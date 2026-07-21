@@ -129,9 +129,12 @@ func (a *App) ExportSettings() (string, error) {
 		return path, err
 	}
 	// Never export transient browser-cookie caches.
+	s.CookieFilePath = ""
 	s.CookieCachePath = ""
 	s.CookieCacheBrowser = ""
 	s.CookieCacheUpdated = ""
+	s.LastfmAPIKey = ""
+	s.CustomArgs = ""
 	data, err := json.MarshalIndent(s, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("marshal exported settings: %w", err)
@@ -165,6 +168,16 @@ func (a *App) ImportSettings() (Settings, error) {
 	imported.CookieCachePath = ""
 	imported.CookieCacheBrowser = ""
 	imported.CookieCacheUpdated = ""
+	current := a.GetSettings()
+	if imported.CookieFilePath == "" {
+		imported.CookieFilePath = current.CookieFilePath
+	}
+	if imported.LastfmAPIKey == "" {
+		imported.LastfmAPIKey = current.LastfmAPIKey
+	}
+	if imported.CustomArgs == "" {
+		imported.CustomArgs = current.CustomArgs
+	}
 	if err := a.UpdateSettings(imported); err != nil {
 		return Settings{}, err
 	}

@@ -1,5 +1,7 @@
 export interface LatestSerializedWriter<T extends object> {
   initialize(value: T): boolean
+  rebase(value: T): void
+  flush(): Promise<void>
   update(patch: Partial<T>): Promise<void>
   desired(): T
 }
@@ -20,6 +22,14 @@ export function createLatestSerializedWriter<T extends object>(
       desired = value
       persisted = value
       return true
+    },
+    rebase(value: T) {
+      revision++
+      desired = value
+      persisted = value
+    },
+    flush() {
+      return chain
     },
     update(patch: Partial<T>) {
       revision++

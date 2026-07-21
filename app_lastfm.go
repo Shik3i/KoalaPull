@@ -9,6 +9,7 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -109,12 +110,18 @@ func (a *App) FetchLastfmTracks(username, apiKey, source, period string, limit i
 }
 
 func (a *App) ResolveMusicTrack(artist, title string) (string, error) {
+	ctx, cancel := context.WithTimeout(a.appContext(), 30*time.Second)
+	defer cancel()
+	return a.resolveMusicTrack(ctx, artist, title)
+}
+
+func (a *App) resolveMusicTrack(parent context.Context, artist, title string) (string, error) {
 	artist = strings.TrimSpace(artist)
 	title = strings.TrimSpace(title)
 	if artist == "" || title == "" || len(artist) > 256 || len(title) > 256 {
 		return "", errors.New("artist and title are required")
 	}
-	ctx, cancel := context.WithTimeout(a.appContext(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 	query := "ytsearch1:" + artist + " - " + title + " official audio"
 	stdout, err := commandOutputLimited(ctx, 2<<20, a.ytdlpPath(), "--no-warnings", "--dump-single-json", "--skip-download", "--", query)
@@ -137,4 +144,81 @@ func (a *App) ResolveMusicTrack(artist, title string) (string, error) {
 		return "", errors.New("music match returned no usable URL")
 	}
 	return resolved, nil
+}
+
+func (a *App) ResolveMusicTracks(jobID string, tracks []LastfmTrack) ([]MusicMatchResult, error) {
+	jobID = strings.TrimSpace(jobID)
+	if jobID == "" || len(jobID) > 128 {
+		return nil, errors.New("music match job ID is required")
+	}
+	if len(tracks) == 0 || len(tracks) > 25 {
+		return nil, errors.New("select between 1 and 25 tracks")
+	}
+	ctx, cancel := context.WithCancel(a.appContext())
+	a.musicMatchMu.Lock()
+	if a.musicMatchJobs == nil {
+		a.musicMatchJobs = make(map[string]context.CancelFunc)
+	}
+	if _, exists := a.musicMatchJobs[jobID]; exists {
+		a.musicMatchMu.Unlock()
+		cancel()
+		return nil, errors.New("music match job already exists")
+	}
+	a.musicMatchJobs[jobID] = cancel
+	a.musicMatchMu.Unlock()
+	defer func() {
+		cancel()
+		a.musicMatchMu.Lock()
+		delete(a.musicMatchJobs, jobID)
+		a.musicMatchMu.Unlock()
+	}()
+
+	results := make([]MusicMatchResult, len(tracks))
+	for index, track := range tracks {
+		results[index] = MusicMatchResult{Artist: track.Artist, Title: track.Title, Error: "matching cancelled"}
+	}
+	indices := make(chan int)
+	var workers sync.WaitGroup
+	workerCount := 3
+	if len(tracks) < workerCount {
+		workerCount = len(tracks)
+	}
+	for worker := 0; worker < workerCount; worker++ {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for index := range indices {
+				track := tracks[index]
+				result := MusicMatchResult{Artist: track.Artist, Title: track.Title}
+				matchedURL, err := a.resolveMusicTrack(ctx, track.Artist, track.Title)
+				if err != nil {
+					result.Error = err.Error()
+				} else {
+					result.URL = matchedURL
+				}
+				results[index] = result
+			}
+		}()
+	}
+	for index := range tracks {
+		select {
+		case indices <- index:
+		case <-ctx.Done():
+			close(indices)
+			workers.Wait()
+			return results, nil
+		}
+	}
+	close(indices)
+	workers.Wait()
+	return results, nil
+}
+
+func (a *App) CancelMusicMatching(jobID string) {
+	a.musicMatchMu.Lock()
+	cancel := a.musicMatchJobs[strings.TrimSpace(jobID)]
+	a.musicMatchMu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
 }
