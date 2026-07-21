@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CancelMusicMatching, FetchLastfmTracks, ResolveMusicTracks } from '../../wailsjs/go/main/App'
+import { CancelMusicMatching, FetchLastfmTracks, OpenExternalLink, ResolveMusicTracks } from '../../wailsjs/go/main/App'
 import type { main } from '../../wailsjs/go/models'
 
 interface LastfmImportProps {
@@ -97,9 +97,11 @@ export function LastfmImport({ username, apiKey, onCredentialsChange, onStageUrl
         <label className="text-xs font-medium">{t('lastfm.username')}
           <input className="input-dark w-full mt-1" value={localUsername} onChange={(event) => setLocalUsername(event.target.value)} autoComplete="off" />
         </label>
-        <label className="text-xs font-medium">{t('lastfm.apiKey')}
-          <input className="input-dark w-full mt-1 font-mono" value={localApiKey} onChange={(event) => setLocalApiKey(event.target.value)} type="password" autoComplete="off" />
-        </label>
+        <div>
+          <label className="text-xs font-medium" htmlFor="lastfm-api-key">{t('lastfm.apiKey')}</label>
+          <input id="lastfm-api-key" className="input-dark w-full mt-1 font-mono" value={localApiKey} onChange={(event) => setLocalApiKey(event.target.value)} type="password" autoComplete="off" />
+          <button type="button" className="mt-1 text-[11px]" style={{ color: 'var(--color-accent)' }} onClick={() => void OpenExternalLink('https://www.last.fm/api/account/create').catch((err) => setError(err instanceof Error ? err.message : String(err)))}>{t('lastfm.getApiKey')}</button>
+        </div>
         <label className="text-xs font-medium">{t('lastfm.source')}
           <select className="select-dark w-full mt-1" value={source} onChange={(event) => setSource(event.target.value)}>
             <option value="top">{t('lastfm.topTracks')}</option><option value="loved">{t('lastfm.lovedTracks')}</option><option value="recent">{t('lastfm.recentTracks')}</option>
@@ -130,8 +132,14 @@ export function LastfmImport({ username, apiKey, onCredentialsChange, onStageUrl
           <button className="btn-primary text-xs" onClick={stageSelected} disabled={resolving || loading || selectedCount === 0}>{resolving ? t('lastfm.matching', { total: selectedCount }) : t('lastfm.stage')}</button>
           {resolving && <button className="rounded-md border px-3 py-2 text-xs" style={{ borderColor: 'var(--color-surface-border)' }} onClick={() => void cancelMatching()}>{t('actions.cancel')}</button>}
         </div>
-        {matches.length > 0 && <div role="status" className="space-y-3 rounded-lg border p-3" style={{ borderColor: 'var(--color-surface-border)' }}>
-          <p className="text-xs">{t('lastfm.matchSummary', { matched: successfulMatches.length, failed: failedMatches.length })}</p>
+        {matches.length > 0 && <div className="space-y-3 rounded-lg border p-3" style={{ borderColor: 'var(--color-surface-border)' }}>
+          <p role="status" className="text-xs">{t('lastfm.matchSummary', { matched: successfulMatches.length, failed: failedMatches.length })}</p>
+          {successfulMatches.length > 0 && <div className="grid gap-2 sm:grid-cols-2">
+            {successfulMatches.map((match, index) => <article key={`${match.url}-${index}`} className="flex gap-3 rounded-lg border p-2.5" style={{ borderColor: 'var(--color-surface-border)', background: 'var(--color-surface-lighter)' }}>
+              {match.thumbnail ? <img src={match.thumbnail} alt="" className="h-12 w-16 shrink-0 rounded object-cover" loading="lazy" /> : <div className="h-12 w-16 shrink-0 rounded" style={{ background: 'var(--color-surface-border)' }} />}
+              <div className="min-w-0 flex-1"><p className="text-xs font-medium truncate">{match.matchedTitle || match.title}</p><p className="text-[11px] truncate" style={{ color: 'var(--text-muted)' }}>{match.uploader || match.artist}</p><p className="text-[10px] truncate mt-1" title={match.url} style={{ color: 'var(--text-muted)' }}>{t('lastfm.requested', { artist: match.artist, title: match.title })}</p></div>
+            </article>)}
+          </div>}
           {failedMatches.length > 0 && <details className="text-xs text-red-300"><summary className="cursor-pointer">{t('lastfm.showFailures')}</summary><ul className="mt-2 space-y-1 pl-4 list-disc">{failedMatches.map((match, index) => <li key={`${match.artist}-${match.title}-${index}`}>{match.artist} – {match.title}{match.error ? `: ${match.error}` : ''}</li>)}</ul></details>}
           <button className="btn-primary text-xs" disabled={successfulMatches.length === 0} onClick={() => onStageUrls(successfulMatches.flatMap((match) => match.url ? [match.url] : []))}>{t('lastfm.reviewMatches', { count: successfulMatches.length })}</button>
         </div>}

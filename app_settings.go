@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"path/filepath"
@@ -145,25 +146,28 @@ func (a *App) ExportSettings() (string, error) {
 	return path, nil
 }
 
-func (a *App) ImportSettings() (Settings, error) {
+func (a *App) ImportSettings() (*Settings, error) {
 	path, err := wailsRuntime.OpenFileDialog(a.ctx, wailsRuntime.OpenDialogOptions{
 		Title:   "Import KoalaPull Settings",
 		Filters: []wailsRuntime.FileFilter{{DisplayName: "JSON Files (*.json)", Pattern: "*.json"}},
 	})
 	if err != nil || path == "" {
-		return a.GetSettings(), err
+		return nil, err
 	}
 	data, err := os.ReadFile(path)
 	if err != nil {
-		return Settings{}, fmt.Errorf("read imported settings: %w", err)
+		return nil, fmt.Errorf("read imported settings: %w", err)
 	}
 	if len(data) > 256*1024 {
-		return Settings{}, errors.New("settings file is too large")
+		return nil, errors.New("settings file is too large")
 	}
 	var imported Settings
 	decoder := json.NewDecoder(strings.NewReader(string(data)))
 	if err := decoder.Decode(&imported); err != nil {
-		return Settings{}, fmt.Errorf("parse imported settings: %w", err)
+		return nil, fmt.Errorf("parse imported settings: %w", err)
+	}
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		return nil, errors.New("settings file contains trailing data")
 	}
 	imported.CookieCachePath = ""
 	imported.CookieCacheBrowser = ""
@@ -179,9 +183,10 @@ func (a *App) ImportSettings() (Settings, error) {
 		imported.CustomArgs = current.CustomArgs
 	}
 	if err := a.UpdateSettings(imported); err != nil {
-		return Settings{}, err
+		return nil, err
 	}
-	return a.GetSettings(), nil
+	result := a.GetSettings()
+	return &result, nil
 }
 
 func (a *App) SelectCookieFile() (string, error) {

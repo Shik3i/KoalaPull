@@ -157,10 +157,13 @@ type LastfmTrack struct {
 }
 
 type MusicMatchResult struct {
-	Artist string `json:"artist"`
-	Title  string `json:"title"`
-	URL    string `json:"url,omitempty"`
-	Error  string `json:"error,omitempty"`
+	Artist       string `json:"artist"`
+	Title        string `json:"title"`
+	URL          string `json:"url,omitempty"`
+	MatchedTitle string `json:"matchedTitle,omitempty"`
+	Uploader     string `json:"uploader,omitempty"`
+	Thumbnail    string `json:"thumbnail,omitempty"`
+	Error        string `json:"error,omitempty"`
 }
 
 type HistoryEntry struct {

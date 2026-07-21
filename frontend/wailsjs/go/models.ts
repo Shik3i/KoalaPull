@@ -94,6 +94,9 @@ export namespace main {
 	    artist: string;
 	    title: string;
 	    url?: string;
+	    matchedTitle?: string;
+	    uploader?: string;
+	    thumbnail?: string;
 	    error?: string;
 
 	    static createFrom(source: any = {}) {
@@ -105,6 +108,9 @@ export namespace main {
 	        this.artist = source["artist"];
 	        this.title = source["title"];
 	        this.url = source["url"];
+	        this.matchedTitle = source["matchedTitle"];
+	        this.uploader = source["uploader"];
+	        this.thumbnail = source["thumbnail"];
 	        this.error = source["error"];
 	    }
 	}

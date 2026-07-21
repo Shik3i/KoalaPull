@@ -112,38 +112,47 @@ func (a *App) FetchLastfmTracks(username, apiKey, source, period string, limit i
 func (a *App) ResolveMusicTrack(artist, title string) (string, error) {
 	ctx, cancel := context.WithTimeout(a.appContext(), 30*time.Second)
 	defer cancel()
-	return a.resolveMusicTrack(ctx, artist, title)
+	result, err := a.resolveMusicTrack(ctx, artist, title)
+	return result.URL, err
 }
 
-func (a *App) resolveMusicTrack(parent context.Context, artist, title string) (string, error) {
+func (a *App) resolveMusicTrack(parent context.Context, artist, title string) (MusicMatchResult, error) {
+	match := MusicMatchResult{Artist: strings.TrimSpace(artist), Title: strings.TrimSpace(title)}
 	artist = strings.TrimSpace(artist)
 	title = strings.TrimSpace(title)
 	if artist == "" || title == "" || len(artist) > 256 || len(title) > 256 {
-		return "", errors.New("artist and title are required")
+		return match, errors.New("artist and title are required")
 	}
 	ctx, cancel := context.WithTimeout(parent, 30*time.Second)
 	defer cancel()
 	query := "ytsearch1:" + artist + " - " + title + " official audio"
 	stdout, err := commandOutputLimited(ctx, 2<<20, a.ytdlpPath(), "--no-warnings", "--dump-single-json", "--skip-download", "--", query)
 	if err != nil {
-		return "", fmt.Errorf("music match failed: %w", err)
+		return match, fmt.Errorf("music match failed: %w", err)
 	}
 	var result struct {
 		WebpageURL string `json:"webpage_url"`
 		URL        string `json:"url"`
 		ID         string `json:"id"`
+		Title      string `json:"title"`
+		Uploader   string `json:"uploader"`
+		Thumbnail  string `json:"thumbnail"`
 	}
 	if err := json.Unmarshal(stdout, &result); err != nil {
-		return "", fmt.Errorf("parse music match: %w", err)
+		return match, fmt.Errorf("parse music match: %w", err)
 	}
 	resolved := result.WebpageURL
 	if resolved == "" && result.ID != "" {
 		resolved = "https://www.youtube.com/watch?v=" + result.ID
 	}
 	if !isAllowedDownloadURL(resolved) {
-		return "", errors.New("music match returned no usable URL")
+		return match, errors.New("music match returned no usable URL")
 	}
-	return resolved, nil
+	match.URL = resolved
+	match.MatchedTitle = strings.TrimSpace(result.Title)
+	match.Uploader = strings.TrimSpace(result.Uploader)
+	match.Thumbnail = sanitizeRemoteMediaURLWithResolver(ctx, result.Thumbnail)
+	return match, nil
 }
 
 func (a *App) ResolveMusicTracks(jobID string, tracks []LastfmTrack) ([]MusicMatchResult, error) {
@@ -190,11 +199,11 @@ func (a *App) ResolveMusicTracks(jobID string, tracks []LastfmTrack) ([]MusicMat
 			for index := range indices {
 				track := tracks[index]
 				result := MusicMatchResult{Artist: track.Artist, Title: track.Title}
-				matchedURL, err := a.resolveMusicTrack(ctx, track.Artist, track.Title)
+				match, err := a.resolveMusicTrack(ctx, track.Artist, track.Title)
 				if err != nil {
 					result.Error = err.Error()
 				} else {
-					result.URL = matchedURL
+					result = match
 				}
 				results[index] = result
 			}

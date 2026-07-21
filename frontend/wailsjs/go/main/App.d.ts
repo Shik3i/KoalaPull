@@ -36,7 +36,7 @@ export function GetVersionInfo():Promise<main.VersionInfo>;
 
 export function GetYtdlpVersion():Promise<string>;
 
-export function ImportSettings():Promise<main.Settings>;
+export function ImportSettings():Promise<main.Settings|null>;
 
 export function IsBrowserRunning(arg1:string):Promise<boolean>;
 

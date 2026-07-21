@@ -67,6 +67,15 @@ func TestResolveMusicTracksRejectsInvalidJobs(t *testing.T) {
 	app.CancelMusicMatching("missing-job")
 }
 
+func TestLastfmExternalLinksAreNarrowlyAllowed(t *testing.T) {
+	if !isAllowedExternalLinkHost("https://www.last.fm/api/account/create") {
+		t.Fatal("Last.fm API account link rejected")
+	}
+	if isAllowedExternalLinkHost("https://last.fm.example.com/api/account/create") {
+		t.Fatal("lookalike Last.fm host accepted")
+	}
+}
+
 func runHelperProcess() {
 	switch os.Getenv("KOALAPULL_HELPER_MODE") {
 	case "sleep-json":

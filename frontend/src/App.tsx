@@ -1231,6 +1231,12 @@ function App() {
     await saveSettings({ savedPresets: next })
   }
 
+  const handleRenamePreset = async (id: string, name: string) => {
+    const next = savedPresets.map((preset) => preset.id === id ? { ...preset, name } : preset)
+    setSavedPresets(next)
+    await saveSettings({ savedPresets: next })
+  }
+
   const handleApplyPreset = (id: string) => {
     const preset = savedPresets.find((item) => item.id === id)
     if (!preset) return
@@ -1448,6 +1454,7 @@ function App() {
             savedPresets={savedPresets}
             onSavePreset={handleSavePreset}
             onDeletePreset={handleDeletePreset}
+            onRenamePreset={handleRenamePreset}
             onApplyPreset={handleApplyPreset}
             selectedPreset={selectedPreset}
             setSelectedPreset={setSelectedPreset}
@@ -1539,9 +1546,11 @@ function App() {
             handleImportSettings={async () => {
               await settingsWriterRef.current!.flush()
               const imported = await ImportSettings()
+              if (!imported) return false
               const normalized = normalizeAppSettings(imported)
               settingsWriterRef.current!.rebase(normalized)
               applySettings(normalized)
+              return true
             }}
             maxConcurrency={maxConcurrency}
             setMaxConcurrency={setMaxConcurrency}

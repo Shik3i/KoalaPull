@@ -1,7 +1,8 @@
-import { memo, useState } from 'react'
+import { memo, useEffect, useState } from 'react'
 import { PlayFile, ShowFileInFolder } from '../../wailsjs/go/main/App'
 import type { AppSettings, DownloadPreset } from './SettingsTab'
 import { LastfmImport } from './LastfmImport'
+import { ConfirmDialog } from './ConfirmDialog'
 
 interface FormatInfo {
   formatId: string
@@ -479,6 +480,7 @@ interface DownloadsTabProps {
   savedPresets: AppSettings['savedPresets']
   onSavePreset: (name: string) => Promise<void>
   onDeletePreset: (id: string) => Promise<void>
+  onRenamePreset: (id: string, name: string) => Promise<void>
   onApplyPreset: (id: string) => void
   selectedPreset: DownloadPreset
   setSelectedPreset: (preset: DownloadPreset) => void
@@ -543,6 +545,7 @@ export function DownloadsTab({
   savedPresets,
   onSavePreset,
   onDeletePreset,
+  onRenamePreset,
   onApplyPreset,
   selectedPreset,
   setSelectedPreset,
@@ -586,15 +589,51 @@ export function DownloadsTab({
   tt,
 }: DownloadsTabProps) {
   const [presetName, setPresetName] = useState('')
+  const [selectedSavedPreset, setSelectedSavedPreset] = useState('')
+  const [presetEditName, setPresetEditName] = useState('')
+  const [confirmPresetDelete, setConfirmPresetDelete] = useState(false)
+  const [presetError, setPresetError] = useState('')
+  const [presetBusy, setPresetBusy] = useState(false)
+  useEffect(() => {
+    if (selectedSavedPreset && !savedPresets.some((preset) => preset.id === selectedSavedPreset)) {
+      setSelectedSavedPreset('')
+      setPresetEditName('')
+    }
+  }, [savedPresets, selectedSavedPreset])
+  const handleModeKeyDown = (event: React.KeyboardEvent<HTMLButtonElement>, current: 'single' | 'batch' | 'lastfm') => {
+    const modes: Array<'single' | 'batch' | 'lastfm'> = ['single', 'batch', 'lastfm']
+    const index = modes.indexOf(current)
+    let next = current
+    if (event.key === 'ArrowRight') next = modes[(index + 1) % modes.length]
+    else if (event.key === 'ArrowLeft') next = modes[(index - 1 + modes.length) % modes.length]
+    else if (event.key === 'Home') next = modes[0]
+    else if (event.key === 'End') next = modes[modes.length - 1]
+    else return
+    event.preventDefault()
+    setDownloadMode(next)
+    requestAnimationFrame(() => document.getElementById(`download-tab-${next}`)?.focus())
+  }
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
+      <ConfirmDialog open={confirmPresetDelete} title={t('presets.deleteTitle')} message={t('presets.deleteConfirm', { name: savedPresets.find((preset) => preset.id === selectedSavedPreset)?.name || '' })} confirmLabel={t('actions.deleteEntry')} cancelLabel={t('actions.cancel')} destructive onConfirm={() => {
+        setConfirmPresetDelete(false)
+        if (selectedSavedPreset && !presetBusy) {
+          setPresetBusy(true)
+          void onDeletePreset(selectedSavedPreset).then(() => { setSelectedSavedPreset(''); setPresetEditName(''); setPresetError('') }).catch((error) => setPresetError(error instanceof Error ? error.message : String(error))).finally(() => setPresetBusy(false))
+        }
+      }} onCancel={() => setConfirmPresetDelete(false)} />
       {/* Download Mode Tabs */}
-      <div className="px-4 lg:px-8 pt-4 shrink-0 flex border-b border-[var(--color-surface-border)]">
+      <div role="tablist" aria-label={t('downloads.modeLabel')} className="px-4 lg:px-8 pt-4 shrink-0 flex overflow-x-auto border-b border-[var(--color-surface-border)]">
         <button
           type="button"
+          role="tab"
+          id="download-tab-single"
+          aria-controls="download-panel"
+          aria-selected={downloadMode === 'single'}
+          tabIndex={downloadMode === 'single' ? 0 : -1}
           onClick={() => setDownloadMode('single')}
-          aria-pressed={downloadMode === 'single'}
-          className="px-4 py-2 text-sm font-semibold transition-all border-b-2 outline-none flex items-center gap-1.5"
+          onKeyDown={(event) => handleModeKeyDown(event, 'single')}
+          className="shrink-0 whitespace-nowrap px-4 py-2 text-sm font-semibold transition-all border-b-2 outline-none flex items-center gap-1.5"
           style={{
             color: downloadMode === 'single' ? 'var(--color-accent)' : 'var(--text-muted)',
             borderColor: downloadMode === 'single' ? 'var(--color-accent)' : 'transparent',
@@ -604,9 +643,14 @@ export function DownloadsTab({
         </button>
         <button
           type="button"
+          role="tab"
+          id="download-tab-batch"
+          aria-controls="download-panel"
+          aria-selected={downloadMode === 'batch'}
+          tabIndex={downloadMode === 'batch' ? 0 : -1}
           onClick={() => setDownloadMode('batch')}
-          aria-pressed={downloadMode === 'batch'}
-          className="px-4 py-2 text-sm font-semibold transition-all border-b-2 outline-none flex items-center gap-1.5"
+          onKeyDown={(event) => handleModeKeyDown(event, 'batch')}
+          className="shrink-0 whitespace-nowrap px-4 py-2 text-sm font-semibold transition-all border-b-2 outline-none flex items-center gap-1.5"
           style={{
             color: downloadMode === 'batch' ? 'var(--color-accent)' : 'var(--text-muted)',
             borderColor: downloadMode === 'batch' ? 'var(--color-accent)' : 'transparent',
@@ -616,16 +660,21 @@ export function DownloadsTab({
         </button>
         <button
           type="button"
+          role="tab"
+          id="download-tab-lastfm"
+          aria-controls="download-panel"
+          aria-selected={downloadMode === 'lastfm'}
+          tabIndex={downloadMode === 'lastfm' ? 0 : -1}
           onClick={() => setDownloadMode('lastfm')}
-          aria-pressed={downloadMode === 'lastfm'}
-          className="px-4 py-2 text-sm font-semibold transition-all border-b-2 outline-none"
+          onKeyDown={(event) => handleModeKeyDown(event, 'lastfm')}
+          className="shrink-0 whitespace-nowrap px-4 py-2 text-sm font-semibold transition-all border-b-2 outline-none"
           style={{ color: downloadMode === 'lastfm' ? 'var(--color-accent)' : 'var(--text-muted)', borderColor: downloadMode === 'lastfm' ? 'var(--color-accent)' : 'transparent' }}
         >
           {t('downloads.lastfmTab')}
         </button>
       </div>
 
-      <div className="px-4 lg:px-8 py-4 lg:py-5 shrink-0">
+      {downloadMode !== 'lastfm' && <div id="download-panel" role="tabpanel" aria-labelledby={`download-tab-${downloadMode}`} className="px-4 lg:px-8 py-4 lg:py-5 shrink-0">
         {downloadMode === 'single' ? (
           <div className="flex flex-col sm:flex-row gap-2">
             <div className="flex-1 relative">
@@ -683,7 +732,7 @@ export function DownloadsTab({
               )}
             </button>
           </div>
-        ) : downloadMode === 'batch' ? (
+        ) : (
           <div className="flex flex-col gap-3">
             <div className="relative">
               <textarea
@@ -766,18 +815,6 @@ export function DownloadsTab({
               )}
             </button>
           </div>
-        ) : (
-          <LastfmImport
-            username={lastfmUsername}
-            apiKey={lastfmApiKey}
-            onCredentialsChange={onLastfmCredentialsChange}
-            onStageUrls={(urls) => {
-              setBatchUrls(urls.join('\n'))
-              setSelectedPreset('audio')
-              setDownloadMode('batch')
-            }}
-            t={t}
-          />
         )}
         {fetchError && (
           <div
@@ -791,22 +828,45 @@ export function DownloadsTab({
             {fetchError}
           </div>
         )}
-      </div>
+      </div>}
 
-      <div className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 lg:py-6 space-y-4">
+      <div id={downloadMode === 'lastfm' ? 'download-panel' : undefined} role={downloadMode === 'lastfm' ? 'tabpanel' : undefined} aria-labelledby={downloadMode === 'lastfm' ? 'download-tab-lastfm' : undefined} className="flex-1 overflow-y-auto px-4 lg:px-8 py-4 lg:py-6 space-y-4">
+        {downloadMode === 'lastfm' && <LastfmImport
+          username={lastfmUsername}
+          apiKey={lastfmApiKey}
+          onCredentialsChange={onLastfmCredentialsChange}
+          onStageUrls={(urls) => {
+            setBatchUrls(urls.join('\n'))
+            setSelectedPreset('audio')
+            setDownloadMode('batch')
+          }}
+          t={t}
+        />}
         {downloadMode === 'single' && fetched && metadata && (
-          <div className="rounded-xl border p-3 mb-4 flex flex-wrap items-end gap-2" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+          <div className="rounded-xl border p-4 mb-4 space-y-3" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+            <div className="flex flex-wrap items-end gap-2">
             <label className="text-xs font-medium flex-1 min-w-48">{t('presets.saved')}
-              <select className="select-dark w-full mt-1" defaultValue="" onChange={(event) => { if (event.target.value) onApplyPreset(event.target.value); event.target.value = '' }}>
+              <select className="select-dark w-full mt-1" value={selectedSavedPreset} onChange={(event) => { const id = event.target.value; setSelectedSavedPreset(id); setPresetEditName(savedPresets.find((preset) => preset.id === id)?.name || '') }}>
                 <option value="">{t('presets.choose')}</option>
                 {savedPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
               </select>
             </label>
+            <button className="btn-primary text-xs px-3 py-2" disabled={!selectedSavedPreset || presetBusy} onClick={() => onApplyPreset(selectedSavedPreset)}>{t('presets.apply')}</button>
+            </div>
+            {selectedSavedPreset && <div className="flex flex-wrap items-end gap-2 rounded-lg border p-3" style={{ borderColor: 'var(--color-surface-border)' }}>
+              <label className="text-xs font-medium flex-1 min-w-44">{t('presets.rename')}
+                <input className="input-dark w-full mt-1 py-2" value={presetEditName} onChange={(event) => setPresetEditName(event.target.value)} maxLength={48} />
+              </label>
+              <button className="btn-primary text-xs px-3 py-2" disabled={!presetEditName.trim() || presetBusy} onClick={() => { setPresetBusy(true); void onRenamePreset(selectedSavedPreset, presetEditName.trim()).then(() => setPresetError('')).catch((error) => setPresetError(error instanceof Error ? error.message : String(error))).finally(() => setPresetBusy(false)) }}>{t('actions.save')}</button>
+              <button disabled={presetBusy} className="text-xs px-3 py-2 rounded-md border border-red-500/40 text-red-300 disabled:opacity-40" onClick={() => setConfirmPresetDelete(true)}>{t('actions.deleteEntry')}</button>
+            </div>}
+            <div className="flex flex-wrap items-end gap-2 border-t pt-3" style={{ borderColor: 'var(--color-surface-border)' }}>
             <label className="text-xs font-medium min-w-36">{t('presets.name')}
               <input className="input-dark w-full mt-1 py-2" value={presetName} onChange={(event) => setPresetName(event.target.value)} maxLength={48} />
             </label>
-            <button className="btn-primary text-xs px-3 py-2" disabled={!presetName.trim()} onClick={async () => { await onSavePreset(presetName.trim()); setPresetName('') }}>{t('presets.saveCurrent')}</button>
-            {savedPresets.length > 0 && <button className="text-xs px-3 py-2" style={{ color: 'var(--text-muted)' }} onClick={async () => { const id = savedPresets.at(-1)?.id; if (id) await onDeletePreset(id) }}>{t('presets.deleteLast')}</button>}
+            <button className="btn-primary text-xs px-3 py-2" disabled={!presetName.trim() || presetBusy} onClick={() => { setPresetBusy(true); void onSavePreset(presetName.trim()).then(() => { setPresetName(''); setPresetError('') }).catch((error) => setPresetError(error instanceof Error ? error.message : String(error))).finally(() => setPresetBusy(false)) }}>{t('presets.saveCurrent')}</button>
+            </div>
+            {presetError && <p role="alert" className="text-xs text-red-300">{presetError}</p>}
           </div>
         )}
         {downloadMode === 'single' && fetched && metadata && (

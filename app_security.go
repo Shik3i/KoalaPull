@@ -166,7 +166,7 @@ func isAllowedExternalLinkHost(raw string) bool {
 	}
 	host := strings.TrimSuffix(strings.ToLower(parsed.Hostname()), ".")
 	switch host {
-	case "github.com", "www.github.com", "yt-dlp.org", "www.yt-dlp.org", "ffmpeg.org", "www.ffmpeg.org", "evermeet.cx", "www.evermeet.cx":
+	case "github.com", "www.github.com", "yt-dlp.org", "www.yt-dlp.org", "ffmpeg.org", "www.ffmpeg.org", "evermeet.cx", "www.evermeet.cx", "last.fm", "www.last.fm":
 		return true
 	}
 	return strings.HasSuffix(host, ".github.com")

@@ -7,6 +7,7 @@ import {
   ExportSettings,
 } from '../../wailsjs/go/main/App'
 import type { main } from '../../wailsjs/go/models'
+import { useState } from 'react'
 
 export type DownloadPreset = 'best' | 'compatible' | 'audio' | 'custom'
 export type LanguageCode = 'en' | 'de' | 'fr'
@@ -77,7 +78,7 @@ interface SettingsTabProps {
   setSponsorBlockEnabled: (val: boolean) => void
   notificationsEnabled: boolean
   handleNotificationsChange: (val: boolean) => Promise<void>
-  handleImportSettings: () => Promise<void>
+  handleImportSettings: () => Promise<boolean>
   maxConcurrency: number
   setMaxConcurrency: (val: number) => void
   cookieSource: 'none' | 'browser' | 'file'
@@ -181,6 +182,8 @@ export function SettingsTab({
   t,
   tt,
 }: SettingsTabProps) {
+  const [transferStatus, setTransferStatus] = useState('')
+  const [transferBusy, setTransferBusy] = useState(false)
   return (
     <div className="flex-1 flex flex-col overflow-hidden">
       <div className="px-4 lg:px-8 py-4 lg:py-5 shrink-0 flex items-center justify-between gap-4">
@@ -216,41 +219,6 @@ export function SettingsTab({
           </div>
         )}
         <div className="grid gap-6 grid-cols-1 md:grid-cols-2 xl:grid-cols-3 items-start">
-          <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
-            <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>{t('settings.notificationsTitle')}</h3>
-            <p className="text-xs leading-5 mb-3" style={{ color: 'var(--text-muted)' }}>{t('settings.notificationsDescription')}</p>
-            <button
-              role="switch"
-              aria-checked={notificationsEnabled}
-              onClick={async () => {
-                try { await handleNotificationsChange(!notificationsEnabled) } catch { /* settings error shown above */ }
-              }}
-              className="relative w-10 h-5 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
-              style={{ background: notificationsEnabled ? 'var(--color-accent)' : 'var(--color-surface-border)' }}
-              aria-label={t('settings.notificationsTitle')}
-            ><span className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform" style={{ left: 2, transform: notificationsEnabled ? 'translateX(20px)' : 'translateX(0)' }} /></button>
-          </section>
-
-          <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
-            <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>{t('settings.transferTitle')}</h3>
-            <p className="text-xs leading-5 mb-3" style={{ color: 'var(--text-muted)' }}>{t('settings.transferDescription')}</p>
-            <div className="flex gap-2">
-              <button className="btn-primary text-xs px-3 py-1.5" onClick={() => ExportSettings().catch((error) => setUpdatesError(String(error)))}>{t('settings.export')}</button>
-              <button className="text-xs px-3 py-1.5 rounded-md border" style={{ borderColor: 'var(--color-surface-border)' }} onClick={async () => {
-                try {
-                  await handleImportSettings()
-                } catch (error) { setUpdatesError(String(error)) }
-              }}>{t('settings.import')}</button>
-            </div>
-            {recentOutputDirs.length > 1 && <div className="mt-3">
-              <label className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('settings.recentFolders')}
-                <select className="select-dark w-full mt-1 text-xs" value="" onChange={(event) => { if (event.target.value) handleSelectRecentFolder(event.target.value) }}>
-                  <option value="">{t('settings.chooseRecentFolder')}</option>
-                  {recentOutputDirs.map((path) => <option key={path} value={path}>{path}</option>)}
-                </select>
-              </label>
-            </div>}
-          </section>
           {/* Theme */}
           <section
             className="rounded-xl p-4 border"
@@ -354,6 +322,33 @@ export function SettingsTab({
                 {t('actions.change')}
               </button>
             </div>
+            {recentOutputDirs.length > 1 && <div className="mt-3">
+              <label className="text-xs" style={{ color: 'var(--text-muted)' }}>{t('settings.recentFolders')}
+                <select className="select-dark w-full mt-1 text-xs" value="" onChange={(event) => { if (event.target.value) handleSelectRecentFolder(event.target.value) }}>
+                  <option value="">{t('settings.chooseRecentFolder')}</option>
+                  {recentOutputDirs.map((path) => <option key={path} value={path}>{path}</option>)}
+                </select>
+              </label>
+            </div>}
+          </section>
+
+          <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+            <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>{t('settings.notificationsTitle')}</h3>
+            <p className="text-xs leading-5 mb-3" style={{ color: 'var(--text-muted)' }}>{t('settings.notificationsDescription')}</p>
+            <button role="switch" aria-checked={notificationsEnabled} onClick={async () => { try { await handleNotificationsChange(!notificationsEnabled) } catch { /* settings error shown above */ } }} className="relative w-10 h-5 rounded-full transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent" style={{ background: notificationsEnabled ? 'var(--color-accent)' : 'var(--color-surface-border)' }} aria-label={t('settings.notificationsTitle')}>
+              <span className="absolute top-0.5 w-4 h-4 rounded-full bg-white transition-transform" style={{ left: 2, transform: notificationsEnabled ? 'translateX(20px)' : 'translateX(0)' }} />
+            </button>
+            <span className="ml-3 text-xs font-medium" style={{ color: notificationsEnabled ? 'var(--color-accent)' : 'var(--text-muted)' }}>{notificationsEnabled ? t('settings.enabled') : t('settings.disabled')}</span>
+          </section>
+
+          <section className="rounded-xl p-4 border" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+            <h3 className="text-sm font-medium mb-2" style={{ color: 'var(--text-secondary)' }}>{t('settings.transferTitle')}</h3>
+            <p className="text-xs leading-5 mb-3" style={{ color: 'var(--text-muted)' }}>{t('settings.transferDescription')}</p>
+            <div className="flex gap-2">
+              <button disabled={transferBusy} className="btn-primary text-xs px-3 py-1.5" onClick={async () => { setTransferBusy(true); setTransferStatus(''); try { const path = await ExportSettings(); if (path) setTransferStatus(t('settings.exportSuccess')) } catch (error) { setTransferStatus(String(error)); setUpdatesError(String(error)) } finally { setTransferBusy(false) } }}>{t('settings.export')}</button>
+              <button disabled={transferBusy} className="text-xs px-3 py-1.5 rounded-md border disabled:opacity-40" style={{ borderColor: 'var(--color-surface-border)' }} onClick={async () => { setTransferBusy(true); setTransferStatus(''); try { if (await handleImportSettings()) setTransferStatus(t('settings.importSuccess')) } catch (error) { setTransferStatus(String(error)); setUpdatesError(String(error)) } finally { setTransferBusy(false) } }}>{t('settings.import')}</button>
+            </div>
+            {transferStatus && <p role="status" className="mt-3 text-xs break-words" style={{ color: 'var(--text-secondary)' }}>{transferStatus}</p>}
           </section>
 
           {/* Auto-Paste URL */}

@@ -37,6 +37,7 @@
     "updating": "Wird aktualisiert...",
     "cancel": "Abbrechen",
     "continue": "Fortfahren",
+    "save": "Speichern",
     "openOutputFolder": "Zielordner öffnen",
     "deleteEntry": "Eintrag löschen",
     "useAgain": "URL erneut verwenden",
@@ -77,6 +78,7 @@
     "singleTab": "Einzelne URL",
     "batchTab": "Batch-Import",
     "lastfmTab": "Last.fm-Musik",
+    "modeLabel": "Download-Quelle",
     "batchPlaceholder": "Füge URLs hier ein (eine pro Zeile)...",
     "batchDuplicateWarning": "{count} URL(s) sind bereits in Warteschlange oder Verlauf. Trotzdem fortfahren?",
     "duplicateWarningIntro": "Diese URL existiert bereits in KoalaPull.",
@@ -163,16 +165,16 @@
     "ffmpegPathPlaceholder": "Pfad zur ffmpeg-Datei...",
     "sponsorBlockTitle": "SponsorBlock-Integration",
     "sponsorBlockDescription": "Sponsor-Segmente, Intros, Outros und Werbung in YouTube-Videos automatisch überspringen",
-    "notificationsTitle": "Desktop-Benachrichtigungen", "notificationsDescription": "Eine dezente Meldung anzeigen, wenn ein Download abgeschlossen ist oder fehlschlägt.", "notificationsDenied": "Benachrichtigungen sind durch das Betriebssystem oder den Browser blockiert. Berechtigung zuerst aktivieren.", "notificationsUnavailable": "Desktop-Benachrichtigungen sind auf diesem System nicht verfügbar.",
+    "notificationsTitle": "Desktop-Benachrichtigungen", "notificationsDescription": "Eine dezente Meldung anzeigen, wenn ein Download abgeschlossen ist oder fehlschlägt.", "notificationsDenied": "Benachrichtigungen sind durch das Betriebssystem oder den Browser blockiert. Berechtigung zuerst aktivieren.", "notificationsUnavailable": "Desktop-Benachrichtigungen sind auf diesem System nicht verfügbar.", "enabled": "Aktiviert", "disabled": "Deaktiviert",
     "transferTitle": "Import und Export", "transferDescription": "Geprüfte App-Einstellungen sichern oder übertragen. Zugangsdaten, Cookie-Pfade und benutzerdefinierte Argumente werden ausgeschlossen.",
-    "export": "Exportieren", "import": "Importieren", "recentFolders": "Zuletzt verwendete Download-Ordner", "chooseRecentFolder": "Letzten Ordner auswählen"
+    "export": "Exportieren", "import": "Importieren", "exportSuccess": "Einstellungen erfolgreich exportiert.", "importSuccess": "Einstellungen erfolgreich importiert.", "recentFolders": "Zuletzt verwendete Download-Ordner", "chooseRecentFolder": "Letzten Ordner auswählen"
   },
-  "presets": {"saved": "Gespeicherte Profile", "choose": "Profil auswählen...", "name": "Profilname", "saveCurrent": "Aktuelle Auswahl speichern", "deleteLast": "Neuestes löschen"},
+  "presets": {"saved": "Gespeicherte Profile", "choose": "Profil auswählen...", "name": "Name des neuen Profils", "saveCurrent": "Aktuelle Auswahl speichern", "apply": "Anwenden", "rename": "Profil umbenennen", "deleteTitle": "Profil löschen", "deleteConfirm": "Profil „{name}“ löschen?"},
   "lastfm": {
     "title": "Musik aus Last.fm importieren", "description": "Hörverlauf laden, alle Titel prüfen und ausgewählte Titel mit verfügbaren Quellen abgleichen. KoalaPull lädt nie unbemerkt herunter.",
-    "username": "Last.fm-Benutzername", "apiKey": "Last.fm-API-Schlüssel", "source": "Musikquelle", "period": "Zeitraum", "topTracks": "Top-Titel", "lovedTracks": "Lieblingstitel", "recentTracks": "Zuletzt gehört",
+    "username": "Last.fm-Benutzername", "apiKey": "Last.fm-API-Schlüssel", "getApiKey": "API-Schlüssel auf Last.fm erstellen", "source": "Musikquelle", "period": "Zeitraum", "topTracks": "Top-Titel", "lovedTracks": "Lieblingstitel", "recentTracks": "Zuletzt gehört",
     "week": "Letzte 7 Tage", "month": "Letzter Monat", "year": "Letztes Jahr", "overall": "Gesamter Zeitraum", "load": "Titel laden", "selected": "{count} Titel ausgewählt", "selectAll": "Alle auswählen", "selectNone": "Auswahl aufheben", "plays": "{count} Wiedergaben",
-    "reviewNotice": "Treffer vor dem Download prüfen. Nur Medien speichern, für die eine Berechtigung besteht. Last.fm liefert Metadaten, keine Musikdateien.", "matching": "{total} Titel werden abgeglichen...", "stage": "Ausgewählte Titel abgleichen", "empty": "Für diese Quelle und diesen Zeitraum wurden keine Titel gefunden.", "matchSummary": "{matched} Treffer · {failed} fehlgeschlagen", "showFailures": "Fehlgeschlagene Titel anzeigen", "reviewMatches": "{count} Treffer als MP3-Batch prüfen"
+    "reviewNotice": "Treffer vor dem Download prüfen. Nur Medien speichern, für die eine Berechtigung besteht. Last.fm liefert Metadaten, keine Musikdateien.", "matching": "{total} Titel werden abgeglichen...", "stage": "Ausgewählte Titel abgleichen", "empty": "Für diese Quelle und diesen Zeitraum wurden keine Titel gefunden.", "matchSummary": "{matched} Treffer · {failed} fehlgeschlagen", "showFailures": "Fehlgeschlagene Titel anzeigen", "reviewMatches": "{count} Treffer als MP3-Batch prüfen", "requested": "Gesucht: {artist} – {title}"
   },
   "notifications": {"completed": "{title} wurde erfolgreich heruntergeladen.", "failed": "{title} konnte nicht heruntergeladen werden."},
   "updates": {
