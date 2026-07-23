@@ -50,6 +50,7 @@ export interface QueueItem {
   subtitle?: string
   preset?: DownloadPreset
   playlistItems?: string
+  downloadSections?: string
   outputPath?: string
 }
 
@@ -194,6 +195,11 @@ const QueueRow = memo(
             )}
             {item.eta && <span style={{ color: 'var(--text-muted)' }}>{t('downloads.eta', { eta: item.eta })}</span>}
             {item.playlistStatus && <span style={{ color: 'var(--text-muted)' }}>{item.playlistStatus}</span>}
+            {item.downloadSections && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded font-mono font-medium" style={{ background: 'color-mix(in srgb, var(--color-accent) 15%, transparent)', color: 'var(--color-accent)' }}>
+                ✂️ {item.downloadSections.replace('*', '')}
+              </span>
+            )}
           </div>
           {(item.status === 'downloading' || item.status === 'starting' || item.status === 'retrying' || item.status === 'paused') && (
             <div className="mt-1.5 w-full h-1 rounded-full overflow-hidden" style={{ background: 'var(--color-surface-lighter)' }}>
@@ -498,6 +504,12 @@ interface DownloadsTabProps {
   setSelectedSubs: (subs: string) => void
   selectedPlaylistIndices: Record<number, boolean>
   setSelectedPlaylistIndices: (indices: Record<number, boolean> | ((prev: Record<number, boolean>) => Record<number, boolean>)) => void
+  downloadClip: boolean
+  setDownloadClip: (b: boolean) => void
+  clipStart: string
+  setClipStart: (s: string) => void
+  clipEnd: string
+  setClipEnd: (s: string) => void
   addingToQueue: boolean
   handleAddToQueue: () => void
   addQueueError: string
@@ -563,6 +575,12 @@ export function DownloadsTab({
   setSelectedSubs,
   selectedPlaylistIndices,
   setSelectedPlaylistIndices,
+  downloadClip,
+  setDownloadClip,
+  clipStart,
+  setClipStart,
+  clipEnd,
+  setClipEnd,
   addingToQueue,
   handleAddToQueue,
   addQueueError,
@@ -1265,6 +1283,55 @@ export function DownloadsTab({
                       </div>
                     </div>
                   )}
+
+                  {/* Clip / Time Range Section */}
+                  <div
+                    className="mt-3 p-3 rounded-lg border border-[var(--color-surface-border)]"
+                    style={{ background: 'var(--color-surface-light)' }}
+                  >
+                    <label className="flex items-center gap-2 cursor-pointer text-xs font-semibold select-none" style={{ color: 'var(--text-primary)' }}>
+                      <input
+                        type="checkbox"
+                        checked={downloadClip}
+                        onChange={(e) => setDownloadClip(e.target.checked)}
+                        className="rounded border-[var(--color-surface-border)] text-accent focus:ring-accent"
+                      />
+                      <span>✂️ {t('downloads.clipEnable') || 'Download specific section / clip only'}</span>
+                    </label>
+                    {downloadClip && (
+                      <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-[var(--color-surface-border)]">
+                        <div>
+                          <label htmlFor="clipStartTime" className="block text-[11px] font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
+                            {t('downloads.clipStart') || 'Start time'}
+                          </label>
+                          <input
+                            id="clipStartTime"
+                            type="text"
+                            value={clipStart}
+                            onChange={(e) => setClipStart(e.target.value)}
+                            placeholder="00:00:00"
+                            className="input-dark text-xs w-full py-1.5"
+                          />
+                        </div>
+                        <div>
+                          <label htmlFor="clipEndTime" className="block text-[11px] font-medium mb-1" style={{ color: 'var(--text-secondary)' }}>
+                            {t('downloads.clipEnd') || 'End time'}
+                          </label>
+                          <input
+                            id="clipEndTime"
+                            type="text"
+                            value={clipEnd}
+                            onChange={(e) => setClipEnd(e.target.value)}
+                            placeholder="00:01:30"
+                            className="input-dark text-xs w-full py-1.5"
+                          />
+                        </div>
+                        <p className="sm:col-span-2 text-[10px]" style={{ color: 'var(--text-muted)' }}>
+                          {t('downloads.clipHint') || 'Format: HH:MM:SS, MM:SS or seconds (e.g. 01:30)'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
                 </div>
                 <button
                   onClick={handleAddToQueue}

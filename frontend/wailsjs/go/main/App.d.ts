@@ -36,7 +36,7 @@ export function GetVersionInfo():Promise<main.VersionInfo>;
 
 export function GetYtdlpVersion():Promise<string>;
 
-export function ImportSettings():Promise<main.Settings|null>;
+export function ImportSettings():Promise<main.Settings>;
 
 export function IsBrowserRunning(arg1:string):Promise<boolean>;
 
@@ -69,6 +69,8 @@ export function ShowFileInFolder(arg1:string):Promise<void>;
 export function StartDownload(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string):Promise<string>;
 
 export function StartDownloadWithPreset(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string):Promise<string>;
+
+export function StartDownloadWithPresetAndClip(arg1:string,arg2:string,arg3:string,arg4:string,arg5:string,arg6:string,arg7:string,arg8:string,arg9:string):Promise<string>;
 
 export function UpdateDependencies():Promise<void>;
 

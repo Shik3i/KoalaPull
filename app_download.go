@@ -157,11 +157,38 @@ func (a *App) FetchMetadata(url string) (*VideoMetadata, error) {
 	return meta, nil
 }
 
+func sanitizeDownloadSections(input string) (string, error) {
+	input = strings.TrimSpace(input)
+	if input == "" {
+		return "", nil
+	}
+	if len(input) > 64 {
+		return "", errors.New("download section specification too long")
+	}
+	if !strings.HasPrefix(input, "*") {
+		input = "*" + input
+	}
+	for _, ch := range input {
+		if !((ch >= '0' && ch <= '9') || ch == ':' || ch == '.' || ch == '-' || ch == '*' || ch == 'i' || ch == 'n' || ch == 'f' || ch == 'I' || ch == 'N' || ch == 'F') {
+			return "", errors.New("invalid characters in download section specification")
+		}
+	}
+	parts := strings.Split(input[1:], "-")
+	if len(parts) != 2 || parts[0] == "" || parts[1] == "" {
+		return "", errors.New("download section must be in format START-END (e.g. 00:01:00-00:02:30)")
+	}
+	return input, nil
+}
+
 func (a *App) StartDownload(url, formatID, outputDir, container, subtitle, title string) (string, error) {
 	return a.StartDownloadWithPreset(url, formatID, outputDir, container, subtitle, title, defaultDownloadPreset, "")
 }
 
 func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subtitle, title, preset, playlistItems string) (string, error) {
+	return a.StartDownloadWithPresetAndClip(url, formatID, outputDir, container, subtitle, title, preset, playlistItems, "")
+}
+
+func (a *App) StartDownloadWithPresetAndClip(url, formatID, outputDir, container, subtitle, title, preset, playlistItems, downloadSections string) (string, error) {
 	if url == "" || formatID == "" {
 		return "", fmt.Errorf("url and formatID are required")
 	}
@@ -194,6 +221,13 @@ func (a *App) StartDownloadWithPreset(url, formatID, outputDir, container, subti
 		"--ffmpeg-location", a.ffmpegDir(),
 		"--newline",
 		"-o", template,
+	}
+	if downloadSections != "" {
+		sec, err := sanitizeDownloadSections(downloadSections)
+		if err != nil {
+			return "", err
+		}
+		args = append(args, "--download-sections", sec)
 	}
 	settings := a.GetSettings()
 	args = append(args, a.getCookieArgs(settings)...)

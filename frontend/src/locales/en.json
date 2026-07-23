@@ -100,7 +100,12 @@
       "completed": "Completed",
       "error": "Error",
       "cancelled": "Cancelled"
-    }
+    },
+    "clipSection": "Clip / Time Range",
+    "clipEnable": "Download specific section / clip only",
+    "clipStart": "Start time",
+    "clipEnd": "End time",
+    "clipHint": "Format: HH:MM:SS, MM:SS or seconds (e.g. 01:30)"
   },
   "history": {
     "title": "Download History",

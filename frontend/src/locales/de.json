@@ -100,7 +100,12 @@
     "selectPreset": "Download-Voreinstellung",
     "presetBest": "Beste Qualität",
     "presetCompatible": "MP4-Video",
-    "presetAudio": "MP3-Audio"
+    "presetAudio": "MP3-Audio",
+    "clipSection": "Clip / Zeitbereich zuschneiden",
+    "clipEnable": "Nur Ausschnitt herunterladen (Clip)",
+    "clipStart": "Startzeit",
+    "clipEnd": "Endzeit",
+    "clipHint": "Format: HH:MM:SS, MM:SS oder Sekunden (z. B. 01:30)"
   },
   "history": {
     "title": "Download-Verlauf",

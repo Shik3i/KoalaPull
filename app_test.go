@@ -1614,3 +1614,31 @@ func TestVersionCheckSleepContextAware(t *testing.T) {
 		t.Fatalf("GetYtdlpVersion did not abort immediately on context cancellation, elapsed: %v", elapsed)
 	}
 }
+
+func TestSanitizeDownloadSections(t *testing.T) {
+	tests := []struct {
+		input   string
+		want    string
+		wantErr bool
+	}{
+		{"", "", false},
+		{"00:01:00-00:02:30", "*00:01:00-00:02:30", false},
+		{"*01:30-02:45", "*01:30-02:45", false},
+		{"*0-60", "*0-60", false},
+		{"*10-inf", "*10-inf", false},
+		{"invalid; rm -rf /", "", true},
+		{"00:01:00", "", true},
+		{"*00:01:00-00:02:30-00:03:00", "", true},
+	}
+	for _, tt := range tests {
+		got, err := sanitizeDownloadSections(tt.input)
+		if (err != nil) != tt.wantErr {
+			t.Errorf("sanitizeDownloadSections(%q) error = %v, wantErr %v", tt.input, err, tt.wantErr)
+			continue
+		}
+		if got != tt.want {
+			t.Errorf("sanitizeDownloadSections(%q) = %q, want %q", tt.input, got, tt.want)
+		}
+	}
+}
+

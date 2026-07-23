@@ -1,13 +1,13 @@
 export namespace main {
-
+	
 	export class DependencyStatus {
 	    ytDlpInstalled: boolean;
 	    ffmpegInstalled: boolean;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new DependencyStatus(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ytDlpInstalled = source["ytDlpInstalled"];
@@ -23,11 +23,11 @@ export namespace main {
 	    acodec: string;
 	    filesize: number;
 	    formatNote: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new FormatInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.formatId = source["formatId"];
@@ -52,11 +52,11 @@ export namespace main {
 	    startTime: string;
 	    endTime: string;
 	    outputPath?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new HistoryEntryView(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.downloadId = source["downloadId"];
@@ -77,11 +77,11 @@ export namespace main {
 	    title: string;
 	    url?: string;
 	    plays?: number;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new LastfmTrack(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.artist = source["artist"];
@@ -98,11 +98,11 @@ export namespace main {
 	    uploader?: string;
 	    thumbnail?: string;
 	    error?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new MusicMatchResult(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.artist = source["artist"];
@@ -117,11 +117,11 @@ export namespace main {
 	export class PlaylistEntry {
 	    id: string;
 	    title: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new PlaylistEntry(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -134,11 +134,11 @@ export namespace main {
 	    formatId: string;
 	    container: string;
 	    subtitle: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new SavedPreset(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -175,11 +175,11 @@ export namespace main {
 	    savedPresets?: SavedPreset[];
 	    lastfmApiKey?: string;
 	    lastfmUsername?: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new Settings(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.defaultOutputDir = source["defaultOutputDir"];
@@ -209,7 +209,7 @@ export namespace main {
 	        this.lastfmApiKey = source["lastfmApiKey"];
 	        this.lastfmUsername = source["lastfmUsername"];
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;
@@ -235,11 +235,11 @@ export namespace main {
 	    latestKoalaPullVersion: string;
 	    ffmpegUpdateAvailable: boolean;
 	    latestFfmpegVersion: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new UpdateInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ytdlpUpdateAvailable = source["ytdlpUpdateAvailable"];
@@ -254,11 +254,11 @@ export namespace main {
 	    ytdlp: string;
 	    ffmpeg: string;
 	    app: string;
-
+	
 	    static createFrom(source: any = {}) {
 	        return new VersionInfo(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.ytdlp = source["ytdlp"];
@@ -276,11 +276,11 @@ export namespace main {
 	    isPlaylist: boolean;
 	    entryCount: number;
 	    entries?: PlaylistEntry[];
-
+	
 	    static createFrom(source: any = {}) {
 	        return new VideoMetadata(source);
 	    }
-
+	
 	    constructor(source: any = {}) {
 	        if ('string' === typeof source) source = JSON.parse(source);
 	        this.id = source["id"];
@@ -293,7 +293,7 @@ export namespace main {
 	        this.entryCount = source["entryCount"];
 	        this.entries = this.convertValues(source["entries"], PlaylistEntry);
 	    }
-
+	
 		convertValues(a: any, classs: any, asMap: boolean = false): any {
 		    if (!a) {
 		        return a;

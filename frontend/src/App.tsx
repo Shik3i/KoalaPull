@@ -1,7 +1,7 @@
 import { useRef, useState, useEffect, useMemo, useCallback, Component } from 'react'
 import {
   CheckDependencies, DownloadDependencies,
-  FetchMetadata, StartDownloadWithPreset, CancelDownload,
+  FetchMetadata, StartDownloadWithPreset, StartDownloadWithPresetAndClip, CancelDownload,
   PauseDownload, ResumeDownload,
   GetSettings, UpdateSettings, SelectDirectory,
   GetAppVersion, GetVersionInfo, GetHistory,
@@ -170,8 +170,16 @@ function createQueueItemFromPending(
     subtitle: base.subtitle,
     preset: base.preset,
     playlistItems: base.playlistItems,
+    downloadSections: base.downloadSections,
     outputPath: pending?.outputPath || base.outputPath,
   }
+}
+
+function formatDownloadSections(start: string, end: string): string {
+  const s = start.trim()
+  const e = end.trim()
+  if (!s && !e) return ''
+  return `*${s || '0'}-${e || 'inf'}`
 }
 
 function findQueuedSwapIndex(items: QueueItem[], id: string, direction: 'up' | 'down'): number {
@@ -358,6 +366,9 @@ function App() {
   const [fetchError, setFetchError] = useState('')
   const [metadata, setMetadata] = useState<VideoMetadata | null>(null)
   const [selectedPlaylistIndices, setSelectedPlaylistIndices] = useState<Record<number, boolean>>({})
+  const [downloadClip, setDownloadClip] = useState(false)
+  const [clipStart, setClipStart] = useState('')
+  const [clipEnd, setClipEnd] = useState('')
   const [selectedPreset, setSelectedPreset] = useState<DownloadPreset>(defaultDownloadPreset)
   const [selectedFormat, setSelectedFormat] = useState(defaultCustomFormatId)
   const [formatOptions, setFormatOptions] = useState<FormatOption[]>([])
@@ -1000,7 +1011,18 @@ function App() {
         playlistItems = selected.join(',')
       }
       const choice = resolveDownloadChoice(selectedPreset, selectedFormat, selectedContainer, selectedSubs)
-      const downloadId = await StartDownloadWithPreset(lastFetchedUrlRef.current, choice.formatId, defaultOutputDir, choice.container, choice.subtitle, metadata.title, selectedPreset, playlistItems)
+      const downloadSections = downloadClip ? formatDownloadSections(clipStart, clipEnd) : ''
+      const downloadId = await StartDownloadWithPresetAndClip(
+        lastFetchedUrlRef.current,
+        choice.formatId,
+        defaultOutputDir,
+        choice.container,
+        choice.subtitle,
+        metadata.title,
+        selectedPreset,
+        playlistItems,
+        downloadSections
+      )
       setQueue((prev) => {
         const pending = pendingProgressRef.current[downloadId]
         const newItem = createQueueItemFromPending(downloadId, pending, {
@@ -1013,6 +1035,7 @@ function App() {
           subtitle: choice.subtitle,
           preset: selectedPreset,
           playlistItems,
+          downloadSections,
           outputPath: undefined,
         })
         delete pendingProgressRef.current[downloadId]
@@ -1129,7 +1152,7 @@ function App() {
   const handleRetryQueueItem = useCallback(async (item: QueueItem) => {
     if (!item.url || !item.formatId || !item.container || !item.subtitle || !item.preset) return
     try {
-      const downloadId = await StartDownloadWithPreset(
+      const downloadId = await StartDownloadWithPresetAndClip(
         item.url,
         item.formatId,
         item.outputDir,
@@ -1138,6 +1161,7 @@ function App() {
         item.title,
         item.preset,
         item.playlistItems || '',
+        item.downloadSections || '',
       )
       setQueue((prev) => prev.map((current) => {
         if (current.id !== item.id) return current
@@ -1472,6 +1496,12 @@ function App() {
             setSelectedSubs={setSelectedSubs}
             selectedPlaylistIndices={selectedPlaylistIndices}
             setSelectedPlaylistIndices={setSelectedPlaylistIndices}
+            downloadClip={downloadClip}
+            setDownloadClip={setDownloadClip}
+            clipStart={clipStart}
+            setClipStart={setClipStart}
+            clipEnd={clipEnd}
+            setClipEnd={setClipEnd}
             addingToQueue={addingToQueue}
             handleAddToQueue={handleAddToQueue}
             addQueueError={addQueueError}

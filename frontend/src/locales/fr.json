@@ -100,7 +100,12 @@
     "selectPreset": "Préréglage de téléchargement",
     "presetBest": "Meilleure qualité",
     "presetCompatible": "Vidéo MP4",
-    "presetAudio": "Audio MP3"
+    "presetAudio": "MP3-Audio",
+    "clipSection": "Clip / Plage temporelle",
+    "clipEnable": "Télécharger uniquement un extrait (clip)",
+    "clipStart": "Heure de début",
+    "clipEnd": "Heure de fin",
+    "clipHint": "Format: HH:MM:SS, MM:SS ou secondes (ex. 01:30)"
   },
   "history": {
     "title": "Historique des téléchargements",
