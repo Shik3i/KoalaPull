@@ -305,6 +305,7 @@ async function build() {
         dictionary[key] = `${assetPrefix}${page.output['en'].replace(/\.html$/, '')}`;
       }
     }
+    dictionary.IMPRINT_LINK = 'https://koalastuff.net/legal';
 
     let html = template;
     html = injectDefaults(html, lang, assetPrefix);
