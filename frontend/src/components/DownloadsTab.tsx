@@ -72,6 +72,26 @@ const downloadPresetOptions: Array<{ value: DownloadPreset; label: string; descr
   { value: 'custom', label: 'Custom', description: 'Show the advanced fields.' },
 ]
 
+function parseClipSeconds(str: string): number | null {
+  if (!str.trim()) return null
+  const parts = str.trim().split(':').map(Number)
+  if (parts.some(isNaN)) return null
+  if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2]
+  if (parts.length === 2) return parts[0] * 60 + parts[1]
+  if (parts.length === 1) return parts[0]
+  return null
+}
+
+function formatDurationSeconds(sec: number): string {
+  if (sec < 0) return ''
+  const h = Math.floor(sec / 3600)
+  const m = Math.floor((sec % 3600) / 60)
+  const s = Math.floor(sec % 60)
+  if (h > 0) return `${h}h ${m}m ${s}s`
+  if (m > 0) return `${m}m ${s}s`
+  return `${s}s`
+}
+
 function getPresetDescription(preset: DownloadPreset): string {
   return downloadPresetOptions.find((item) => item.value === preset)?.description || ''
 }
@@ -612,6 +632,7 @@ export function DownloadsTab({
   const [confirmPresetDelete, setConfirmPresetDelete] = useState(false)
   const [presetError, setPresetError] = useState('')
   const [presetBusy, setPresetBusy] = useState(false)
+  const [showSavedPresetsPanel, setShowSavedPresetsPanel] = useState(false)
   useEffect(() => {
     if (selectedSavedPreset && !savedPresets.some((preset) => preset.id === selectedSavedPreset)) {
       setSelectedSavedPreset('')
@@ -861,30 +882,51 @@ export function DownloadsTab({
           t={t}
         />}
         {downloadMode === 'single' && fetched && metadata && (
-          <div className="rounded-xl border p-4 mb-4 space-y-3" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
-            <div className="flex flex-wrap items-end gap-2">
-            <label className="text-xs font-medium flex-1 min-w-48">{t('presets.saved')}
-              <select className="select-dark w-full mt-1" value={selectedSavedPreset} onChange={(event) => { const id = event.target.value; setSelectedSavedPreset(id); setPresetEditName(savedPresets.find((preset) => preset.id === id)?.name || '') }}>
-                <option value="">{t('presets.choose')}</option>
-                {savedPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
-              </select>
-            </label>
-            <button className="btn-primary text-xs px-3 py-2" disabled={!selectedSavedPreset || presetBusy} onClick={() => onApplyPreset(selectedSavedPreset)}>{t('presets.apply')}</button>
-            </div>
-            {selectedSavedPreset && <div className="flex flex-wrap items-end gap-2 rounded-lg border p-3" style={{ borderColor: 'var(--color-surface-border)' }}>
-              <label className="text-xs font-medium flex-1 min-w-44">{t('presets.rename')}
-                <input className="input-dark w-full mt-1 py-2" value={presetEditName} onChange={(event) => setPresetEditName(event.target.value)} maxLength={48} />
-              </label>
-              <button className="btn-primary text-xs px-3 py-2" disabled={!presetEditName.trim() || presetBusy} onClick={() => { setPresetBusy(true); void onRenamePreset(selectedSavedPreset, presetEditName.trim()).then(() => setPresetError('')).catch((error) => setPresetError(error instanceof Error ? error.message : String(error))).finally(() => setPresetBusy(false)) }}>{t('actions.save')}</button>
-              <button disabled={presetBusy} className="text-xs px-3 py-2 rounded-md border border-red-500/40 text-red-300 disabled:opacity-40" onClick={() => setConfirmPresetDelete(true)}>{t('actions.deleteEntry')}</button>
-            </div>}
-            <div className="flex flex-wrap items-end gap-2 border-t pt-3" style={{ borderColor: 'var(--color-surface-border)' }}>
-            <label className="text-xs font-medium min-w-36">{t('presets.name')}
-              <input className="input-dark w-full mt-1 py-2" value={presetName} onChange={(event) => setPresetName(event.target.value)} maxLength={48} />
-            </label>
-            <button className="btn-primary text-xs px-3 py-2" disabled={!presetName.trim() || presetBusy} onClick={() => { setPresetBusy(true); void onSavePreset(presetName.trim()).then(() => { setPresetName(''); setPresetError('') }).catch((error) => setPresetError(error instanceof Error ? error.message : String(error))).finally(() => setPresetBusy(false)) }}>{t('presets.saveCurrent')}</button>
-            </div>
-            {presetError && <p role="alert" className="text-xs text-red-300">{presetError}</p>}
+          <div className="mb-4">
+            <button
+              type="button"
+              onClick={() => setShowSavedPresetsPanel(!showSavedPresetsPanel)}
+              className="text-xs font-semibold flex items-center justify-between w-full px-3.5 py-2 rounded-lg border transition-all cursor-pointer outline-none focus-visible:ring-2 focus-visible:ring-accent"
+              style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)', color: 'var(--text-secondary)' }}
+            >
+              <span className="flex items-center gap-2">
+                <span>⚙️</span>
+                <span>{t('presets.saved')}</span>
+                {savedPresets.length > 0 && (
+                  <span className="text-[10px] px-1.5 py-0.2 rounded font-mono font-medium" style={{ background: 'var(--color-surface-lighter)', color: 'var(--text-muted)' }}>
+                    {savedPresets.length}
+                  </span>
+                )}
+              </span>
+              <span className="text-[11px] font-mono text-[var(--color-accent)]">{showSavedPresetsPanel ? '▲ Hide' : '▼ Manage Presets'}</span>
+            </button>
+            {showSavedPresetsPanel && (
+              <div className="rounded-xl border p-4 mt-2 space-y-3" style={{ background: 'var(--color-surface-light)', borderColor: 'var(--color-surface-border)' }}>
+                <div className="flex flex-wrap items-end gap-2">
+                <label className="text-xs font-medium flex-1 min-w-48">{t('presets.saved')}
+                  <select className="select-dark w-full mt-1" value={selectedSavedPreset} onChange={(event) => { const id = event.target.value; setSelectedSavedPreset(id); setPresetEditName(savedPresets.find((preset) => preset.id === id)?.name || '') }}>
+                    <option value="">{t('presets.choose')}</option>
+                    {savedPresets.map((preset) => <option key={preset.id} value={preset.id}>{preset.name}</option>)}
+                  </select>
+                </label>
+                <button className="btn-primary text-xs px-3 py-2" disabled={!selectedSavedPreset || presetBusy} onClick={() => onApplyPreset(selectedSavedPreset)}>{t('presets.apply')}</button>
+                </div>
+                {selectedSavedPreset && <div className="flex flex-wrap items-end gap-2 rounded-lg border p-3" style={{ borderColor: 'var(--color-surface-border)' }}>
+                  <label className="text-xs font-medium flex-1 min-w-44">{t('presets.rename')}
+                    <input className="input-dark w-full mt-1 py-2" value={presetEditName} onChange={(event) => setPresetEditName(event.target.value)} maxLength={48} />
+                  </label>
+                  <button className="btn-primary text-xs px-3 py-2" disabled={!presetEditName.trim() || presetBusy} onClick={() => { setPresetBusy(true); void onRenamePreset(selectedSavedPreset, presetEditName.trim()).then(() => setPresetError('')).catch((error) => setPresetError(error instanceof Error ? error.message : String(error))).finally(() => setPresetBusy(false)) }}>{t('actions.save')}</button>
+                  <button disabled={presetBusy} className="text-xs px-3 py-2 rounded-md border border-red-500/40 text-red-300 disabled:opacity-40" onClick={() => setConfirmPresetDelete(true)}>{t('actions.deleteEntry')}</button>
+                </div>}
+                <div className="flex flex-wrap items-end gap-2 border-t pt-3" style={{ borderColor: 'var(--color-surface-border)' }}>
+                <label className="text-xs font-medium min-w-36">{t('presets.name')}
+                  <input className="input-dark w-full mt-1 py-2" value={presetName} onChange={(event) => setPresetName(event.target.value)} maxLength={48} />
+                </label>
+                <button className="btn-primary text-xs px-3 py-2" disabled={!presetName.trim() || presetBusy} onClick={() => { setPresetBusy(true); void onSavePreset(presetName.trim()).then(() => { setPresetName(''); setPresetError('') }).catch((error) => setPresetError(error instanceof Error ? error.message : String(error))).finally(() => setPresetBusy(false)) }}>{t('presets.saveCurrent')}</button>
+                </div>
+                {presetError && <p role="alert" className="text-xs text-red-300">{presetError}</p>}
+              </div>
+            )}
           </div>
         )}
         {downloadMode === 'single' && fetched && metadata && (
@@ -942,7 +984,18 @@ export function DownloadsTab({
                         id="selectedPreset"
                         value={selectedPreset}
                         onChange={async (e) => {
-                          const next = e.target.value as DownloadPreset
+                          const val = e.target.value
+                          if (val.startsWith('saved:')) {
+                            const savedId = val.replace('saved:', '')
+                            onApplyPreset(savedId)
+                            try {
+                              await saveSettings({ downloadPreset: 'custom' })
+                            } catch (err) {
+                              console.warn('UpdateSettings failed:', err)
+                            }
+                            return
+                          }
+                          const next = val as DownloadPreset
                           setSelectedPreset(next)
                           try {
                             await saveSettings({ downloadPreset: next })
@@ -959,6 +1012,15 @@ export function DownloadsTab({
                             {opt.label}
                           </option>
                         ))}
+                        {savedPresets.length > 0 && (
+                          <optgroup label={t('presets.saved')}>
+                            {savedPresets.map((preset) => (
+                              <option key={preset.id} value={`saved:${preset.id}`}>
+                                {preset.name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
                       </select>
                     </div>
                     <div className="flex-1 min-w-[220px]">
@@ -1157,8 +1219,9 @@ export function DownloadsTab({
                             onChange={async (e) => {
                               const next = e.target.value
                               setSelectedSubs(next)
+                              setSelectedPreset('custom')
                               try {
-                                await saveSettings({ customSubtitle: next })
+                                await saveSettings({ customSubtitle: next, downloadPreset: 'custom' })
                               } catch (err) {
                                 console.warn('UpdateSettings failed:', err)
                               }
@@ -1182,8 +1245,9 @@ export function DownloadsTab({
                             onChange={async (e) => {
                               const next = e.target.value
                               setSelectedContainer(next)
+                              setSelectedPreset('custom')
                               try {
-                                    await saveSettings({ customContainer: next })
+                                await saveSettings({ customContainer: next, downloadPreset: 'custom' })
                               } catch (err) {
                                 console.warn('UpdateSettings failed:', err)
                               }
@@ -1326,9 +1390,23 @@ export function DownloadsTab({
                             className="input-dark text-xs w-full py-1.5"
                           />
                         </div>
-                        <p className="sm:col-span-2 text-[10px]" style={{ color: 'var(--text-muted)' }}>
-                          {t('downloads.clipHint') || 'Format: HH:MM:SS, MM:SS or seconds (e.g. 01:30)'}
-                        </p>
+                        {(() => {
+                          const startSec = parseClipSeconds(clipStart) ?? 0
+                          const endSec = parseClipSeconds(clipEnd) ?? (metadata?.duration || null)
+                          const durationSec = endSec !== null ? Math.max(0, endSec - startSec) : null
+                          return (
+                            <div className="sm:col-span-2 flex items-center justify-between gap-2 text-[11px] pt-1">
+                              <span style={{ color: 'var(--text-muted)' }}>
+                                {t('downloads.clipHint') || 'Format: HH:MM:SS, MM:SS or seconds (e.g. 01:30)'}
+                              </span>
+                              {durationSec !== null && durationSec > 0 && (
+                                <span className="font-mono font-semibold px-2 py-0.5 rounded text-[10px]" style={{ background: 'color-mix(in srgb, var(--color-accent) 15%, transparent)', color: 'var(--color-accent)' }}>
+                                  ✂️ Length: {formatDurationSeconds(durationSec)}
+                                </span>
+                              )}
+                            </div>
+                          )
+                        })()}
                       </div>
                     )}
                   </div>

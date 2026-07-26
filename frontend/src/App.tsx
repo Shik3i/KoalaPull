@@ -382,13 +382,15 @@ function App() {
   const handleVideoChange = async (nextVideoId: string) => {
     const nextCombined = combineFormatIds(nextVideoId, audioId)
     setSelectedFormat(nextCombined)
-    try { await saveSettings({ customFormatId: nextCombined }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+    setSelectedPreset('custom')
+    try { await saveSettings({ customFormatId: nextCombined, downloadPreset: 'custom' }) } catch (err) { console.warn('UpdateSettings failed:', err) }
   }
 
   const handleAudioChange = async (nextAudioId: string) => {
     const nextCombined = combineFormatIds(videoId, nextAudioId)
     setSelectedFormat(nextCombined)
-    try { await saveSettings({ customFormatId: nextCombined }) } catch (err) { console.warn('UpdateSettings failed:', err) }
+    setSelectedPreset('custom')
+    try { await saveSettings({ customFormatId: nextCombined, downloadPreset: 'custom' }) } catch (err) { console.warn('UpdateSettings failed:', err) }
   }
 
   const [selectedContainer, setSelectedContainer] = useState(defaultCustomContainer)
@@ -822,9 +824,28 @@ function App() {
         setBrowserError('')
       }
     }
+
+    const handleGlobalPaste = (e: Event) => {
+      const clipboardEvent = e as ClipboardEvent
+      const activeEl = document.activeElement
+      const isInput = activeEl && (activeEl.tagName === 'INPUT' || activeEl.tagName === 'TEXTAREA')
+      if (isInput && activeEl?.id !== 'urlInput') return
+      const text = clipboardEvent.clipboardData?.getData('text')?.trim()
+      if (!text || (!text.startsWith('http://') && !text.startsWith('https://'))) return
+
+      e.preventDefault()
+      setActiveTab('downloads')
+      setDownloadMode('single')
+      void triggerFetch(text)
+    }
+
     window.addEventListener('keydown', handler)
-    return () => window.removeEventListener('keydown', handler)
-  }, [])
+    window.addEventListener('paste', handleGlobalPaste)
+    return () => {
+      window.removeEventListener('keydown', handler)
+      window.removeEventListener('paste', handleGlobalPaste)
+    }
+  }, [triggerFetch])
 
   useEffect(() => {
     const handleDragOver = (e: DragEvent) => {
@@ -1268,6 +1289,7 @@ function App() {
     setSelectedFormat(preset.formatId)
     setSelectedContainer(preset.container)
     setSelectedSubs(preset.subtitle)
+    void saveSettings({ downloadPreset: 'custom', customFormatId: preset.formatId, customContainer: preset.container, customSubtitle: preset.subtitle })
   }
 
   const loadHistory = async () => {

@@ -637,7 +637,7 @@ func (a *App) PlayFile(filePath string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		return openFileWithDefaultApp(cleaned)
+		return openFileWithDefaultApp(filepath.FromSlash(cleaned))
 	case "darwin":
 		cmd = command("open", cleaned)
 	default:
@@ -682,7 +682,7 @@ func (a *App) ShowFileInFolder(filePath string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = command("explorer.exe", "/select,", cleaned)
+		cmd = command("explorer.exe", "/select,"+filepath.FromSlash(cleaned))
 	case "darwin":
 		cmd = command("open", "-R", cleaned)
 	default:
@@ -696,6 +696,11 @@ func (a *App) isAllowedOutputFile(path string) bool {
 	defaultDir, err := cleanAbsolutePath(settings.DefaultOutputDir)
 	if err == nil && isWithinPath(path, defaultDir) {
 		return true
+	}
+	for _, recent := range settings.RecentOutputDirs {
+		if recentDir, err := cleanAbsolutePath(recent); err == nil && isWithinPath(path, recentDir) {
+			return true
+		}
 	}
 	return a.isKnownHistoryOutputFile(path)
 }

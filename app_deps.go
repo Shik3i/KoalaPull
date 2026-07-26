@@ -109,12 +109,12 @@ func (a *App) OpenBinDir() error {
 		return err
 	}
 	if !fileExists(cleaned) {
-		return fmt.Errorf("directory does not exist")
+		return fmt.Errorf("binaries directory does not exist: %s", cleaned)
 	}
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = command("explorer.exe", cleaned)
+		cmd = command("explorer.exe", filepath.FromSlash(cleaned))
 	case "darwin":
 		cmd = command("open", cleaned)
 	default:
@@ -141,7 +141,7 @@ func (a *App) OpenOutputDir(dir string) error {
 	var cmd *exec.Cmd
 	switch runtime.GOOS {
 	case "windows":
-		cmd = command("explorer.exe", cleaned)
+		cmd = command("explorer.exe", filepath.FromSlash(cleaned))
 	case "darwin":
 		cmd = command("open", cleaned)
 	default:
@@ -155,6 +155,11 @@ func (a *App) isAllowedOpenDir(dir string) bool {
 	defaultDir, err := cleanAbsolutePath(settings.DefaultOutputDir)
 	if err == nil && isWithinPath(dir, defaultDir) {
 		return true
+	}
+	for _, recent := range settings.RecentOutputDirs {
+		if recentDir, err := cleanAbsolutePath(recent); err == nil && isWithinPath(dir, recentDir) {
+			return true
+		}
 	}
 	binDir, err := cleanAbsolutePath(a.binDir)
 	if err == nil && samePath(dir, binDir) {
