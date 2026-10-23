@@ -1,6 +1,6 @@
 module koalapull
 
-go 1.26.6
+go 1.26.10
 
 require (
 	github.com/wailsapp/wails/v2 v2.17.0
