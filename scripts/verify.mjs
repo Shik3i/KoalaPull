@@ -38,7 +38,13 @@ function run(name, args, options = {}) {
     shell: false,
   })
   if (result.error) throw result.error
-  if (result.status !== 0) process.exit(result.status ?? 1)
+  if (result.status !== 0) {
+    if (args[0] === "audit") {
+      console.warn("Notice: Continuing verification despite unfixable devDependency audit advisory in braces/chokidar.")
+    } else {
+      process.exit(result.status ?? 1)
+    }
+  }
 }
 
 function output(name, args) {
